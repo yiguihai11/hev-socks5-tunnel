@@ -57,4 +57,17 @@ const char *hev_config_get_misc_pid_file (void);
 const char *hev_config_get_misc_log_file (void);
 int hev_config_get_misc_log_level (void);
 
+/* dns-forwarder */
+const char *hev_config_get_dns_forwarder_virtual_ip4 (void);
+const char *hev_config_get_dns_forwarder_virtual_ip6 (void);
+const char *hev_config_get_dns_forwarder_target_ip4 (void);
+const char *hev_config_get_dns_forwarder_target_ip6 (void);
+
+/* chnroutes */
+const char *hev_config_get_chnroutes_file_path (void);
+
+/* smart-proxy */
+int hev_config_get_smart_proxy_timeout_ms (void);
+int hev_config_get_smart_proxy_blocked_ip_expiry_minutes (void);
+
 #endif /* __HEV_CONFIG_H__ */

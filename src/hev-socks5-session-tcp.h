@@ -11,6 +11,7 @@
 #define __HEV_SOCKS5_SESSION_TCP_H__
 
 #include <hev-ring-buffer.h>
+#include <hev-task-mutex.h>
 #include <hev-socks5-client-tcp.h>
 
 #include "hev-socks5-session.h"
@@ -49,5 +50,8 @@ int hev_socks5_session_tcp_construct (HevSocks5SessionTCP *self,
 
 HevSocks5SessionTCP *hev_socks5_session_tcp_new (struct tcp_pcb *pcb,
                                                  HevTaskMutex *mutex);
+
+void hev_socks5_session_tcp_splice (HevSocks5Session *base);
+
 
 #endif /* __HEV_SOCKS5_SESSION_TCP_H__ */

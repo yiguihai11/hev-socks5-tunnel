@@ -36,6 +36,10 @@
 #include "hev-config-const.h"
 #include "hev-socks5-session-tcp.h"
 #include "hev-socks5-session-udp.h"
+#include "hev-traffic-router.h"
+#include "hev-session-manager.h"
+
+
 
 #include "hev-socks5-tunnel.h"
 
@@ -54,7 +58,7 @@ static struct netif netif;
 static struct tcp_pcb *tcp;
 static struct udp_pcb *udp;
 
-static HevTaskMutex mutex;
+HevTaskMutex mutex;
 static HevTask *task_event;
 static HevTask *task_lwip_io;
 static HevTask *task_lwip_timer;
@@ -110,7 +114,7 @@ netif_init_handler (struct netif *netif)
     return ERR_OK;
 }
 
-static void
+void
 hev_socks5_tunnel_insert_session (HevListNode *node)
 {
     HevSocks5SessionData *sd;
@@ -128,7 +132,7 @@ hev_socks5_tunnel_insert_session (HevListNode *node)
     hev_socks5_session_terminate (sd->self);
 }
 
-static void
+void
 hev_socks5_tunnel_delete_session (HevListNode *node)
 {
     hev_list_del (&session_set, node);
@@ -162,33 +166,25 @@ hev_socks5_session_task_entry (void *data)
 static err_t
 tcp_accept_handler (void *arg, struct tcp_pcb *pcb, err_t err)
 {
-    HevSocks5SessionTCP *tcp;
-    HevListNode *node;
-    int stack_size;
-    HevTask *task;
-
-    if (err != ERR_OK)
+    // 新增1：打印接收TCP连接时的错误码（若有错误，快速定位连接建立失败原因）
+    if (err != ERR_OK) {
+        LOG_D("socks5 tunnel: TCP accept failed, error code: %d (ERR_OK=0, ERR_RST=6, etc.)", err);
         return err;
-
-    if (!run)
-        return ERR_RST;
-
-    tcp = hev_socks5_session_tcp_new (pcb, &mutex);
-    if (!tcp)
-        return ERR_MEM;
-
-    stack_size = hev_config_get_misc_task_stack_size ();
-    task = hev_task_new (stack_size);
-    if (!task) {
-        hev_object_unref (HEV_OBJECT (tcp));
-        return ERR_MEM;
     }
 
-    hev_socks5_session_set_task (HEV_SOCKS5_SESSION (tcp), task);
-    node = hev_socks5_session_get_node (HEV_SOCKS5_SESSION (tcp));
-    hev_socks5_tunnel_insert_session (node);
-    hev_task_run (task, hev_socks5_session_task_entry, tcp);
-    hev_task_wakeup (task_lwip_timer);
+    // 新增2：打印当前隧道运行状态（判断连接是否因隧道停止而被拒绝）
+    if (!run) {
+        LOG_D("socks5 tunnel: TCP accept rejected, tunnel is not running (run flag is 0)");
+        return ERR_RST;
+    }
+
+    // 新增4：打印路由处理结果（区分“直连”和“走SOCKS5”两种分支）
+    if (hev_traffic_router_handle_tcp (pcb)) {
+        return ERR_OK;
+    }
+
+    LOG_D("pcb local_port raw=0x%04x, ntohs= %d\n", pcb->local_port, ntohs(pcb->local_port));
+    hev_session_manager_start_socks5_tcp (pcb);
 
     return ERR_OK;
 }
@@ -235,6 +231,11 @@ udp_recv_handler (void *arg, struct udp_pcb *pcb, struct pbuf *p,
 
     if (!run) {
         udp_remove (pcb);
+        return;
+    }
+
+    if (hev_traffic_router_handle_udp (pcb, p, addr, port)) {
+        pbuf_free (p);
         return;
     }
 

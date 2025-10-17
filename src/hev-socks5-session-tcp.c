@@ -213,7 +213,7 @@ hev_socks5_session_tcp_bind (HevSocks5 *self, int fd,
     return 0;
 }
 
-static void
+void
 hev_socks5_session_tcp_splice (HevSocks5Session *base)
 {
     HevSocks5SessionTCP *self = HEV_SOCKS5_SESSION_TCP (base);

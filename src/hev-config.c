@@ -8,9 +8,10 @@
  */
 
 #include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
-#include <lwip/tcp.h>
 #include <yaml.h>
 
 #include "hev-logger.h"
@@ -44,6 +45,19 @@ static int connect_timeout = 10000;
 static int read_write_timeout = 300000;
 static int limit_nofile = 65535;
 static int log_level = HEV_LOGGER_WARN;
+
+/* dns-forwarder */
+static char dns_fwd_virtual_ip4[64];
+static char dns_fwd_virtual_ip6[64];
+static char dns_fwd_target_ip4[64];
+static char dns_fwd_target_ip6[64];
+
+/* chnroutes */
+static char chnroutes_file_path[1024];
+
+/* smart-proxy */
+static int smart_proxy_timeout_ms;
+static int smart_proxy_blocked_ip_expiry_minutes;
 
 static int
 hev_config_parse_tunnel_ipv4 (yaml_document_t *doc, yaml_node_t *base)
@@ -316,6 +330,113 @@ hev_config_parse_log_level (const char *value)
 }
 
 static int
+hev_config_parse_dns_forwarder (yaml_document_t *doc, yaml_node_t *base)
+{
+    yaml_node_pair_t *pair;
+
+    if (!base || YAML_MAPPING_NODE != base->type)
+        return -1;
+
+    for (pair = base->data.mapping.pairs.start;
+         pair < base->data.mapping.pairs.top; pair++) {
+        yaml_node_t *node;
+        const char *key, *value;
+
+        if (!pair->key || !pair->value)
+            break;
+
+        node = yaml_document_get_node (doc, pair->key);
+        if (!node || YAML_SCALAR_NODE != node->type)
+            break;
+        key = (const char *)node->data.scalar.value;
+
+        node = yaml_document_get_node (doc, pair->value);
+        if (!node || YAML_SCALAR_NODE != node->type)
+            break;
+        value = (const char *)node->data.scalar.value;
+
+        if (0 == strcmp (key, "virtual-ip4"))
+            strncpy (dns_fwd_virtual_ip4, value, sizeof (dns_fwd_virtual_ip4) - 1);
+        else if (0 == strcmp (key, "virtual-ip6"))
+            strncpy (dns_fwd_virtual_ip6, value, sizeof (dns_fwd_virtual_ip6) - 1);
+        else if (0 == strcmp (key, "target-ip4"))
+            strncpy (dns_fwd_target_ip4, value, sizeof (dns_fwd_target_ip4) - 1);
+        else if (0 == strcmp (key, "target-ip6"))
+            strncpy (dns_fwd_target_ip6, value, sizeof (dns_fwd_target_ip6) - 1);
+    }
+
+    return 0;
+}
+
+static int
+hev_config_parse_chnroutes (yaml_document_t *doc, yaml_node_t *base)
+{
+    yaml_node_pair_t *pair;
+
+    if (!base || YAML_MAPPING_NODE != base->type)
+        return -1;
+
+    for (pair = base->data.mapping.pairs.start;
+         pair < base->data.mapping.pairs.top; pair++) {
+        yaml_node_t *node;
+        const char *key, *value;
+
+        if (!pair->key || !pair->value)
+            break;
+
+        node = yaml_document_get_node (doc, pair->key);
+        if (!node || YAML_SCALAR_NODE != node->type)
+            break;
+        key = (const char *)node->data.scalar.value;
+
+        node = yaml_document_get_node (doc, pair->value);
+        if (!node || YAML_SCALAR_NODE != node->type)
+            break;
+        value = (const char *)node->data.scalar.value;
+
+        if (0 == strcmp (key, "file-path"))
+            strncpy (chnroutes_file_path, value, sizeof (chnroutes_file_path) - 1);
+    }
+
+    return 0;
+}
+
+static int
+hev_config_parse_smart_proxy (yaml_document_t *doc, yaml_node_t *base)
+{
+    yaml_node_pair_t *pair;
+
+    if (!base || YAML_MAPPING_NODE != base->type)
+        return -1;
+
+    for (pair = base->data.mapping.pairs.start;
+         pair < base->data.mapping.pairs.top; pair++) {
+        yaml_node_t *node;
+        const char *key, *value;
+
+        if (!pair->key || !pair->value)
+            break;
+
+        node = yaml_document_get_node (doc, pair->key);
+        if (!node || YAML_SCALAR_NODE != node->type)
+            break;
+        key = (const char *)node->data.scalar.value;
+
+        node = yaml_document_get_node (doc, pair->value);
+        if (!node || YAML_SCALAR_NODE != node->type)
+            break;
+        value = (const char *)node->data.scalar.value;
+
+        if (0 == strcmp (key, "timeout-ms"))
+            smart_proxy_timeout_ms = strtoul (value, NULL, 10);
+        else if (0 == strcmp (key, "blocked-ip-expiry-minutes"))
+            smart_proxy_blocked_ip_expiry_minutes = strtoul (value, NULL, 10);
+    }
+
+    return 0;
+}
+
+static int
 hev_config_parse_misc (yaml_document_t *doc, yaml_node_t *base)
 {
     yaml_node_pair_t *pair;
@@ -399,13 +520,16 @@ hev_config_parse_doc (yaml_document_t *doc)
             res = hev_config_parse_mapdns (doc, node);
         else if (0 == strcmp (key, "misc"))
             res = hev_config_parse_misc (doc, node);
+        else if (0 == strcmp (key, "dns-forwarder"))
+            res = hev_config_parse_dns_forwarder (doc, node);
+        else if (0 == strcmp (key, "chnroutes"))
+            res = hev_config_parse_chnroutes (doc, node);
+        else if (0 == strcmp (key, "smart-proxy"))
+            res = hev_config_parse_smart_proxy (doc, node);
 
         if (res < 0)
             return -1;
     }
-
-    if (tcp_buffer_size > TCP_SND_BUF)
-        tcp_buffer_size = TCP_SND_BUF;
 
     min_task_stack_size = TASK_STACK_SIZE + tcp_buffer_size;
     if (task_stack_size < min_task_stack_size)
@@ -630,4 +754,59 @@ int
 hev_config_get_misc_log_level (void)
 {
     return log_level;
+}
+
+/* dns-forwarder */
+const char *
+hev_config_get_dns_forwarder_virtual_ip4 (void)
+{
+    if (!dns_fwd_virtual_ip4[0])
+        return NULL;
+    return dns_fwd_virtual_ip4;
+}
+
+const char *
+hev_config_get_dns_forwarder_virtual_ip6 (void)
+{
+    if (!dns_fwd_virtual_ip6[0])
+        return NULL;
+    return dns_fwd_virtual_ip6;
+}
+
+const char *
+hev_config_get_dns_forwarder_target_ip4 (void)
+{
+    if (!dns_fwd_target_ip4[0])
+        return NULL;
+    return dns_fwd_target_ip4;
+}
+
+const char *
+hev_config_get_dns_forwarder_target_ip6 (void)
+{
+    if (!dns_fwd_target_ip6[0])
+        return NULL;
+    return dns_fwd_target_ip6;
+}
+
+/* chnroutes */
+const char *
+hev_config_get_chnroutes_file_path (void)
+{
+    if (!chnroutes_file_path[0])
+        return NULL;
+    return chnroutes_file_path;
+}
+
+/* smart-proxy */
+int
+hev_config_get_smart_proxy_timeout_ms (void)
+{
+    return smart_proxy_timeout_ms;
+}
+
+int
+hev_config_get_smart_proxy_blocked_ip_expiry_minutes (void)
+{
+    return smart_proxy_blocked_ip_expiry_minutes;
 }
