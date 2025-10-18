@@ -13,7 +13,6 @@
 #include <lwip/ip_addr.h>
 #include <lwip/udp.h>
 #include <lwip/tcp.h>
-#include <pbuf.h>
 
 /**
  * hev_traffic_router_init:
@@ -55,9 +54,7 @@ int hev_traffic_router_handle_udp (struct udp_pcb *pcb, struct pbuf *p,
  */
 int hev_traffic_router_handle_tcp (struct tcp_pcb *pcb);
 
-//void hev_traffic_router_blacklist_add (const ip_addr_t *addr);
-void hev_traffic_router_block_ip (const ip_addr_t *ip);
-int hev_traffic_router_is_blocked (const ip_addr_t *ip);
+void hev_traffic_router_blacklist_add (const ip_addr_t *addr);
 
 
 #endif /* __HEV_TRAFFIC_ROUTER_H__ */
