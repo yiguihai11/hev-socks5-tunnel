@@ -177,8 +177,6 @@ tcp_accept_handler (void *arg, struct tcp_pcb *pcb, err_t err)
         LOG_D("socks5 tunnel: TCP accept rejected, tunnel is not running (run flag is 0)");
         return ERR_RST;
     }
-    
-    LOG_D("pcb local_port raw=0x%04x, ntohs= %d\n", pcb->local_port, ntohs(pcb->local_port));
 
     // 新增4：打印路由处理结果（区分“直连”和“走SOCKS5”两种分支）
     if (hev_traffic_router_handle_tcp (pcb)) {
