@@ -315,7 +315,7 @@ splice_task_entry (void *data)
     close (fd);
 }
 
-static void
+static int
 hev_socks5_session_udp_splice (HevSocks5Session *base)
 {
     HevSocks5SessionUDP *self = HEV_SOCKS5_SESSION_UDP (base);
@@ -344,6 +344,8 @@ hev_socks5_session_udp_splice (HevSocks5Session *base)
     self->alive &= ~HEV_SOCKS5_SESSION_UDP_ALIVE_F;
     hev_task_join (task);
     hev_task_unref (task);
+
+    return 0;
 }
 
 static HevTask *

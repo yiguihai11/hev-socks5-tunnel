@@ -11,11 +11,15 @@
 #include <stdlib.h>
 #include <string.h>
 #include <arpa/inet.h>
+#include "misc/hev-list.h"
+
 #include <time.h>
 
 #include "hev-compiler.h"
 #include <hev-task.h>
+#include <hev-task-mutex.h>
 #include <hev-memory-allocator.h>
+#include "misc/hev-list.h"
 
 #include "hev-config.h"
 #include "hev-logger.h"
@@ -32,6 +36,15 @@ typedef struct _HevIPAddressRange6 {
     u8_t start[16];
     u8_t end[16];
 } HevIPAddressRange6;
+
+typedef struct _HevBlacklistedIP {
+    HevListNode node;
+    ip_addr_t addr;
+    time_t expiry;
+} HevBlacklistedIP;
+
+static HevList blacklist;
+static HevTaskMutex blacklist_mutex;
 
 static HevIPAddressRange4 *chnroutes_ip4;
 static unsigned int chnroutes_ip4_count;
@@ -138,132 +151,158 @@ chnroutes_fini (void)
     free (chnroutes_ip6);
 }
 
-/* Blacklist implementation (blocked IPs) ---------------------------------*/
-
-typedef struct BlockedIP {
-    ip_addr_t ip;
-    time_t expire_at; /* unix timestamp, seconds */
-    struct BlockedIP *next;
-} BlockedIP;
-
-static BlockedIP *blocked_list = NULL;
-
-/* 清理过期条目 */
-static void
-blocked_ip_cleanup (void)
+static int
+is_domestic (const ip_addr_t *addr)
 {
-    time_t now = time (NULL);
-    BlockedIP *prev = NULL, *cur = blocked_list;
+    if (IP_IS_V4 (addr)) {
+        if (!chnroutes_ip4)
+            return 0;
 
-    while (cur) {
-        if (cur->expire_at <= now) {
-            BlockedIP *del = cur;
-            if (prev)
-                prev->next = cur->next;
-            else
-                blocked_list = cur->next;
-            cur = cur->next;
-            free (del);
-            continue;
+        u32_t addr_host = ntohl(ip_2_ip4(addr)->addr);
+        int l = 0, r = chnroutes_ip4_count - 1;
+        while (l <= r) {
+            int mid = l + (r - l) / 2;
+            if (addr_host >= chnroutes_ip4[mid].start && addr_host <= chnroutes_ip4[mid].end) {
+                return 1;
+            }
+            if (addr_host < chnroutes_ip4[mid].start) {
+                r = mid - 1;
+            } else {
+                l = mid + 1;
+            }
         }
-        prev = cur;
-        cur = cur->next;
-    }
-}
+    } else if (IP_IS_V6 (addr)) {
+        if (!chnroutes_ip6)
+            return 0;
 
-/* 判断 ip 是否被屏蔽 */
-int
-hev_traffic_router_is_blocked (const ip_addr_t *ip)
-{
-    blocked_ip_cleanup ();
-    BlockedIP *cur = blocked_list;
-
-    while (cur) {
-        if (ip_addr_cmp (&cur->ip, ip))
-            return 1;
-        cur = cur->next;
+        int l = 0, r = chnroutes_ip6_count - 1;
+        while (l <= r) {
+            int mid = l + (r - l) / 2;
+            if (memcmp(ip_2_ip6(addr)->addr, chnroutes_ip6[mid].start, 16) >= 0 &&
+                memcmp(ip_2_ip6(addr)->addr, chnroutes_ip6[mid].end, 16) <= 0) {
+                return 1;
+            }
+            if (memcmp(ip_2_ip6(addr)->addr, chnroutes_ip6[mid].start, 16) < 0) {
+                r = mid - 1;
+            } else {
+                l = mid + 1;
+            }
+        }
     }
+    
     return 0;
 }
 
-/* 把 ip 加入黑名单（若已存在则更新过期时间） */
 void
-hev_traffic_router_block_ip (const ip_addr_t *ip)
+hev_traffic_router_blacklist_add (const ip_addr_t *addr)
 {
-    time_t now = time (NULL);
-    int expiry_minutes = hev_config_get_smart_proxy_blocked_ip_expiry_minutes ();
+    HevBlacklistedIP *bip;
+    int expiry_minutes;
+
+    expiry_minutes = hev_config_get_smart_proxy_blocked_ip_expiry_minutes ();
     if (expiry_minutes <= 0)
-        expiry_minutes = 60; /* fallback */
-    time_t expire = now + expiry_minutes * 60;
-
-    BlockedIP *cur = blocked_list;
-    while (cur) {
-        if (ip_addr_cmp (&cur->ip, ip)) {
-            cur->expire_at = expire;
-            return;
-        }
-        cur = cur->next;
-    }
-
-    BlockedIP *node = malloc (sizeof (BlockedIP));
-    if (!node)
         return;
-    memset (node, 0, sizeof (*node));
-    ip_addr_copy (node->ip, *ip);
-    node->expire_at = expire;
-    node->next = blocked_list;
-    blocked_list = node;
+
+    bip = hev_malloc (sizeof (HevBlacklistedIP));
+    if (!bip)
+        return;
+
+    ip_addr_copy (bip->addr, *addr);
+    bip->expiry = time (NULL) + expiry_minutes * 60;
+
+    hev_task_mutex_lock (&blacklist_mutex);
+    hev_list_add_tail (&blacklist, &bip->node);
+    hev_task_mutex_unlock (&blacklist_mutex);
 }
 
-/* 释放整个黑名单（在 fini 时可调用） */
-static void
-blocked_ip_fini (void)
-{
-    BlockedIP *cur = blocked_list;
-    while (cur) {
-        BlockedIP *next = cur->next;
-        free (cur);
-        cur = next;
-    }
-    blocked_list = NULL;
-}
-
-/* 修改路由接口：在非国内时使用智能代理决策（优先检查黑名单） */
 int
-hev_traffic_router_handle_tcp (struct tcp_pcb *pcb)
+hev_traffic_router_blacklist_check (const ip_addr_t *addr)
 {
-    if (is_domestic (&pcb->local_ip)) {
-        hev_session_manager_start_direct_tcp (pcb);
-        return 1;
+    HevListNode *node, *next;
+    time_t now = time (NULL);
+    int found = 0;
+
+    hev_task_mutex_lock (&blacklist_mutex);
+
+    for (node = hev_list_first (&blacklist); node; node = next) {
+        HevBlacklistedIP *bip = container_of (node, HevBlacklistedIP, node);
+        next = hev_list_node_next (node);
+
+        if (now > bip->expiry) {
+            hev_list_del (&blacklist, node);
+            hev_free (bip);
+            continue;
+        }
+
+        if (ip_addr_cmp (&bip->addr, addr)) {
+            found = 1;
+        }
     }
 
-    /* 非国内时先检查黑名单：若在黑名单则直接走 SOCKS5 */
-    if (hev_traffic_router_is_blocked (&pcb->local_ip)) {
-        LOG_D ("router: IP is blacklisted, using SOCKS5 route");
-        hev_session_manager_start_socks5_tcp (pcb);
-        return 1;
-    }
+    hev_task_mutex_unlock (&blacklist_mutex);
 
-    /* 否则尝试智能代理（由 session-manager 来做短超时探测，探测失败会加入黑名单并回退 SOCKS5） */
-    hev_session_manager_start_smart_proxy (pcb);
-    return 1;
+    return found;
 }
 
 int
 hev_traffic_router_init (void)
 {
     const char *chnroutes_path = hev_config_get_chnroutes_file_path ();
+
+
+    hev_task_mutex_init (&blacklist_mutex);
+
     if (chnroutes_init (chnroutes_path) < 0) {
         LOG_E ("router: Failed to initialize chnroutes!");
         return -1;
     }
-
     return 0;
 }
 
 void
 hev_traffic_router_fini (void)
 {
+    HevListNode *node;
+
+    hev_task_mutex_lock (&blacklist_mutex);
+    for (node = hev_list_first (&blacklist); node; node = hev_list_first (&blacklist)) {
+        HevBlacklistedIP *bip = container_of (node, HevBlacklistedIP, node);
+        hev_list_del (&blacklist, node);
+        hev_free (bip);
+    }
+    hev_task_mutex_unlock (&blacklist_mutex);
+
     chnroutes_fini ();
-    blocked_ip_fini ();
+}
+
+int
+hev_traffic_router_handle_tcp (struct tcp_pcb *pcb)
+{
+    const ip_addr_t *local_ip = &pcb->local_ip;
+
+    /* 1. Domestic IPs are connected directly. */
+    if (is_domestic (local_ip)) {
+        hev_session_manager_start_direct_tcp (pcb);
+        return 1;
+    }
+
+    /* 2. For non-domestic IPs, attempt smart proxy if enabled and not blacklisted. */
+    if (hev_config_get_smart_proxy_timeout_ms () > 0 &&
+        hev_config_get_smart_proxy_blocked_ip_expiry_minutes () > 0 &&
+        !hev_traffic_router_blacklist_check (local_ip)) {
+        hev_session_manager_start_smart_proxy (pcb);
+        return 1;
+    }
+
+    /* 3. Fallback to SOCKS5 for all other cases (blacklisted, smart proxy disabled). */
+    hev_session_manager_start_socks5_tcp (pcb);
+    return 1;
+}
+
+int
+hev_traffic_router_handle_udp (struct udp_pcb *pcb, struct pbuf *p,
+                               const ip_addr_t *addr, u16_t port)
+{
+    /* TODO: Implement DNS forwarder and direct UDP */
+    return 0; /* Not handled */
 }

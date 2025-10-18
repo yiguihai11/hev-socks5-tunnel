@@ -99,6 +99,7 @@ tcp_splice_b (HevSocks5SessionTCP *self)
                 res = -1;
         } else {
             hev_ring_buffer_write_finish (self->buffer, s);
+            self->initial_data_received = 1;
         }
     }
 
@@ -213,7 +214,7 @@ hev_socks5_session_tcp_bind (HevSocks5 *self, int fd,
     return 0;
 }
 
-void
+int
 hev_socks5_session_tcp_splice (HevSocks5Session *base)
 {
     HevSocks5SessionTCP *self = HEV_SOCKS5_SESSION_TCP (base);
@@ -224,12 +225,12 @@ hev_socks5_session_tcp_splice (HevSocks5Session *base)
     LOG_D ("%p socks5 session tcp splice", self);
 
     if (!self->pcb)
-        return;
+        return 0;
 
     tcp_buffer_size = hev_config_get_misc_tcp_buffer_size ();
     self->buffer = hev_ring_buffer_alloca (tcp_buffer_size);
     if (!self->buffer)
-        return;
+        return 0;
 
     for (;;) {
         HevTaskYieldType type;
@@ -246,8 +247,11 @@ hev_socks5_session_tcp_splice (HevSocks5Session *base)
         else
             break;
 
-        if (task_io_yielder (type, base) < 0)
+        if (task_io_yielder (type, base) < 0) {
+            if (self->is_smart_proxy_probe && !self->initial_data_received)
+                return -1; /* GFW detected */
             break;
+        }
     }
 
     while (self->pcb) {
@@ -257,6 +261,8 @@ hev_socks5_session_tcp_splice (HevSocks5Session *base)
         if (task_io_yielder (HEV_TASK_WAITIO, base) < 0)
             break;
     }
+
+    return 0;
 }
 
 static HevTask *

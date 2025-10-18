@@ -13,9 +13,6 @@
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <arpa/inet.h>
-#include <fcntl.h>
-#include <sys/time.h>
-#include <sys/select.h>
 
 #include <hev-task.h>
 #include <hev-task-system.h>
@@ -23,6 +20,7 @@
 #include <hev-memory-allocator.h>
 #include <hev-object.h>
 #include <hev-socks5.h>
+#include <hev-socks5-misc.h>
 
 #include "hev-config.h"
 #include "hev-logger.h"
@@ -36,7 +34,6 @@
 /* Forward declarations */
 static void run_direct_connect_task (void *data);
 static void run_smart_proxy_task (void *data);
-
 
 void
 hev_session_manager_init (void)
@@ -118,20 +115,29 @@ hev_session_manager_start_direct_tcp (struct tcp_pcb *pcb)
 void
 hev_session_manager_start_smart_proxy (struct tcp_pcb *pcb)
 {
+    HevSocks5SessionTCP *tcp;
+    HevListNode *node;
     int stack_size;
     HevTask *task;
 
-    stack_size = hev_config_get_misc_task_stack_size ();
-    task = hev_task_new (stack_size);
-    if (!task) {
+    tcp = hev_socks5_session_tcp_new (pcb, &mutex);
+    if (!tcp) {
         tcp_abort (pcb);
         return;
     }
 
-    hev_task_run (task, run_smart_proxy_task, pcb);
+    stack_size = hev_config_get_misc_task_stack_size ();
+    task = hev_task_new (stack_size);
+    if (!task) {
+        hev_object_unref (HEV_OBJECT (tcp));
+        return;
+    }
+
+    hev_socks5_session_set_task (HEV_SOCKS5_SESSION (tcp), task);
+    node = hev_socks5_session_get_node (HEV_SOCKS5_SESSION (tcp));
+    hev_socks5_tunnel_insert_session (node);
+    hev_task_run (task, run_smart_proxy_task, tcp);
 }
-
-
 
 static void
 run_direct_connect_task (void *data)
@@ -194,9 +200,22 @@ run_direct_connect_task (void *data)
     LOG_I ("router: Direct connect established to %s:%d", ip_str,
            pcb->local_port);
 
-    /* Use the session's splice function with our direct-connected fd */
+    /* Splice with GFW detection */
+    self->is_smart_proxy_probe = 1;
+    self->initial_data_received = 0;
+
     HEV_SOCKS5 (s)->fd = fd;
-    iface->splicer (s);
+
+    if (iface->splicer (s) < 0) {
+        LOG_W ("router: smart proxy splice timed out (GFW?), fallback to SOCKS5");
+        hev_traffic_router_blacklist_add (&pcb->local_ip);
+        HEV_SOCKS5 (s)->fd = -1;
+        close (fd);
+        hev_socks5_session_run (s);
+        hev_socks5_tunnel_delete_session (node);
+        hev_object_unref (HEV_OBJECT (self));
+        return;
+    }
 
     /* Cleanup */
     HEV_SOCKS5 (s)->fd = -1;
@@ -211,23 +230,27 @@ exit_cleanup:
 static void
 run_smart_proxy_task (void *data)
 {
-    struct tcp_pcb *pcb = data;
+    HevSocks5SessionTCP *self = data;
+    HevSocks5Session *s = HEV_SOCKS5_SESSION (self);
+    HevObjectClass *klass = HEV_OBJECT_GET_CLASS (s);
+    HevSocks5SessionIface *iface = klass->iface (HEV_OBJECT (s), HEV_SOCKS5_SESSION_TYPE);
+    struct tcp_pcb *pcb = self->pcb;
+    HevTask *task = iface->get_task (s);
+    HevListNode *node = iface->get_node (s);
     struct sockaddr_storage saddr;
     socklen_t saddr_len;
-    int fd = -1;
-    int res;
-    int direct_ok = 0;
     char ip_str[INET6_ADDRSTRLEN];
+    int fd = -1;
+    int timeout;
 
-    LOG_D ("router: smart proxy task run - try direct first");
+    LOG_D ("router: smart proxy task run");
 
-    /* Build address structure for dual-stack socket */
+    /* Build address structure */
     struct sockaddr_in6 *sa6 = (struct sockaddr_in6 *)&saddr;
     saddr_len = sizeof (struct sockaddr_in6);
     memset (sa6, 0, saddr_len);
     sa6->sin6_family = AF_INET6;
-    sa6->sin6_port = htons(pcb->local_port);
-
+    sa6->sin6_port = htons (pcb->local_port);
     if (IP_IS_V6 (&pcb->local_ip)) {
         memcpy (&sa6->sin6_addr, ip_2_ip6 (&pcb->local_ip), 16);
     } else {
@@ -237,78 +260,46 @@ run_smart_proxy_task (void *data)
         memcpy (&addr_bytes[12], ip_2_ip4 (&pcb->local_ip), 4);
     }
 
-    /* Try a quick direct TCP connect using an ephemeral socket. If it succeeds,
-       we'll use direct connect path; otherwise fallback to SOCKS5. */
+    /* Create socket */
     fd = hev_task_io_socket_socket (AF_INET6, SOCK_STREAM, IPPROTO_TCP);
     if (fd < 0) {
-        LOG_D ("router: smart proxy quick check socket create failed");
-        goto fallback_socks5_and_block;
+        goto fallback_socks5;
     }
 
     int zero = 0;
     setsockopt (fd, IPPROTO_IPV6, IPV6_V6ONLY, &zero, sizeof (zero));
+    if (hev_task_add_fd (task, fd, POLLIN | POLLOUT) < 0)
+        hev_task_mod_fd (task, fd, POLLIN | POLLOUT);
 
-    /* Use non-blocking connect and wait a short time for completion */
-    int flags = fcntl (fd, F_GETFL, 0);
-    fcntl (fd, F_SETFL, flags | O_NONBLOCK);
-
-    res = connect (fd, (struct sockaddr *)&saddr, saddr_len);
-    if (res == 0) {
-        direct_ok = 1;
-    } else if (errno == EINPROGRESS) {
-        /* wait up to configured timeout (ms) */
-        int timeout_ms = hev_config_get_smart_proxy_timeout_ms ();
-        if (timeout_ms <= 0)
-            timeout_ms = 300; /* fallback 300ms */
-
-        struct timeval tv;
-        fd_set wfds;
-        tv.tv_sec = timeout_ms / 1000;
-        tv.tv_usec = (timeout_ms % 1000) * 1000;
-        FD_ZERO (&wfds);
-        FD_SET (fd, &wfds);
-        res = select (fd + 1, NULL, &wfds, NULL, &tv);
-        if (res > 0 && FD_ISSET (fd, &wfds)) {
-            int err = 0;
-            socklen_t errlen = sizeof (err);
-            if (getsockopt (fd, SOL_SOCKET, SO_ERROR, &err, &errlen) == 0) {
-                if (err == 0)
-                    direct_ok = 1;
-            }
-        }
+    /* Connect with timeout */
+    timeout = hev_config_get_smart_proxy_timeout_ms ();
+    hev_socks5_set_timeout (s, timeout);
+    if (hev_task_io_socket_connect (fd, (struct sockaddr *)&saddr, saddr_len,
+                                    hev_socks5_task_io_yielder, s) < 0) {
+        LOG_W ("router: smart proxy direct connect failed, fallback to SOCKS5");
+        hev_traffic_router_blacklist_add (&pcb->local_ip);
+        close (fd);
+        goto fallback_socks5;
     }
 
+    ipaddr_ntoa_r (&pcb->local_ip, ip_str, sizeof (ip_str));
+    LOG_I ("router: Smart proxy direct connect established to %s:%d", ip_str,
+           pcb->local_port);
+
+    /* Splice */
+    HEV_SOCKS5 (s)->fd = fd;
+    iface->splicer (s);
+
+    /* Cleanup */
+    HEV_SOCKS5 (s)->fd = -1;
     close (fd);
+    hev_socks5_session_terminate (s);
+    hev_socks5_tunnel_delete_session (node);
+    hev_object_unref (HEV_OBJECT (self));
+    return;
 
-    if (direct_ok) {
-    /* 尝试发送一次探测包以验证数据可达性 */
-    const char probe[] = "\r\n"; /* 或者更合理的协议探测内容 */
-    ssize_t sent = send(fd, probe, sizeof(probe), 0);
-    if (sent < 0) {
-        LOG_D("router: smart proxy probe send failed: %s", strerror(errno));
-        direct_ok = 0;
-    } else {
-        fd_set rfds;
-        struct timeval tv;
-        FD_ZERO(&rfds);
-        FD_SET(fd, &rfds);
-        tv.tv_sec = 0;
-        tv.tv_usec = 300 * 1000; /* 300ms 等待响应 */
-        res = select(fd + 1, &rfds, NULL, NULL, &tv);
-        if (res <= 0) {
-            LOG_D("router: smart proxy probe no response, fallback");
-            direct_ok = 0;
-        } else {
-            /* 有响应可读，说明链路双向通 */
-            LOG_D("router: smart proxy probe succeeded, use direct");
-        }
-    }
-}
-
-
-fallback_socks5_and_block:
-    /* 如果探测失败，则把该 IP 加入黑名单（按配置的过期时间），随后回退 SOCKS5 */
-    LOG_D ("router: Smart proxy fallback to SOCKS5 and block ip for a while");
-    hev_traffic_router_block_ip (&pcb->local_ip);
-    hev_session_manager_start_socks5_tcp (pcb);
+fallback_socks5:
+    hev_socks5_session_run (s);
+    hev_socks5_tunnel_delete_session (node);
+    hev_object_unref (HEV_OBJECT (self));
 }

@@ -178,12 +178,7 @@ tcp_accept_handler (void *arg, struct tcp_pcb *pcb, err_t err)
         return ERR_RST;
     }
 
-    // 新增4：打印路由处理结果（区分“直连”和“走SOCKS5”两种分支）
-    if (hev_traffic_router_handle_tcp (pcb)) {
-        return ERR_OK;
-    }
-
-    hev_session_manager_start_socks5_tcp (pcb);
+    hev_traffic_router_handle_tcp (pcb);
 
     return ERR_OK;
 }

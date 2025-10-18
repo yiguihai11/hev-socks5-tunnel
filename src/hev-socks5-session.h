@@ -31,7 +31,7 @@ struct _HevSocks5SessionData
 
 struct _HevSocks5SessionIface
 {
-    void (*splicer) (HevSocks5Session *self);
+    int (*splicer) (HevSocks5Session *self);
     HevTask *(*get_task) (HevSocks5Session *self);
     void (*set_task) (HevSocks5Session *self, HevTask *task);
     HevListNode *(*get_node) (HevSocks5Session *self);

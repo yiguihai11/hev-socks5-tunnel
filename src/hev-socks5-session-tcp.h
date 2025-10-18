@@ -34,6 +34,8 @@ struct _HevSocks5SessionTCP
     HevTaskMutex *mutex;
     HevRingBuffer *buffer;
     int pcb_eof;
+    int is_smart_proxy_probe;
+    int initial_data_received;
 };
 
 struct _HevSocks5SessionTCPClass
@@ -51,7 +53,7 @@ int hev_socks5_session_tcp_construct (HevSocks5SessionTCP *self,
 HevSocks5SessionTCP *hev_socks5_session_tcp_new (struct tcp_pcb *pcb,
                                                  HevTaskMutex *mutex);
 
-void hev_socks5_session_tcp_splice (HevSocks5Session *base);
+int hev_socks5_session_tcp_splice (HevSocks5Session *base);
 
 
 #endif /* __HEV_SOCKS5_SESSION_TCP_H__ */
