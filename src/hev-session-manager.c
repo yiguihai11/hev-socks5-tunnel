@@ -410,65 +410,179 @@ run_direct_udp_task (void *data)
     // 创建 socket
     session->fd = hev_task_io_socket_socket (AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
     if (session->fd < 0) {
-        LOG_E ("router: failed to create UDP socket");
+        LOG_E ("router: failed to create UDP socket: %s", strerror (errno));
         goto cleanup;
     }
 
     int zero = 0;
     setsockopt (session->fd, IPPROTO_IPV6, IPV6_V6ONLY, &zero, sizeof (zero));
 
+    // 【删除绑定代码 - 让系统自动分配源端口】
+    // 不需要 bind()，直接使用 sendto() 会自动绑定一个临时端口
+
     if (hev_task_add_fd (session->task, session->fd, POLLIN) < 0) {
         LOG_E ("router: failed to add fd to task");
         goto cleanup;
     }
 
-    // 设置 UDP 接收处理器(用于接收从应用程序发来的后续 UDP 包)
+    // 设置 UDP 接收处理器
     hev_task_mutex_lock (session->mutex);
     if (session->pcb) {
         udp_recv (session->pcb, direct_udp_recv_handler, session);
     }
     hev_task_mutex_unlock (session->mutex);
 
-    // 处理第一个数据包
-    if (session->first_packet) {
-        struct sockaddr_storage dest_addr;
-        socklen_t addr_len;
+// 处理第一个数据包
+if (session->first_packet) {
+    struct sockaddr_storage dest_addr;
+    socklen_t addr_len;
 
-        LOG_D ("router: Processing first packet - len: %u, tot_len: %u", 
-               session->first_packet->len, 
-               session->first_packet->tot_len);
+    LOG_I ("router: ===== UDP Direct Connect Debug Info =====");
+    LOG_I ("router: Packet length: %u, total length: %u", 
+           session->first_packet->len, 
+           session->first_packet->tot_len);
 
-        if (IP_IS_V6 (&session->dest_ip)) {
-            struct sockaddr_in6 *sa6 = (struct sockaddr_in6 *)&dest_addr;
-            addr_len = sizeof (struct sockaddr_in6);
-            memset (sa6, 0, addr_len);
-            sa6->sin6_family = AF_INET6;
-            sa6->sin6_port = htons (session->dest_port);
-            memcpy (&sa6->sin6_addr, ip_2_ip6 (&session->dest_ip), 16);
-        } else {
-            struct sockaddr_in *sa4 = (struct sockaddr_in *)&dest_addr;
-            addr_len = sizeof (struct sockaddr_in);
-            memset (sa4, 0, addr_len);
-            sa4->sin_family = AF_INET;
-            sa4->sin_port = htons (session->dest_port);
-            sa4->sin_addr.s_addr = ip_2_ip4 (&session->dest_ip)->addr;
+    /* 
+     * 重要：检测并移除 UDP header
+     * 
+     * 原因：lwIP 在使用 NETIF_FLAG_PRETEND_UDP 标志时，传递给 udp_recv_handler
+     * 的 pbuf 可能包含完整的 UDP header（8字节）：
+     *   [0-1]: 源端口 (Source Port)
+     *   [2-3]: 目标端口 (Destination Port)  
+     *   [4-5]: 长度 (Length)
+     *   [6-7]: 校验和 (Checksum)
+     * 
+     * 我们需要发送的是纯 DNS 数据（应用层），所以需要移除 UDP header。
+     * 检测方法：检查字节[2-3]是否等于目标端口（如53），如果是则说明包含UDP header。
+     */
+    unsigned char *data = (unsigned char *)session->first_packet->payload;
+    if (session->first_packet->len > 8) {
+        uint16_t check_port = (data[2] << 8) | data[3];
+        if (check_port == session->dest_port) {
+            LOG_W ("router: ⚠️  Detected UDP header in pbuf, removing 8 bytes");
+            /* 使用 lwIP API 移除前8字节的 UDP header */
+            if (pbuf_remove_header(session->first_packet, 8) != 0) {
+                LOG_E ("router: Failed to remove UDP header from pbuf");
+                goto cleanup;
+            }
+            LOG_D ("router: UDP header removed, new length: %u", session->first_packet->len);
         }
-
-        // 发送第一个包到真实目标
-        ssize_t sent = sendto (session->fd, session->first_packet->payload, 
-                              session->first_packet->len, 0,
-                              (struct sockaddr *)&dest_addr, addr_len);
-        
-        if (sent < 0) {
-            LOG_W ("router: direct UDP send first packet failed: %s", strerror (errno));
-            goto cleanup;
-        } else {
-            LOG_D ("router: Direct UDP sent first packet: %zd bytes", sent);
-        }
-
-        pbuf_free (session->first_packet);
-        session->first_packet = NULL;
     }
+
+    /* 现在 first_packet->payload 指向纯 DNS 数据 */
+    unsigned char *dns_data = (unsigned char *)session->first_packet->payload;
+    int dns_len = session->first_packet->len;
+
+    // 打印完整的数据包内容（hex dump）
+    {
+        char hex_line[128];
+        char ascii_line[64];
+        
+        LOG_I ("router: ----- Raw DNS Packet Data -----");
+        for (int i = 0; i < dns_len; i += 16) {
+            memset(hex_line, 0, sizeof(hex_line));
+            memset(ascii_line, 0, sizeof(ascii_line));
+            
+            int line_len = (dns_len - i) > 16 ? 16 : (dns_len - i);
+            
+            for (int j = 0; j < line_len; j++) {
+                sprintf(hex_line + strlen(hex_line), "%02x ", dns_data[i + j]);
+                ascii_line[j] = (dns_data[i + j] >= 32 && dns_data[i + j] <= 126) ? dns_data[i + j] : '.';
+            }
+            
+            LOG_I ("router: %04x: %-48s |%s|", i, hex_line, ascii_line);
+        }
+        LOG_I ("router: ----- End of Packet -----");
+    }
+
+    // 解析DNS查询（如果是DNS）
+    if (session->dest_port == 53 && dns_len >= 12) {
+        unsigned char *dns = dns_data;
+        LOG_I ("router: DNS Query Analysis:");
+        LOG_I ("router:   Transaction ID: 0x%02x%02x", dns[0], dns[1]);
+        LOG_I ("router:   Flags: 0x%02x%02x", dns[2], dns[3]);
+        LOG_I ("router:   Questions: %d", (dns[4] << 8) | dns[5]);
+        LOG_I ("router:   Answer RRs: %d", (dns[6] << 8) | dns[7]);
+        LOG_I ("router:   Authority RRs: %d", (dns[8] << 8) | dns[9]);
+        LOG_I ("router:   Additional RRs: %d", (dns[10] << 8) | dns[11]);
+        
+        // 解析域名
+        if (dns_len > 12) {
+            char domain[256] = {0};
+            int pos = 12;
+            int domain_pos = 0;
+            while (pos < dns_len && dns[pos] != 0) {
+                int label_len = dns[pos];
+                if (label_len == 0 || label_len > 63 || pos + label_len >= dns_len)
+                    break;
+                if (domain_pos > 0)
+                    domain[domain_pos++] = '.';
+                memcpy(domain + domain_pos, dns + pos + 1, label_len);
+                domain_pos += label_len;
+                pos += label_len + 1;
+            }
+            LOG_I ("router:   Domain: %s", domain);
+        }
+    }
+
+    char dest_str[INET6_ADDRSTRLEN];
+    char src_str[INET6_ADDRSTRLEN];
+    ipaddr_ntoa_r (&session->dest_ip, dest_str, sizeof (dest_str));
+    ipaddr_ntoa_r (&session->src_ip, src_str, sizeof (src_str));
+    LOG_I ("router: Source: %s:%d -> Dest: %s:%d", 
+           src_str, session->src_port, dest_str, session->dest_port);
+
+    if (IP_IS_V6 (&session->dest_ip)) {
+        struct sockaddr_in6 *sa6 = (struct sockaddr_in6 *)&dest_addr;
+        addr_len = sizeof (struct sockaddr_in6);
+        memset (sa6, 0, addr_len);
+        sa6->sin6_family = AF_INET6;
+        sa6->sin6_port = htons (session->dest_port);
+        memcpy (&sa6->sin6_addr, ip_2_ip6 (&session->dest_ip), 16);
+    } else {
+        struct sockaddr_in *sa4 = (struct sockaddr_in *)&dest_addr;
+        addr_len = sizeof (struct sockaddr_in);
+        memset (sa4, 0, addr_len);
+        sa4->sin_family = AF_INET;
+        sa4->sin_port = htons (session->dest_port);
+        sa4->sin_addr.s_addr = ip_2_ip4 (&session->dest_ip)->addr;
+    }
+
+    // 发送DNS数据到真实目标
+    LOG_I ("router: Attempting to send %d bytes via sendto()...", dns_len);
+    ssize_t sent = sendto (session->fd, dns_data, dns_len, 0,
+                          (struct sockaddr *)&dest_addr, addr_len);
+    
+    if (sent < 0) {
+        LOG_E ("router: ❌ sendto() FAILED: %s (errno=%d)", 
+               strerror (errno), errno);
+        goto cleanup;
+    } else {
+        LOG_I ("router: ✅ sendto() SUCCESS: sent %zd bytes", sent);
+        
+        // 打印实际使用的源地址（系统自动分配的）
+        struct sockaddr_storage local_addr;
+        socklen_t local_len = sizeof(local_addr);
+        if (getsockname(session->fd, (struct sockaddr *)&local_addr, &local_len) == 0) {
+            char local_str[INET6_ADDRSTRLEN];
+            int local_port;
+            if (local_addr.ss_family == AF_INET6) {
+                struct sockaddr_in6 *sa6 = (struct sockaddr_in6 *)&local_addr;
+                inet_ntop(AF_INET6, &sa6->sin6_addr, local_str, sizeof(local_str));
+                local_port = ntohs(sa6->sin6_port);
+            } else {
+                struct sockaddr_in *sa4 = (struct sockaddr_in *)&local_addr;
+                inet_ntop(AF_INET, &sa4->sin_addr, local_str, sizeof(local_str));
+                local_port = ntohs(sa4->sin_port);
+            }
+            LOG_I ("router: Actual socket bound to: %s:%d", local_str, local_port);
+        }
+    }
+    LOG_I ("router: ==========================================");
+
+    pbuf_free (session->first_packet);
+    session->first_packet = NULL;
+}
 
     session->alive = 1;
 
@@ -478,53 +592,94 @@ run_direct_udp_task (void *data)
     ipaddr_ntoa_r (&session->src_ip, src_ip_str, sizeof (src_ip_str));
     LOG_I ("router: Direct UDP session started: %s:%d <-> %s:%d",
            src_ip_str, session->src_port, dest_ip_str, session->dest_port);
+    LOG_I ("router: Waiting for response from server (socket fd=%d)...", session->fd);
 
     // 接收循环 - 等待服务器响应
-    while (session->alive) {
+    int recv_attempts = 0;
+    while (session->alive && recv_attempts < 100) {
         addr_len = sizeof (remote_addr);
+        
+        LOG_D ("router: recvfrom() attempt #%d...", ++recv_attempts);
         ssize_t received = recvfrom (session->fd, buffer, sizeof (buffer), 0,
                                     (struct sockaddr *)&remote_addr, &addr_len);
 
         if (received < 0) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                LOG_D ("router: recvfrom() returned EAGAIN/EWOULDBLOCK, yielding...");
                 hev_task_yield (HEV_TASK_WAITIO);
                 continue;
             }
-            LOG_W ("router: direct UDP recv failed: %s", strerror (errno));
+            LOG_E ("router: ❌ recvfrom() failed: %s (errno=%d)", strerror (errno), errno);
             break;
         }
 
         if (received == 0) {
+            LOG_W ("router: recvfrom() returned 0 bytes");
             break;
         }
 
-        LOG_D ("router: Direct UDP received %zd bytes from server", received);
+        LOG_I ("router: ✅ Received %zd bytes from server!", received);
+        
+        // 打印接收到的数据
+        {
+            char hex_line[128];
+            char ascii_line[64];
+            
+            LOG_I ("router: ----- Received Response Data -----");
+            for (int i = 0; i < received && i < 256; i += 16) {
+                memset(hex_line, 0, sizeof(hex_line));
+                memset(ascii_line, 0, sizeof(ascii_line));
+                
+                int line_len = (received - i) > 16 ? 16 : (received - i);
+                
+                for (int j = 0; j < line_len; j++) {
+                    sprintf(hex_line + strlen(hex_line), "%02x ", buffer[i + j]);
+                    ascii_line[j] = (buffer[i + j] >= 32 && buffer[i + j] <= 126) ? buffer[i + j] : '.';
+                }
+                
+                LOG_I ("router: %04x: %-48s |%s|", i, hex_line, ascii_line);
+            }
+            LOG_I ("router: ----- End of Response -----");
+        }
 
         // 分配 pbuf 并复制接收到的数据
         struct pbuf *p = pbuf_alloc (PBUF_TRANSPORT, received, PBUF_RAM);
         if (!p) {
-            LOG_W ("router: failed to allocate pbuf for response");
+            LOG_E ("router: failed to allocate pbuf for response");
             continue;
         }
 
         memcpy (p->payload, buffer, received);
+        LOG_D ("router: Allocated pbuf: %u bytes", p->len);
 
         // 发送响应回客户端
-        hev_task_mutex_lock (session->mutex);
-        if (session->pcb) {
-            // 使用 udp_sendto 发送到客户端地址
-            err_t err = udp_sendto (session->pcb, p, 
-                                   &session->src_ip,
-                                   session->src_port);
-            if (err != ERR_OK) {
-                LOG_W ("router: failed to send UDP response to client, error: %d", err);
-            } else {
-                LOG_D ("router: Direct UDP forwarded %zd bytes to client", received);
-            }
-        }
-        hev_task_mutex_unlock (session->mutex);
+hev_task_mutex_lock (session->mutex);
+if (session->pcb) {
+    LOG_I ("router: Forwarding response to client %s:%d (spoofing source as %s:%d)", 
+           src_ip_str, session->src_port, dest_ip_str, session->dest_port);
+    
+    // 使用 udp_sendfrom 伪装源地址
+    // pcb->remote_ip 和 pcb->remote_port 是客户端地址（198.18.0.1:xxxxx）
+    // 我们要伪装源地址为 DNS 服务器地址（114.114.114.114:53）
+    err_t err = udp_sendfrom (session->pcb, p, 
+                             &session->dest_ip,     // 伪装源地址：DNS服务器
+                             session->dest_port);   // 伪装源端口：53
+    
+    if (err != ERR_OK) {
+        LOG_E ("router: ❌ udp_sendfrom() to client failed, error: %d", err);
+    } else {
+        LOG_I ("router: ✅ Successfully forwarded %zd bytes to client", received);
+    }
+} else {
+    LOG_W ("router: pcb is NULL, cannot forward response");
+}
+hev_task_mutex_unlock (session->mutex);
 
-        pbuf_free (p);
+pbuf_free (p);
+    }
+
+    if (recv_attempts >= 100) {
+        LOG_W ("router: Exceeded maximum recv attempts (100), exiting");
     }
 
 cleanup:

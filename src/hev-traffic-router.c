@@ -303,6 +303,125 @@ int
 hev_traffic_router_handle_udp (struct udp_pcb *pcb, struct pbuf *p,
                                const ip_addr_t *addr, u16_t port)
 {
+    /* DNS Forwarder 劫持检查（优先级最高）
+     * 
+     * 功能：劫持发往特定虚拟DNS地址的查询，转发到真实DNS服务器
+     * 配置示例：
+     *   virtual-ip4: 8.8.8.8     -> target-ip4: 1.1.1.1:53
+     *   virtual-ip6: 2001:4860:4860::8844 -> target-ip6: 2606:4700:4700::1111:53
+     * 
+     * 应用场景：
+     *   1. 统一DNS出口，方便管理
+     *   2. 劫持特定DNS地址到本地/指定服务器
+     *   3. 实现DNS分流（国内DNS用直连，国外DNS用代理）
+     */
+    if (port == 53) {
+        const char *dns_fwd_virtual_ip4 = hev_config_get_dns_forwarder_virtual_ip4();
+        const char *dns_fwd_virtual_ip6 = hev_config_get_dns_forwarder_virtual_ip6();
+        const char *dns_fwd_target_ip4 = hev_config_get_dns_forwarder_target_ip4();
+        const char *dns_fwd_target_ip6 = hev_config_get_dns_forwarder_target_ip6();
+        
+        int is_hijacked = 0;
+        ip_addr_t target_ip;
+        u16_t target_port = 53;  // 默认端口53
+        
+        /* 检查IPv4劫持 */
+        if (dns_fwd_virtual_ip4 && dns_fwd_target_ip4 && IP_IS_V4(addr)) {
+            ip_addr_t virtual_ip4;
+            if (ipaddr_aton(dns_fwd_virtual_ip4, &virtual_ip4)) {
+                if (ip_addr_cmp(addr, &virtual_ip4)) {
+                    /* 解析目标地址（可能包含端口） */
+                    char target_buf[128];
+                    strncpy(target_buf, dns_fwd_target_ip4, sizeof(target_buf) - 1);
+                    
+                    char *colon = strchr(target_buf, ':');
+                    if (colon) {
+                        *colon = '\0';
+                        target_port = atoi(colon + 1);
+                    }
+                    
+                    if (ipaddr_aton(target_buf, &target_ip)) {
+                        is_hijacked = 1;
+                        char vip_str[INET6_ADDRSTRLEN];
+                        char tip_str[INET6_ADDRSTRLEN];
+                        ipaddr_ntoa_r(&virtual_ip4, vip_str, sizeof(vip_str));
+                        ipaddr_ntoa_r(&target_ip, tip_str, sizeof(tip_str));
+                        LOG_I ("router: DNS Forwarder hijack: %s:53 -> %s:%d", 
+                               vip_str, tip_str, target_port);
+                    }
+                }
+            }
+        }
+        
+        /* 检查IPv6劫持 */
+        if (!is_hijacked && dns_fwd_virtual_ip6 && dns_fwd_target_ip6 && IP_IS_V6(addr)) {
+            ip_addr_t virtual_ip6;
+            if (ipaddr_aton(dns_fwd_virtual_ip6, &virtual_ip6)) {
+                if (ip_addr_cmp(addr, &virtual_ip6)) {
+                    /* 解析目标地址（格式：[ipv6]:port 或 ipv6） */
+                    char target_buf[128];
+                    strncpy(target_buf, dns_fwd_target_ip6, sizeof(target_buf) - 1);
+                    
+                    char *bracket_end = strrchr(target_buf, ']');
+                    if (bracket_end && *(bracket_end + 1) == ':') {
+                        target_port = atoi(bracket_end + 2);
+                        *bracket_end = '\0';
+                        if (ipaddr_aton(target_buf + 1, &target_ip)) {  // 跳过 '['
+                            is_hijacked = 1;
+                        }
+                    } else {
+                        if (ipaddr_aton(target_buf, &target_ip)) {
+                            is_hijacked = 1;
+                        }
+                    }
+                    
+                    if (is_hijacked) {
+                        char vip_str[INET6_ADDRSTRLEN];
+                        char tip_str[INET6_ADDRSTRLEN];
+                        ipaddr_ntoa_r(&virtual_ip6, vip_str, sizeof(vip_str));
+                        ipaddr_ntoa_r(&target_ip, tip_str, sizeof(tip_str));
+                        LOG_I ("router: DNS Forwarder hijack (IPv6): %s:53 -> %s:%d", 
+                               vip_str, tip_str, target_port);
+                    }
+                }
+            }
+        }
+        
+        /* 如果被劫持，使用目标地址进行UDP直连 */
+        if (is_hijacked) {
+            char dest_ip_str[INET6_ADDRSTRLEN];
+            char src_ip_str[INET6_ADDRSTRLEN];
+            struct pbuf *p_copy;
+            
+            ipaddr_ntoa_r (&target_ip, dest_ip_str, sizeof (dest_ip_str));
+            ipaddr_ntoa_r (&pcb->remote_ip, src_ip_str, sizeof (src_ip_str));
+            
+            LOG_I ("router: UDP DNS forward (hijacked): %s:%d -> %s:%d", 
+                   src_ip_str, pcb->remote_port, dest_ip_str, target_port);
+            
+            // 重要:复制 pbuf 数据,因为原始 pbuf 由 lwIP 管理
+            // 不能直接传递原始 pbuf,因为它可能在 lwIP 内部被修改或释放
+            p_copy = pbuf_alloc (PBUF_TRANSPORT, p->tot_len, PBUF_RAM);
+            if (!p_copy) {
+                LOG_E ("router: failed to allocate pbuf copy for DNS forward");
+                return 0;
+            }
+            
+            if (pbuf_copy (p_copy, p) != ERR_OK) {
+                LOG_E ("router: failed to copy pbuf for DNS forward");
+                pbuf_free (p_copy);
+                return 0;
+            }
+            
+            LOG_D ("router: Copied UDP packet: %u bytes", p_copy->tot_len);
+            
+            /* 创建 direct UDP session，转发到目标DNS服务器 */
+            hev_session_manager_start_direct_udp (pcb, &target_ip, target_port, p_copy);
+            return 1;
+        }
+    }
+    
+    /* 国内IP直连检查（第二优先级） */
     if (is_domestic (addr)) {
         char dest_ip_str[INET6_ADDRSTRLEN];
         char src_ip_str[INET6_ADDRSTRLEN];
@@ -312,18 +431,14 @@ hev_traffic_router_handle_udp (struct udp_pcb *pcb, struct pbuf *p,
         ipaddr_ntoa_r (&pcb->remote_ip, src_ip_str, sizeof (src_ip_str));
         
         LOG_I ("router: UDP direct connect: %s:%d -> %s:%d (domestic)", 
-               src_ip_str, pcb->remote_port,
-               dest_ip_str, port);
+               src_ip_str, pcb->remote_port, dest_ip_str, port);
         
-        // 重要:复制 pbuf 数据,因为原始 pbuf 由 lwIP 管理
-        // 不能直接传递原始 pbuf,因为它可能在 lwIP 内部被修改或释放
         p_copy = pbuf_alloc (PBUF_TRANSPORT, p->tot_len, PBUF_RAM);
         if (!p_copy) {
             LOG_E ("router: failed to allocate pbuf copy for direct UDP");
-            return 0;  // 返回 0,让 SOCKS5 处理
+            return 0;
         }
         
-        // 复制数据
         if (pbuf_copy (p_copy, p) != ERR_OK) {
             LOG_E ("router: failed to copy pbuf for direct UDP");
             pbuf_free (p_copy);
@@ -332,7 +447,6 @@ hev_traffic_router_handle_udp (struct udp_pcb *pcb, struct pbuf *p,
         
         LOG_D ("router: Copied UDP packet: %u bytes", p_copy->tot_len);
         
-        // 创建 direct UDP session,传递复制的 pbuf
         hev_session_manager_start_direct_udp (pcb, addr, port, p_copy);
         return 1;
     }
