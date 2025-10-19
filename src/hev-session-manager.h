@@ -19,6 +19,10 @@ void hev_session_manager_fini (void);
 void hev_session_manager_start_socks5_tcp (struct tcp_pcb *pcb);
 void hev_session_manager_start_direct_tcp (struct tcp_pcb *pcb);
 void hev_session_manager_start_smart_proxy (struct tcp_pcb *pcb);
+void hev_session_manager_start_direct_udp (struct udp_pcb *pcb,
+                                          const ip_addr_t *dest_addr,
+                                          u16_t dest_port,
+                                          struct pbuf *first_packet);
 
 
 #endif /* __HEV_SESSION_MANAGER_H__ */

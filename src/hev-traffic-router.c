@@ -303,6 +303,39 @@ int
 hev_traffic_router_handle_udp (struct udp_pcb *pcb, struct pbuf *p,
                                const ip_addr_t *addr, u16_t port)
 {
-    /* TODO: Implement DNS forwarder and direct UDP */
-    return 0; /* Not handled */
+    if (is_domestic (addr)) {
+        char dest_ip_str[INET6_ADDRSTRLEN];
+        char src_ip_str[INET6_ADDRSTRLEN];
+        struct pbuf *p_copy;
+        
+        ipaddr_ntoa_r (addr, dest_ip_str, sizeof (dest_ip_str));
+        ipaddr_ntoa_r (&pcb->remote_ip, src_ip_str, sizeof (src_ip_str));
+        
+        LOG_I ("router: UDP direct connect: %s:%d -> %s:%d (domestic)", 
+               src_ip_str, pcb->remote_port,
+               dest_ip_str, port);
+        
+        // 重要:复制 pbuf 数据,因为原始 pbuf 由 lwIP 管理
+        // 不能直接传递原始 pbuf,因为它可能在 lwIP 内部被修改或释放
+        p_copy = pbuf_alloc (PBUF_TRANSPORT, p->tot_len, PBUF_RAM);
+        if (!p_copy) {
+            LOG_E ("router: failed to allocate pbuf copy for direct UDP");
+            return 0;  // 返回 0,让 SOCKS5 处理
+        }
+        
+        // 复制数据
+        if (pbuf_copy (p_copy, p) != ERR_OK) {
+            LOG_E ("router: failed to copy pbuf for direct UDP");
+            pbuf_free (p_copy);
+            return 0;
+        }
+        
+        LOG_D ("router: Copied UDP packet: %u bytes", p_copy->tot_len);
+        
+        // 创建 direct UDP session,传递复制的 pbuf
+        hev_session_manager_start_direct_udp (pcb, addr, port, p_copy);
+        return 1;
+    }
+
+    return 0;
 }

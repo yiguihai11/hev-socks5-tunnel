@@ -223,16 +223,26 @@ udp_recv_handler (void *arg, struct udp_pcb *pcb, struct pbuf *p,
     int stack_size;
     HevTask *task;
 
-    if (!run) {
+    if (!p) {
         udp_remove (pcb);
         return;
     }
 
-    if (hev_traffic_router_handle_udp (pcb, p, addr, port)) {
+    if (!run) {
         pbuf_free (p);
+        udp_remove (pcb);
         return;
     }
 
+    // 检查是否是国内 IP,如果是则使用直连
+    if (hev_traffic_router_handle_udp (pcb, p, addr, port)) {
+        // hev_traffic_router_handle_udp 内部会复制 pbuf
+        // 原始 pbuf 会由 lwIP 自动释放,所以这里不要调用 pbuf_free(p)
+        // 也不要 remove pcb,因为 direct UDP session 会接管它
+        return;
+    }
+
+    // 检查是否是 mapped DNS
     dns = hev_mapped_dns_get ();
     if (dns && addr->type == IPADDR_TYPE_V4) {
         int faddr = hev_config_get_mapdns_address ();
@@ -243,8 +253,10 @@ udp_recv_handler (void *arg, struct udp_pcb *pcb, struct pbuf *p,
         }
     }
 
+    // 默认:通过 SOCKS5 代理
     udp = hev_socks5_session_udp_new (pcb, &mutex);
     if (!udp) {
+        pbuf_free (p);
         udp_remove (pcb);
         return;
     }
@@ -252,6 +264,7 @@ udp_recv_handler (void *arg, struct udp_pcb *pcb, struct pbuf *p,
     stack_size = hev_config_get_misc_task_stack_size ();
     task = hev_task_new (stack_size);
     if (!task) {
+        pbuf_free (p);
         hev_object_unref (HEV_OBJECT (udp));
         return;
     }
