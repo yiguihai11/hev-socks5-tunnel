@@ -707,6 +707,10 @@ direct_udp_recv_task (void *data)
     LOG_D ("router: direct UDP recv task end");
 }
 
+/* ============================================================================
+   UDP直连改进：统一使用IPv6格式（与TCP保持一致）
+   ============================================================================ */
+
 static void
 run_direct_udp_task (void *data)
 {
@@ -717,12 +721,14 @@ run_direct_udp_task (void *data)
 
     LOG_D ("router: direct UDP send task start");
 
+    /* 创建IPv6 socket，同时支持IPv4（通过IPv4-mapped IPv6地址）*/
     session->fd = hev_task_io_socket_socket (AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
     if (session->fd < 0) {
         LOG_E ("router: failed to create UDP socket: %s", strerror (errno));
         goto cleanup;
     }
 
+    /* ✅ 支持IPv6：禁用IPv6 only模式，允许同时处理IPv4和IPv6 */
     int zero = 0;
     setsockopt (session->fd, IPPROTO_IPV6, IPV6_V6ONLY, &zero, sizeof (zero));
 
@@ -735,20 +741,30 @@ run_direct_udp_task (void *data)
     }
     hev_task_mutex_unlock (session->mutex);
 
+    /* ✅ 改进：统一使用IPv6格式构建目标地址（与TCP保持一致）*/
+    struct sockaddr_in6 *sa6 = (struct sockaddr_in6 *)&dest_addr;
+    addr_len = sizeof (struct sockaddr_in6);
+    memset (sa6, 0, addr_len);
+    sa6->sin6_family = AF_INET6;
+    sa6->sin6_port = htons (session->dest_port);
+
     if (IP_IS_V6 (&session->dest_ip)) {
-        struct sockaddr_in6 *sa6 = (struct sockaddr_in6 *)&dest_addr;
-        addr_len = sizeof (struct sockaddr_in6);
-        memset (sa6, 0, addr_len);
-        sa6->sin6_family = AF_INET6;
-        sa6->sin6_port = htons (session->dest_port);
+        /* 纯IPv6地址 */
         memcpy (&sa6->sin6_addr, ip_2_ip6 (&session->dest_ip), 16);
+        
+        char dest_ip_str[INET6_ADDRSTRLEN];
+        ipaddr_ntoa_r (&session->dest_ip, dest_ip_str, sizeof (dest_ip_str));
+        LOG_D ("router: Target is IPv6: %s:%d", dest_ip_str, session->dest_port);
     } else {
-        struct sockaddr_in *sa4 = (struct sockaddr_in *)&dest_addr;
-        addr_len = sizeof (struct sockaddr_in);
-        memset (sa4, 0, addr_len);
-        sa4->sin_family = AF_INET;
-        sa4->sin_port = htons (session->dest_port);
-        sa4->sin_addr.s_addr = ip_2_ip4 (&session->dest_ip)->addr;
+        /* IPv4地址 - 转换为IPv4-mapped IPv6地址格式: ::ffff:x.x.x.x */
+        u8_t *addr_bytes = (u8_t *)&sa6->sin6_addr;
+        addr_bytes[10] = 0xff;
+        addr_bytes[11] = 0xff;
+        memcpy (&addr_bytes[12], ip_2_ip4 (&session->dest_ip), 4);
+        
+        char dest_ip_str[INET6_ADDRSTRLEN];
+        ipaddr_ntoa_r (&session->dest_ip, dest_ip_str, sizeof (dest_ip_str));
+        LOG_D ("router: Target is IPv4 (mapped to IPv6): %s:%d", dest_ip_str, session->dest_port);
     }
 
     stack_size = hev_config_get_misc_task_stack_size ();
@@ -763,6 +779,7 @@ run_direct_udp_task (void *data)
 
     session->alive = UDP_ALIVE_SEND | UDP_ALIVE_RECV;
 
+    /* 发送循环 */
     for (;;) {
         HevListNode *node = hev_list_first (&session->packet_queue);
         if (!node) {
@@ -774,8 +791,8 @@ run_direct_udp_task (void *data)
 
         HevUDPPacket *pkt = container_of (node, HevUDPPacket, node);
         struct pbuf *p = pkt->data;
-        
-        // ✅ 发送到目标服务器前，移除lwIP的8字节UDP头部
+
+        /* ✅ 发送到目标服务器前移除lwIP的8字节UDP头部 */
         if (p->len > 8) {
             unsigned char *data = (unsigned char *)p->payload;
             uint16_t check_port = (data[2] << 8) | data[3];
