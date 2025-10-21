@@ -790,12 +790,14 @@ run_smart_proxy_task (void *data)
     HevTLSClientHello client_hello;
     int gfw_detected = 0;
     int first_loop = 1;
+    int probe_success = 0;  /* ✅ 新增：探测成功标志 */
+    self->is_smart_proxy_probe = 1; //一个开关标记
 
     ipaddr_ntoa_r (&pcb->remote_ip, src_ip, sizeof (src_ip));
     ipaddr_ntoa_r (&pcb->local_ip, dst_ip, sizeof (dst_ip));
 
-    LOG_D ("%p session: smart proxy task run %s:%d -> %s:%d (is_smart_proxy_probe=%d)",
-           self, src_ip, pcb->remote_port, dst_ip, pcb->local_port, self->is_smart_proxy_probe);
+    LOG_D ("%p session: smart proxy task run %s:%d -> %s:%d",
+           self, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
 
     /* 等待数据到达队列（用于 SNI 检测） */
     if (pcb->local_port == 443 && !self->queue) {
@@ -853,7 +855,9 @@ run_smart_proxy_task (void *data)
     if (hev_task_add_fd (task, fd, POLLIN | POLLOUT) < 0)
         hev_task_mod_fd (task, fd, POLLIN | POLLOUT);
 
-    /* 🔍 阶段 1：TCP 三次握手 */
+    /* ====================================================================
+       🔍 阶段 1：TCP 三次握手
+       ==================================================================== */
     timeout = hev_config_get_smart_proxy_timeout_ms ();
     hev_socks5_set_timeout (s, timeout);
     connect_start = time (NULL);
@@ -869,9 +873,6 @@ run_smart_proxy_task (void *data)
                "fallback to SOCKS5 (NOT blacklisting - may be temporary network issue)",
                self, dst_ip, pcb->local_port, connect_duration * 1000);
         
-        /* ❌ TCP 握手失败不加黑名单（可能是临时网络问题） */
-        gfw_detected = 1;
-        
         hev_task_del_fd (task, fd);
         close (fd);
         goto fallback_socks5;
@@ -882,11 +883,14 @@ run_smart_proxy_task (void *data)
            self, src_ip, pcb->remote_port, dst_ip, pcb->local_port,
            (connect_success_time - connect_start) * 1000);
 
-    /* 🔍 阶段 2：等待服务器数据（在 timeout-ms 时间内） */
+    /* ====================================================================
+       🔍 阶段 2：等待服务器数据并验证
+       ==================================================================== */
     tcp_buffer_size = hev_config_get_misc_tcp_buffer_size ();
     self->buffer = hev_ring_buffer_alloca (tcp_buffer_size);
     if (!self->buffer) {
         LOG_E ("%p session: smart proxy failed to allocate ring buffer", self);
+        gfw_detected = 1;
         hev_task_del_fd (task, fd);
         close (fd);
         goto fallback_socks5;
@@ -921,16 +925,17 @@ run_smart_proxy_task (void *data)
     LOG_D ("%p session: smart proxy waiting for initial data from server (timeout=%dms)",
            self, timeout);
 
-    /* 🔍 数据传输循环，检测真实数据 */
+    /* ====================================================================
+       🔍 数据传输循环，检测真实数据
+       ==================================================================== */
     for (;;) {
         int res_f = tcp_direct_splice_f (self, &idle_timer);
         
-        if (res_f < 0) {
-            LOG_D ("%p session: forward splice ended", self);
-            break;
-        }
-
-        /* 🔍 关键检测点：收到数据后验证是否为真实应用数据 */
+        /* ====================================================================
+           🔧 关键修复：先验证数据，再处理连接结束
+           ==================================================================== */
+        
+        /* 🔍 关键检测点:收到数据后验证是否为真实应用数据 */
         if (first_loop && self->initial_data_received && self->is_smart_proxy_probe) {
             time_t elapsed_ms = (time (NULL) - connect_success_time) * 1000;
             struct iovec iov[2];
@@ -946,12 +951,12 @@ run_smart_proxy_task (void *data)
                     if (iov[0].iov_len >= 7 && 
                         (memcmp (data, "HTTP/1.", 7) == 0 || 
                          memcmp (data, "HTTP/2", 6) == 0)) {
-                        LOG_I ("%p session: Smart proxy SUCCESS for HTTP port %d: "
+                        LOG_I ("%p session: ✅ Smart proxy SUCCESS for HTTP port %d: "
                                "Valid HTTP response from %s (data received in %ld ms)",
                                self, pcb->local_port, dst_ip, elapsed_ms);
                         is_valid_response = 1;
                     } else {
-                        LOG_W ("%p session: Smart proxy received INVALID HTTP response on port %d from %s "
+                        LOG_W ("%p session: ❌ Smart proxy received INVALID HTTP response on port %d from %s "
                                "(expected 'HTTP/', got %d bytes starting with 0x%02x), BLACKLIST",
                                self, pcb->local_port, dst_ip, (int)iov[0].iov_len, first_byte);
                         hev_traffic_router_blacklist_add (&pcb->local_ip);
@@ -966,13 +971,13 @@ run_smart_proxy_task (void *data)
                         const char *tls_type = (first_byte == 0x14) ? "ChangeCipherSpec" :
                                                (first_byte == 0x16) ? "Handshake (ServerHello)" : 
                                                "Application Data";
-                        LOG_I ("%p session: Smart proxy SUCCESS for HTTPS: "
+                        LOG_I ("%p session: ✅ Smart proxy SUCCESS for HTTPS: "
                                "Valid TLS %s (0x%02x) from %s:%d (data received in %ld ms)",
                                self, tls_type, first_byte, dst_ip, pcb->local_port, elapsed_ms);
                         is_valid_response = 1;
                     } else if (first_byte == 0x15) {
-                        /* ❌ TLS Alert (服务器拒绝，如 SNI 不匹配) */
-                        LOG_W ("%p session: Smart proxy received TLS Alert (0x15) from %s:%d "
+                        /* ❌ TLS Alert (服务器拒绝,如 SNI 不匹配) */
+                        LOG_W ("%p session: ❌ Smart proxy received TLS Alert (0x15) from %s:%d "
                                "(likely SNI mismatch or certificate error), BLACKLIST",
                                self, dst_ip, pcb->local_port);
                         hev_traffic_router_blacklist_add (&pcb->local_ip);
@@ -980,7 +985,7 @@ run_smart_proxy_task (void *data)
                         break;
                     } else {
                         /* ❌ Invalid TLS response */
-                        LOG_W ("%p session: Smart proxy received INVALID TLS response (0x%02x) from %s:%d "
+                        LOG_W ("%p session: ❌ Smart proxy received INVALID TLS response (0x%02x) from %s:%d "
                                "(expected 0x14/0x16/0x17), BLACKLIST",
                                self, first_byte, dst_ip, pcb->local_port);
                         hev_traffic_router_blacklist_add (&pcb->local_ip);
@@ -988,9 +993,9 @@ run_smart_proxy_task (void *data)
                         break;
                     }
                 }
-                /* 🔍 其他端口：任意数据都算成功 */
+                /* 🔍 其他端口:任意数据都算成功 */
                 else {
-                    LOG_I ("%p session: Smart proxy SUCCESS for port %d: "
+                    LOG_I ("%p session: ✅ Smart proxy SUCCESS for port %d: "
                            "Received %zu bytes from %s (data received in %ld ms)",
                            self, pcb->local_port, iov[0].iov_len, dst_ip, elapsed_ms);
                     is_valid_response = 1;
@@ -998,16 +1003,17 @@ run_smart_proxy_task (void *data)
             }
             
             if (is_valid_response) {
-                /* ✅ 收到真实数据，继续直连 */
-                LOG_I ("%p session: Smart proxy SUCCESS for %s:%d "
+                /* ✅ 收到真实数据,标记探测成功 */
+                probe_success = 1;  /* 🔧 关键修复:设置成功标志 */
+                LOG_I ("%p session: ✅ Smart proxy probe SUCCESS for %s:%d "
                        "(handshake OK + valid application data in %ld ms), "
                        "NOT blacklisting, continue direct connection",
                        self, dst_ip, pcb->local_port, elapsed_ms);
                 hev_socks5_set_timeout (s, 0);
-                first_loop = 0;
+                first_loop = 0;  /* 🔧 退出探测循环 */
             } else if (elapsed_ms >= timeout) {
-                /* ❌ 超时无数据（严格按照 timeout-ms 判断） */
-                LOG_W ("%p session: Smart proxy TIMEOUT for %s:%d "
+                /* ❌ 超时无数据(严格按照 timeout-ms 判断) */
+                LOG_W ("%p session: ❌ Smart proxy TIMEOUT for %s:%d "
                        "(handshake OK but NO valid data received in %d ms), "
                        "fallback to SOCKS5 and BLACKLIST",
                        self, dst_ip, pcb->local_port, timeout);
@@ -1016,6 +1022,26 @@ run_smart_proxy_task (void *data)
                 break;
             }
             /* 否则继续等待数据 */
+        }
+        
+        /* ====================================================================
+           🔧 关键修复：处理连接结束，但区分探测成功和失败
+           ==================================================================== */
+        if (res_f < 0) {
+            if (probe_success) {
+                /* ✅ 探测已成功，客户端关闭是正常的（HTTP 短连接） */
+                LOG_D ("%p session: forward splice ended after successful probe "
+                       "(HTTP short connection is normal behavior)",
+                       self);
+            } else if (first_loop) {
+                /* ❌ 探测未完成就结束，认为失败 */
+                LOG_D ("%p session: forward splice ended during probe (probe incomplete, considered failed)",
+                       self);
+            } else {
+                /* 正常结束 */
+                LOG_D ("%p session: forward splice ended normally", self);
+            }
+            break;
         }
 
         /* 正常的空闲超时检查（仅在收到数据后生效） */
@@ -1047,9 +1073,13 @@ cleanup_splice:
         session_duration = time (NULL) - connect_success_time;
         
         if (gfw_detected) {
-            LOG_I ("%p session: Smart proxy FAILED %s:%d -> %s:%d "
+            LOG_I ("%p session: ❌ Smart proxy FAILED %s:%d -> %s:%d "
                    "(detected issue, fallback to SOCKS5)",
                    self, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
+        } else if (probe_success) {
+            LOG_I ("%p session: ✅ Smart proxy direct connect %s:%d -> %s:%d ended "
+                   "(duration=%ld seconds, probe was successful)",
+                   self, src_ip, pcb->remote_port, dst_ip, pcb->local_port, session_duration);
         } else {
             LOG_I ("%p session: Smart proxy direct connect %s:%d -> %s:%d ended "
                    "(duration=%ld seconds)",
@@ -1057,10 +1087,14 @@ cleanup_splice:
         }
     }
     
+    /* ====================================================================
+       🔧 关键修复：只有真正失败才走 fallback，探测成功就正常结束
+       ==================================================================== */
     if (gfw_detected) {
         goto fallback_socks5;
     }
     
+    /* ✅ 探测成功或正常结束，不走 SOCKS5 回退 */
     hev_socks5_session_terminate (s);
     hev_socks5_tunnel_delete_session (node);
     hev_object_unref (HEV_OBJECT (self));
@@ -1069,6 +1103,11 @@ cleanup_splice:
 fallback_socks5:
     LOG_I ("%p session: Smart proxy falling back to SOCKS5 for %s:%d -> %s:%d",
            self, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
+    
+    /* 重置 buffer 指针，让 SOCKS5 可以复用 */
+    if (self->buffer) {
+        LOG_D ("%p session: Smart proxy buffer will be reused by SOCKS5", self);
+    }
     
     hev_socks5_session_run (s);
     
