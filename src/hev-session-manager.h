@@ -22,7 +22,8 @@ void hev_session_manager_start_smart_proxy (struct tcp_pcb *pcb);
 void hev_session_manager_start_direct_udp (struct udp_pcb *pcb,
                                           const ip_addr_t *dest_addr,
                                           u16_t dest_port,
-                                          struct pbuf *first_packet);
-
+                                          struct pbuf *first_packet,
+                                          const ip_addr_t *original_dest_addr,
+                                          u16_t original_dest_port);
 
 #endif /* __HEV_SESSION_MANAGER_H__ */

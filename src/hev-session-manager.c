@@ -1140,6 +1140,9 @@ typedef struct _HevDirectUDPSession {
     
     time_t last_activity;
     time_t session_start;
+    
+    ip_addr_t original_dest_ip;  // ✅ 新增
+    u16_t original_dest_port;    // ✅ 新增
 } HevDirectUDPSession;
 
 #define UDP_ALIVE_SEND 0x01
@@ -1326,8 +1329,8 @@ direct_udp_recv_task (void *data)
             hev_task_mutex_lock (session->mutex);
             if (session->pcb) {
                 err_t err = udp_sendfrom (session->pcb, p,
-                                         &session->dest_ip,
-                                         session->dest_port);
+                                 &session->original_dest_ip,   // ✅ 修改
+                                 session->original_dest_port); // ✅ 修改
                 if (err != ERR_OK) {
                     LOG_E ("%p session: UDP udp_sendfrom failed: %d", session, err);
                 } else {
@@ -1504,7 +1507,9 @@ void
 hev_session_manager_start_direct_udp (struct udp_pcb *pcb,
                                      const ip_addr_t *dest_addr,
                                      u16_t dest_port,
-                                     struct pbuf *first_packet)
+                                     struct pbuf *first_packet,
+                                     const ip_addr_t *original_dest_addr,  // ✅ 新增
+                                     u16_t original_dest_port)             // ✅ 新增
 {
     HevDirectUDPSession *session;
     HevUDPPacket *pkt;
@@ -1540,6 +1545,9 @@ hev_session_manager_start_direct_udp (struct udp_pcb *pcb,
     session->dest_port = dest_port;
     ip_addr_copy (session->src_ip, pcb->remote_ip);
     session->src_port = pcb->remote_port;
+    // ✅ 新增：保存原始目标
+    ip_addr_copy (session->original_dest_ip, *original_dest_addr);
+    session->original_dest_port = original_dest_port;
 
     pkt = hev_malloc (sizeof (HevUDPPacket));
     if (pkt) {
