@@ -3,7 +3,7 @@
  Name        : hev-socks5-session-tcp.c
  Author      : hev <r@hev.cc>
  Copyright   : Copyright (c) 2017 - 2023 hev
- Description : Socks5 Session TCP
+ Description : Socks5 Session TCP (增强日志版本)
  ============================================================================
  */
 
@@ -68,6 +68,7 @@ tcp_splice_f (HevSocks5SessionTCP *self)
             else
                 res = -1;
         } else {
+            LOG_D ("%p socks5 session tcp: forward sent %zd bytes", self, s);
             hev_task_mutex_lock (self->mutex);
             self->queue = pbuf_free_header (self->queue, s);
             if (self->pcb)
@@ -76,6 +77,7 @@ tcp_splice_f (HevSocks5SessionTCP *self)
             res = 1;
         }
     } else if (res < 0) {
+        LOG_D ("%p socks5 session tcp: forward EOF, shutting down write", self);
         shutdown (HEV_SOCKS5 (self)->fd, SHUT_WR);
     }
 
@@ -98,6 +100,7 @@ tcp_splice_b (HevSocks5SessionTCP *self)
             else
                 res = -1;
         } else {
+            LOG_D ("%p socks5 session tcp: backward received %zd bytes", self, s);
             hev_ring_buffer_write_finish (self->buffer, s);
             self->initial_data_received = 1;
         }
@@ -119,6 +122,7 @@ tcp_splice_b (HevSocks5SessionTCP *self)
             err |= tcp_output (self->pcb);
             res = 1;
         } else if (res < 0) {
+            LOG_D ("%p socks5 session tcp: backward EOF, shutting down pcb write", self);
             tcp_shutdown (self->pcb, 0, 1);
         }
     }
@@ -135,14 +139,18 @@ tcp_recv_handler (void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err)
     HevSocks5SessionTCP *self = arg;
 
     if (p) {
+        LOG_D ("%p socks5 session tcp: received %d bytes from client", self, p->tot_len);
         if (!self->queue) {
             self->queue = p;
         } else {
-            if (self->queue->tot_len > TCP_WND_MAX (pcb))
+            if (self->queue->tot_len > TCP_WND_MAX (pcb)) {
+                LOG_W ("%p socks5 session tcp: queue full, would block", self);
                 return ERR_WOULDBLOCK;
+            }
             pbuf_cat (self->queue, p);
         }
     } else {
+        LOG_D ("%p socks5 session tcp: received EOF from client", self);
         self->pcb_eof = 1;
     }
 
@@ -155,6 +163,7 @@ tcp_sent_handler (void *arg, struct tcp_pcb *pcb, u16_t len)
 {
     HevSocks5SessionTCP *self = arg;
 
+    LOG_D ("%p socks5 session tcp: sent %u bytes acknowledged", self, len);
     hev_ring_buffer_read_release (self->buffer, len);
     hev_task_wakeup (self->data.task);
 
@@ -166,6 +175,7 @@ tcp_err_handler (void *arg, err_t err)
 {
     HevSocks5SessionTCP *self = arg;
 
+    LOG_W ("%p socks5 session tcp: error occurred (err=%d), terminating", self, err);
     self->pcb = NULL;
     hev_socks5_session_terminate (HEV_SOCKS5_SESSION (self));
 }
@@ -177,11 +187,14 @@ hev_socks5_session_tcp_new (struct tcp_pcb *pcb, HevTaskMutex *mutex)
     int res;
 
     self = hev_malloc0 (sizeof (HevSocks5SessionTCP));
-    if (!self)
+    if (!self) {
+        LOG_E ("socks5 session tcp: failed to allocate memory");
         return NULL;
+    }
 
     res = hev_socks5_session_tcp_construct (self, pcb, mutex);
     if (res < 0) {
+        LOG_E ("socks5 session tcp: failed to construct");
         hev_free (self);
         return NULL;
     }
@@ -207,8 +220,11 @@ hev_socks5_session_tcp_bind (HevSocks5 *self, int fd,
         int res;
 
         res = set_sock_mark (fd, mark);
-        if (res < 0)
+        if (res < 0) {
+            LOG_E ("%p socks5 session tcp: failed to set socket mark", self);
             return -1;
+        }
+        LOG_D ("%p socks5 session tcp: socket mark set to %u", self, mark);
     }
 
     return 0;
@@ -221,24 +237,38 @@ hev_socks5_session_tcp_splice (HevSocks5Session *base)
     int tcp_buffer_size;
     int res_f = 1;
     int res_b = 1;
+    size_t total_forward = 0;
+    size_t total_backward = 0;
 
     LOG_D ("%p socks5 session tcp splice", self);
 
-    if (!self->pcb)
+    if (!self->pcb) {
+        LOG_W ("%p socks5 session tcp splice: pcb is NULL", self);
         return 0;
+    }
 
     tcp_buffer_size = hev_config_get_misc_tcp_buffer_size ();
     self->buffer = hev_ring_buffer_alloca (tcp_buffer_size);
-    if (!self->buffer)
+    if (!self->buffer) {
+        LOG_E ("%p socks5 session tcp splice: failed to allocate ring buffer", self);
         return 0;
+    }
+
+    LOG_D ("%p socks5 session tcp splice: starting data transfer loop", self);
 
     for (;;) {
         HevTaskYieldType type;
 
-        if (res_f >= 0)
+        if (res_f >= 0) {
             res_f = tcp_splice_f (self);
-        if (res_b >= 0)
+            if (res_f > 0)
+                total_forward++;
+        }
+        if (res_b >= 0) {
             res_b = tcp_splice_b (self);
+            if (res_b > 0)
+                total_backward++;
+        }
 
         if (res_f > 0 || res_b > 0)
             type = HEV_TASK_YIELD;
@@ -248,11 +278,16 @@ hev_socks5_session_tcp_splice (HevSocks5Session *base)
             break;
 
         if (task_io_yielder (type, base) < 0) {
-            if (self->is_smart_proxy_probe && !self->initial_data_received)
+            if (self->is_smart_proxy_probe && !self->initial_data_received) {
+                LOG_W ("%p socks5 session tcp splice: GFW detected (smart proxy probe failed)", self);
                 return -1; /* GFW detected */
+            }
+            LOG_D ("%p socks5 session tcp splice: yielder returned error", self);
             break;
         }
     }
+
+    LOG_D ("%p socks5 session tcp splice: draining remaining data", self);
 
     while (self->pcb) {
         if (hev_ring_buffer_get_use_size (self->buffer) == 0)
@@ -261,6 +296,9 @@ hev_socks5_session_tcp_splice (HevSocks5Session *base)
         if (task_io_yielder (HEV_TASK_WAITIO, base) < 0)
             break;
     }
+
+    LOG_D ("%p socks5 session tcp splice: completed (forward_cycles=%zu, backward_cycles=%zu)",
+           self, total_forward, total_backward);
 
     return 0;
 }
@@ -278,6 +316,7 @@ hev_socks5_session_tcp_set_task (HevSocks5Session *base, HevTask *task)
 {
     HevSocks5SessionTCP *self = HEV_SOCKS5_SESSION_TCP (base);
 
+    LOG_D ("%p socks5 session tcp set task %p", self, task);
     self->data.task = task;
 }
 
@@ -294,17 +333,23 @@ hev_socks5_session_tcp_construct (HevSocks5SessionTCP *self,
                                   struct tcp_pcb *pcb, HevTaskMutex *mutex)
 {
     HevSocks5Addr addr;
+    char dst_ip[INET6_ADDRSTRLEN];
     int res;
 
     res = hev_socks5_addr_from_lwip (&addr, &pcb->local_ip, pcb->local_port);
-    if (res < 0)
+    if (res < 0) {
+        LOG_E ("socks5 session tcp construct: failed to convert address");
         return -1;
+    }
 
     res = hev_socks5_client_tcp_construct (&self->base, &addr);
-    if (res < 0)
+    if (res < 0) {
+        LOG_E ("socks5 session tcp construct: failed to construct client");
         return -1;
+    }
 
-    LOG_D ("%p socks5 session tcp construct", self);
+    ipaddr_ntoa_r (&pcb->local_ip, dst_ip, sizeof (dst_ip));
+    LOG_D ("%p socks5 session tcp construct for %s:%d", self, dst_ip, pcb->local_port);
 
     HEV_OBJECT (self)->klass = HEV_SOCKS5_SESSION_TCP_TYPE;
 
@@ -329,14 +374,17 @@ hev_socks5_session_tcp_destruct (HevObject *base)
 
     hev_task_mutex_lock (self->mutex);
     if (self->pcb) {
+        LOG_D ("%p socks5 session tcp destruct: aborting pcb", self);
         tcp_recv (self->pcb, NULL);
         tcp_sent (self->pcb, NULL);
         tcp_err (self->pcb, NULL);
         tcp_abort (self->pcb);
     }
 
-    if (self->queue)
+    if (self->queue) {
+        LOG_D ("%p socks5 session tcp destruct: freeing queued data", self);
         pbuf_free (self->queue);
+    }
     hev_task_mutex_unlock (self->mutex);
 
     HEV_SOCKS5_CLIENT_TCP_TYPE->destruct (base);
