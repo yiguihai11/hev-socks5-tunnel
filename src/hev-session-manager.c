@@ -791,7 +791,6 @@ run_smart_proxy_task (void *data)
     int gfw_detected = 0;
     int first_loop = 1;
     int probe_success = 0;  /* ✅ 新增：探测成功标志 */
-    self->is_smart_proxy_probe = 1; //一个开关标记
 
     ipaddr_ntoa_r (&pcb->remote_ip, src_ip, sizeof (src_ip));
     ipaddr_ntoa_r (&pcb->local_ip, dst_ip, sizeof (dst_ip));
@@ -936,7 +935,7 @@ run_smart_proxy_task (void *data)
            ==================================================================== */
         
         /* 🔍 关键检测点:收到数据后验证是否为真实应用数据 */
-        if (first_loop && self->initial_data_received && self->is_smart_proxy_probe) {
+        if (first_loop && self->initial_data_received) {
             time_t elapsed_ms = (time (NULL) - connect_success_time) * 1000;
             struct iovec iov[2];
             int iovc = hev_ring_buffer_reading (self->buffer, iov);

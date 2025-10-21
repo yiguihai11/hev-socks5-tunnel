@@ -102,7 +102,6 @@ tcp_splice_b (HevSocks5SessionTCP *self)
         } else {
             LOG_D ("%p socks5 session tcp: backward received %zd bytes", self, s);
             hev_ring_buffer_write_finish (self->buffer, s);
-            self->initial_data_received = 1;
         }
     }
 
@@ -278,10 +277,6 @@ hev_socks5_session_tcp_splice (HevSocks5Session *base)
             break;
 
         if (task_io_yielder (type, base) < 0) {
-            if (self->is_smart_proxy_probe && !self->initial_data_received) {
-                LOG_W ("%p socks5 session tcp splice: GFW detected (smart proxy probe failed)", self);
-                return -1; /* GFW detected */
-            }
             LOG_D ("%p socks5 session tcp splice: yielder returned error", self);
             break;
         }

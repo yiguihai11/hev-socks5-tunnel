@@ -1,0 +1,109 @@
+# Main configuration for hev-socks5-tunnel
+
+tunnel:
+  # Interface name
+  name: tun0
+  # Interface MTU
+  mtu: 8500
+  # Multi-queue
+  multi-queue: false
+  # IPv4 address
+  ipv4: 198.18.0.1
+  # IPv6 address
+  ipv6: 'fc00::1'
+  # Post up script
+# post-up-script: up.sh
+  # Pre down script
+# pre-down-script: down.sh
+
+socks5:
+  # Socks5 server port
+  port: 1080
+  # Socks5 server address (ipv4/ipv6)
+  address: 64.69.34.166
+  # Socks5 UDP relay mode (tcp|udp)
+  udp: 'tcp'
+  # Override the UDP address provided by the Socks5 server (ipv4/ipv6)
+# udp-address: ''
+  # Socks5 handshake using pipeline mode
+# pipeline: false
+  # Socks5 server username
+  username: 'yiguihai'
+  # Socks5 server password
+  password: 'ygh15177542493'
+  # Socket mark
+# mark: 0
+
+dns-forwarder:
+  # Hijack DNS queries sent to this IPv4 address inside the tunnel.
+  virtual-ip4: 8.8.8.8
+  # Hijack DNS queries sent to this IPv6 address inside the tunnel.
+  virtual-ip6: '2001:4860:4860::8844'
+
+  # Forward IPv4 DNS queries to this target.
+  # Port is optional, defaults to 53.
+  target-ip4: 1.1.1.1:53
+  # target-ip4: 1.1.1.1:53
+
+  # Forward IPv6 DNS queries to this target.
+  # Port is optional, defaults to 53.
+  # target-ip6: '[2606:4700:4700::1111]'
+  target-ip6: '[2606:4700:4700::1111]:53'
+
+chnroutes:
+  # Enables split routing based on a list of Chinese IP ranges.
+  # When enabled, traffic to IPs within the specified file will be considered "domestic".
+  # This allows for different routing decisions, e.g., domestic traffic can be connected
+  # directly, while other traffic goes through the SOCKS5 proxy.
+  # The feature is enabled if this file path is set.
+  file-path: "conf/chnroutes.txt"
+
+smart-proxy:
+  # Enables a "smart" fallback mechanism for non-domestic TCP traffic.
+  # When a TCP connection to a non-domestic IP is attempted:
+  # 1. It first tries to connect directly.
+  # 2. If the direct connection attempt times out (takes longer than `timeout-ms`),
+  #    it will then fall back to using the SOCKS5 proxy for that connection.
+  # 3. The IP address that timed out is temporarily "blocked" for a duration of
+  #    `blocked-ip-expiry-minutes`.
+  # 4. Future connection attempts to a blocked IP will skip the direct attempt and
+  #    go straight to the SOCKS5 proxy, improving performance for slow-to-reach sites.
+  #
+  # Feature is enabled if both timeout-ms and blocked-ip-expiry-minutes are set and non-zero.
+
+  # Timeout in milliseconds for direct connection attempts.
+  timeout-ms: 2000
+  # Expiry time in minutes for temporarily blocked IPs.
+  blocked-ip-expiry-minutes: 360
+
+#mapdns:
+  # Mapped DNS address
+# address: 198.18.0.2
+  # Mapped DNS port
+# port: 53
+  # Mapped IP network base
+# network: 240.0.0.0
+  # Mapped IP network mask
+# netmask: 240.0.0.0
+  # Mapped DNS cache size
+# cache-size: 10000
+
+misc:
+  # task stack size (bytes)
+# task-stack-size: 86016
+  # tcp buffer size (bytes)
+# tcp-buffer-size: 65536
+  # maximum session count (0: unlimited)
+# max-session-count: 0
+  # connect timeout (ms)
+# connect-timeout: 10000
+  # read-write timeout (ms)
+# read-write-timeout: 300000
+  # stdout, stderr or file-path
+  log-file: stdout
+  # debug, info, warn or error
+  log-level: info
+  # If present, run as a daemon with this pid file
+# pid-file: /run/hev-socks5-tunnel.pid
+  # If present, set rlimit nofile; else use default value
+# limit-nofile: 65535
