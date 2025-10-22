@@ -436,24 +436,22 @@ hev_traffic_router_handle_udp (struct udp_pcb *pcb, struct pbuf *p,
         
         /* 如果被劫持，使用目标地址进行UDP直连 */
         if (is_hijacked) {
-    LOG_I ("router: UDP routing %s:%d -> %s:%d via DNS_FORWARD (hijacked DNS query)",
-           src_ip, pcb->remote_port, dst_ip, port);
-    pbuf_ref(p);
-    hev_session_manager_start_direct_udp (pcb, &target_ip, target_port, p,
-                                         addr, port);  // ✅ 传入原始目标
-    return 1;
-}
+            LOG_I ("router: UDP routing %s:%d -> %s:%d via DNS_FORWARD (hijacked DNS query)",
+                   src_ip, pcb->remote_port, dst_ip, target_port);
+            pbuf_ref(p);
+            hev_session_manager_start_direct_udp (pcb, &target_ip, target_port, p);
+            return 1;
+        }
     }
     
     /* 国内IP直连检查（第二优先级） */
     if (is_domestic (addr)) {
-    LOG_I ("router: UDP routing %s:%d -> %s:%d via DIRECT (domestic IP, packet_size=%d)",
-           src_ip, pcb->remote_port, dst_ip, port, p ? p->tot_len : 0);
-    pbuf_ref(p);
-    hev_session_manager_start_direct_udp (pcb, addr, port, p,
-                                         addr, port);  // ✅ 直连时原始=真实
-    return 1;
-}
+        LOG_I ("router: UDP routing %s:%d -> %s:%d via DIRECT (domestic IP, packet_size=%d)",
+               src_ip, pcb->remote_port, dst_ip, port, p ? p->tot_len : 0);
+        pbuf_ref(p);
+        hev_session_manager_start_direct_udp (pcb, addr, port, p);
+        return 1;
+    }
     
     LOG_D ("router: UDP packet %s:%d -> %s:%d not handled by router (will use SOCKS5)",
            src_ip, pcb->remote_port, dst_ip, port);
