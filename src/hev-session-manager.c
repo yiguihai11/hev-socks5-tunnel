@@ -117,7 +117,7 @@ static int sniff_client_hello (HevSocks5SessionTCP *self, HevTLSClientHello *hel
    ⬇️ 使用我们保存的 HEV_TCP_KEEPIDLE 等宏
    ============================================================================ */
 static void
-set_tcp_keepalive (int fd)
+set_tcp_keepalive (void *session, int fd)
 {
 #ifndef TCP_KEEPALIVE_UNSUPPORTED
     int enable = 1;
@@ -126,7 +126,7 @@ set_tcp_keepalive (int fd)
     int keepcnt = 3;        // 3次失败后断开
 
     if (setsockopt (fd, SOL_SOCKET, SO_KEEPALIVE, &enable, sizeof (enable)) < 0) {
-        LOG_W ("session: Failed to enable TCP Keep-Alive: %s", strerror (errno));
+        LOG_W ("%p session: Failed to enable TCP Keep-Alive: %s", session, strerror (errno));
         return;
     }
 
@@ -143,10 +143,10 @@ set_tcp_keepalive (int fd)
     setsockopt (fd, IPPROTO_TCP, HEV_TCP_KEEPCNT, &keepcnt, sizeof (keepcnt));
 #endif
 
-    LOG_D ("session: TCP Keep-Alive enabled (idle=%ds, interval=%ds, count=%d)",
-           keepidle, keepintvl, keepcnt);
+    LOG_D ("%p session: TCP Keep-Alive enabled (idle=%ds, interval=%ds, count=%d)",
+           session, keepidle, keepintvl, keepcnt);
 #else
-    LOG_D ("session: TCP Keep-Alive not supported on this platform");
+    LOG_D ("%p session: TCP Keep-Alive not supported on this platform", session);
 #endif
 }
 
@@ -508,7 +508,7 @@ sniff_client_hello (HevSocks5SessionTCP *self, HevTLSClientHello *hello)
     if (total_len < 5)  /* 至少需要 TLS Record Header */
         return -1;
     
-    return hev_tls_parse_client_hello (buffer, total_len, hello);
+    return hev_tls_parse_client_hello (self, buffer, total_len, hello);
 }
 
 static void
@@ -603,7 +603,7 @@ run_direct_connect_task (void *data)
     }
 
     /* 设置 TCP Keep-Alive(使用辅助函数) */
-    set_tcp_keepalive (fd);
+    set_tcp_keepalive (self, fd);
 
     int zero = 0;
     setsockopt (fd, IPPROTO_IPV6, IPV6_V6ONLY, &zero, sizeof (zero));
@@ -848,7 +848,7 @@ run_smart_proxy_task (void *data)
         goto fallback_socks5;
     }
 
-    set_tcp_keepalive (fd);
+    set_tcp_keepalive (self, fd);
 
     int zero = 0;
     setsockopt (fd, IPPROTO_IPV6, IPV6_V6ONLY, &zero, sizeof (zero));

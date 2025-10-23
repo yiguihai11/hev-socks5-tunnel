@@ -188,13 +188,13 @@ hev_socks5_session_tcp_new (struct tcp_pcb *pcb, HevTaskMutex *mutex)
 
     self = hev_malloc0 (sizeof (HevSocks5SessionTCP));
     if (!self) {
-        LOG_E ("socks5 session tcp: failed to allocate memory");
+        LOG_E ("%p socks5 session tcp: failed to allocate memory", self);
         return NULL;
     }
 
     res = hev_socks5_session_tcp_construct (self, pcb, mutex);
     if (res < 0) {
-        LOG_E ("socks5 session tcp: failed to construct");
+        LOG_E ("%p socks5 session tcp: failed to construct", self);
         hev_free (self);
         return NULL;
     }
@@ -338,13 +338,13 @@ hev_socks5_session_tcp_construct (HevSocks5SessionTCP *self,
 
     res = hev_socks5_addr_from_lwip (&addr, &pcb->local_ip, pcb->local_port);
     if (res < 0) {
-        LOG_E ("socks5 session tcp construct: failed to convert address");
+        LOG_E ("%p socks5 session tcp construct: failed to convert address", self);
         return -1;
     }
 
     res = hev_socks5_client_tcp_construct (&self->base, &addr);
     if (res < 0) {
-        LOG_E ("socks5 session tcp construct: failed to construct client");
+        LOG_E ("%p socks5 session tcp construct: failed to construct client", self);
         return -1;
     }
 

@@ -42,7 +42,7 @@ typedef struct _HevTLSClientHello {
  *
  * Returns: 0 成功, -1 失败或不是 TLS
  */
-int hev_tls_parse_client_hello (const unsigned char *data, size_t len,
+int hev_tls_parse_client_hello (void *log_data, const unsigned char *data, size_t len,
                                  HevTLSClientHello *hello);
 
 #endif /* __HEV_TLS_PARSER_H__ */

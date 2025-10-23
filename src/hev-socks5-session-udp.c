@@ -256,13 +256,13 @@ hev_socks5_session_udp_new (struct udp_pcb *pcb, HevTaskMutex *mutex)
 
     self = hev_malloc0 (sizeof (HevSocks5SessionUDP));
     if (!self) {
-        LOG_E ("socks5 session udp: failed to allocate memory");
+        LOG_E ("%p socks5 session udp: failed to allocate memory", self);
         return NULL;
     }
 
     res = hev_socks5_session_udp_construct (self, pcb, mutex);
     if (res < 0) {
-        LOG_E ("socks5 session udp: failed to construct");
+        LOG_E ("%p socks5 session udp: failed to construct", self);
         hev_free (self);
         return NULL;
     }
@@ -326,8 +326,8 @@ hev_socks5_session_udp_set_upstream_addr (HevSocks5Client *base,
 
     if (srv->udp_in_udp && srv->udp_addr[0]) {
         uint16_t port = hev_socks5_addr_get_port (addr);
-        LOG_D ("socks5 session udp: using UDP relay address %s:%d",
-               srv->udp_addr, port);
+        LOG_D ("%p socks5 session udp: using UDP relay address %s:%d",
+               base, srv->udp_addr, port);
         hev_socks5_addr_from_name (addr, srv->udp_addr, port);
     }
 
@@ -453,10 +453,10 @@ hev_socks5_session_udp_construct (HevSocks5SessionUDP *self,
 
     if (srv->udp_in_udp) {
         type = HEV_SOCKS5_TYPE_UDP_IN_UDP;
-        LOG_D ("socks5 session udp construct: using UDP-in-UDP mode");
+        LOG_D ("%p socks5 session udp construct: using UDP-in-UDP mode", self);
     } else {
         type = HEV_SOCKS5_TYPE_UDP_IN_TCP;
-        LOG_D ("socks5 session udp construct: using UDP-in-TCP mode");
+        LOG_D ("%p socks5 session udp construct: using UDP-in-TCP mode", self);
     }
 
     res = hev_socks5_client_udp_construct (&self->base, type);

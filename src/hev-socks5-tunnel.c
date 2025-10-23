@@ -173,19 +173,19 @@ tcp_accept_handler (void *arg, struct tcp_pcb *pcb, err_t err)
     ipaddr_ntoa_r (&pcb->local_ip, dst_ip, sizeof (dst_ip));
     
     if (err != ERR_OK) {
-        LOG_W ("socks5 tunnel: TCP accept failed for %s:%d -> %s:%d, error code: %d",
-               src_ip, pcb->remote_port, dst_ip, pcb->local_port, err);
+        LOG_W ("%p socks5 tunnel: TCP accept failed for %s:%d -> %s:%d, error code: %d",
+               pcb, src_ip, pcb->remote_port, dst_ip, pcb->local_port, err);
         return err;
     }
 
     if (!run) {
-        LOG_W ("socks5 tunnel: TCP accept rejected for %s:%d -> %s:%d, tunnel is not running",
-               src_ip, pcb->remote_port, dst_ip, pcb->local_port);
+        LOG_W ("%p socks5 tunnel: TCP accept rejected for %s:%d -> %s:%d, tunnel is not running",
+               pcb, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
         return ERR_RST;
     }
 
-    LOG_D ("socks5 tunnel: TCP connection accepted from %s:%d to %s:%d",
-           src_ip, pcb->remote_port, dst_ip, pcb->local_port);
+    LOG_D ("%p socks5 tunnel: TCP connection accepted from %s:%d to %s:%d",
+           pcb, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
 
     hev_traffic_router_handle_tcp (pcb);
 
@@ -247,7 +247,7 @@ udp_recv_handler (void *arg, struct udp_pcb *pcb, struct pbuf *p,
     char dst_ip[INET6_ADDRSTRLEN];
 
     if (!p) {
-        LOG_D ("socks5 tunnel: UDP recv_handler got NULL pbuf, removing pcb");
+        LOG_D ("%p socks5 tunnel: UDP recv_handler got NULL pbuf, removing pcb", pcb);
         udp_remove (pcb);
         return;
     }
@@ -255,11 +255,11 @@ udp_recv_handler (void *arg, struct udp_pcb *pcb, struct pbuf *p,
     ipaddr_ntoa_r (addr, dst_ip, sizeof (dst_ip));
     ipaddr_ntoa_r (&pcb->remote_ip, src_ip, sizeof (src_ip));
     
-    LOG_D ("socks5 tunnel: UDP packet received from %s:%d to %s:%d (size=%d bytes)",
-           src_ip, pcb->remote_port, dst_ip, port, p->tot_len);
+    LOG_D ("%p socks5 tunnel: UDP packet received from %s:%d to %s:%d (size=%d bytes)",
+           pcb, src_ip, pcb->remote_port, dst_ip, port, p->tot_len);
 
     if (!run) {
-        LOG_W ("socks5 tunnel: UDP packet dropped, tunnel is not running");
+        LOG_W ("%p socks5 tunnel: UDP packet dropped, tunnel is not running", pcb);
         pbuf_free (p);
         udp_remove (pcb);
         return;
@@ -270,7 +270,7 @@ udp_recv_handler (void *arg, struct udp_pcb *pcb, struct pbuf *p,
         /* hev_traffic_router_handle_udp 内部会复制 pbuf
          * 原始 pbuf 会由 lwIP 自动释放，所以这里不要调用 pbuf_free(p)
          * 也不要 remove pcb，因为 direct UDP session 会接管它 */
-        LOG_D ("socks5 tunnel: UDP packet handled by traffic router (direct connect or DNS forward)");
+        LOG_D ("%p socks5 tunnel: UDP packet handled by traffic router (direct connect or DNS forward)", pcb);
         return;
     }
 
@@ -280,20 +280,20 @@ udp_recv_handler (void *arg, struct udp_pcb *pcb, struct pbuf *p,
         int faddr = hev_config_get_mapdns_address ();
         int fport = hev_config_get_mapdns_port ();
         if (fport == port && faddr == ip_2_ip4 (addr)->addr) {
-            LOG_I ("socks5 tunnel: UDP packet is mapped DNS query from %s:%d",
-                   src_ip, pcb->remote_port);
+            LOG_I ("%p socks5 tunnel: UDP packet is mapped DNS query from %s:%d",
+                   pcb, src_ip, pcb->remote_port);
             udp_recv (pcb, dns_recv_handler, dns);
             return;
         }
     }
 
     /* 默认：通过 SOCKS5 代理 */
-    LOG_I ("socks5 tunnel: UDP packet will use SOCKS5 proxy from %s:%d to %s:%d",
-           src_ip, pcb->remote_port, dst_ip, port);
+    LOG_I ("%p socks5 tunnel: UDP packet will use SOCKS5 proxy from %s:%d to %s:%d",
+           pcb, src_ip, pcb->remote_port, dst_ip, port);
 
     udp = hev_socks5_session_udp_new (pcb, &mutex);
     if (!udp) {
-        LOG_E ("socks5 tunnel: Failed to create UDP SOCKS5 session");
+        LOG_E ("%p socks5 tunnel: Failed to create UDP SOCKS5 session", pcb);
         pbuf_free (p);
         udp_remove (pcb);
         return;
@@ -302,7 +302,7 @@ udp_recv_handler (void *arg, struct udp_pcb *pcb, struct pbuf *p,
     stack_size = hev_config_get_misc_task_stack_size ();
     task = hev_task_new (stack_size);
     if (!task) {
-        LOG_E ("socks5 tunnel: Failed to create task for UDP SOCKS5 session");
+        LOG_E ("%p socks5 tunnel: Failed to create task for UDP SOCKS5 session", pcb);
         pbuf_free (p);
         hev_object_unref (HEV_OBJECT (udp));
         return;

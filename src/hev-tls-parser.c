@@ -100,7 +100,7 @@ parse_alpn_extension (const unsigned char *data, size_t len, char *alpn_out, siz
 }
 
 int
-hev_tls_parse_client_hello (const unsigned char *data, size_t len,
+hev_tls_parse_client_hello (void *log_data, const unsigned char *data, size_t len,
                              HevTLSClientHello *hello)
 {
     size_t pos = 0;
@@ -114,7 +114,7 @@ hev_tls_parse_client_hello (const unsigned char *data, size_t len,
     /* TLS Record Header */
     uint8_t content_type = data[pos++];
     if (content_type != TLS_CONTENT_TYPE_HANDSHAKE) {
-        LOG_D ("tls parser: Not a TLS handshake (content_type=0x%02x)", content_type);
+        LOG_D ("%p tls parser: Not a TLS handshake (content_type=0x%02x)", log_data, content_type);
         return -1;
     }
 
@@ -128,8 +128,8 @@ hev_tls_parse_client_hello (const unsigned char *data, size_t len,
     pos += 2;
 
     if (pos + record_len > len) {
-        LOG_D ("tls parser: Incomplete TLS record (need %u, have %zu)",
-               record_len, len - pos);
+        LOG_D ("%p tls parser: Incomplete TLS record (need %u, have %zu)",
+               log_data, record_len, len - pos);
         return -1;
     }
 
@@ -138,7 +138,7 @@ hev_tls_parse_client_hello (const unsigned char *data, size_t len,
         return -1;
     uint8_t handshake_type = data[pos++];
     if (handshake_type != TLS_HANDSHAKE_TYPE_CLIENT_HELLO) {
-        LOG_D ("tls parser: Not ClientHello (handshake_type=0x%02x)", handshake_type);
+        LOG_D ("%p tls parser: Not ClientHello (handshake_type=0x%02x)", log_data, handshake_type);
         return -1;
     }
 
@@ -148,8 +148,8 @@ hev_tls_parse_client_hello (const unsigned char *data, size_t len,
     uint32_t handshake_len = read_uint24 (data + pos);
     pos += 3;
 
-    LOG_D ("tls parser: Found ClientHello (version=0x%04x, length=%u)",
-           tls_version, handshake_len);
+    LOG_D ("%p tls parser: Found ClientHello (version=0x%04x, length=%u)",
+           log_data, tls_version, handshake_len);
 
     /* Client Version */
     if (pos + 2 > len)
@@ -188,7 +188,7 @@ hev_tls_parse_client_hello (const unsigned char *data, size_t len,
 
     /* Extensions */
     if (pos + 2 > len) {
-        LOG_D ("tls parser: No extensions found");
+        LOG_D ("%p tls parser: No extensions found", log_data);
         hello->detected = 1;
         return 0;  /* 没有扩展也是合法的 ClientHello */
     }
@@ -199,7 +199,7 @@ hev_tls_parse_client_hello (const unsigned char *data, size_t len,
     if (pos + extensions_len > len)
         return -1;
 
-    LOG_D ("tls parser: Parsing extensions (length=%u)", extensions_len);
+    LOG_D ("%p tls parser: Parsing extensions (length=%u)", log_data, extensions_len);
 
     size_t extensions_end = pos + extensions_len;
     while (pos + 4 <= extensions_end) {
@@ -214,12 +214,12 @@ hev_tls_parse_client_hello (const unsigned char *data, size_t len,
 
         switch (ext_type) {
         case TLS_EXT_SERVER_NAME:
-            LOG_D ("tls parser: Found SNI extension (length=%u)", ext_len);
+            LOG_D ("%p tls parser: Found SNI extension (length=%u)", log_data, ext_len);
             parse_sni_extension (data + pos, ext_len, hello->sni, MAX_SNI_LENGTH);
             break;
 
         case TLS_EXT_ALPN:
-            LOG_D ("tls parser: Found ALPN extension (length=%u)", ext_len);
+            LOG_D ("%p tls parser: Found ALPN extension (length=%u)", log_data, ext_len);
             parse_alpn_extension (data + pos, ext_len, hello->alpn, sizeof (hello->alpn));
             break;
 
@@ -234,10 +234,10 @@ hev_tls_parse_client_hello (const unsigned char *data, size_t len,
     hello->detected = 1;
 
     if (hello->sni[0]) {
-        LOG_I ("tls parser: Detected SNI: %s", hello->sni);
+        LOG_I ("%p tls parser: Detected SNI: %s", log_data, hello->sni);
     }
     if (hello->alpn[0]) {
-        LOG_I ("tls parser: Detected ALPN: %s", hello->alpn);
+        LOG_I ("%p tls parser: Detected ALPN: %s", log_data, hello->alpn);
     }
 
     return 0;

@@ -323,13 +323,13 @@ hev_traffic_router_handle_tcp (struct tcp_pcb *pcb) {
     ipaddr_ntoa_r (local_ip, dst_ip, sizeof (dst_ip));
     ipaddr_ntoa_r (&pcb->remote_ip, src_ip, sizeof (src_ip));
     
-    LOG_D ("router: TCP routing decision for %s:%d -> %s:%d",
-           src_ip, pcb->remote_port, dst_ip, pcb->local_port);
+    LOG_D ("%p router: TCP routing decision for %s:%d -> %s:%d",
+           pcb, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
     
     /* 1. Domestic IPs are connected directly. */
     if (is_domestic (local_ip)) {
-        LOG_I ("router: TCP routing %s:%d -> %s:%d via DIRECT (domestic IP)",
-               src_ip, pcb->remote_port, dst_ip, pcb->local_port);
+        LOG_I ("%p router: TCP routing %s:%d -> %s:%d via DIRECT (domestic IP)",
+               pcb, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
         hev_session_manager_start_direct_tcp (pcb);
         return 1;
     }
@@ -338,19 +338,19 @@ hev_traffic_router_handle_tcp (struct tcp_pcb *pcb) {
     if (hev_config_get_smart_proxy_timeout_ms () > 0 &&
         hev_config_get_smart_proxy_blocked_ip_expiry_minutes () > 0 &&
         !hev_traffic_router_blacklist_check (local_ip)) {
-        LOG_I ("router: TCP routing %s:%d -> %s:%d via SMART_PROXY (trying direct first)",
-               src_ip, pcb->remote_port, dst_ip, pcb->local_port);
+        LOG_I ("%p router: TCP routing %s:%d -> %s:%d via SMART_PROXY (trying direct first)",
+               pcb, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
         hev_session_manager_start_smart_proxy (pcb);
         return 1;
     }
     
     /* 3. Fallback to SOCKS5 for all other cases (blacklisted, smart proxy disabled). */
     if (hev_traffic_router_blacklist_check (local_ip)) {
-        LOG_I ("router: TCP routing %s:%d -> %s:%d via SOCKS5 (IP is blacklisted)",
-               src_ip, pcb->remote_port, dst_ip, pcb->local_port);
+        LOG_I ("%p router: TCP routing %s:%d -> %s:%d via SOCKS5 (IP is blacklisted)",
+               pcb, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
     } else {
-        LOG_I ("router: TCP routing %s:%d -> %s:%d via SOCKS5 (smart proxy disabled)",
-               src_ip, pcb->remote_port, dst_ip, pcb->local_port);
+        LOG_I ("%p router: TCP routing %s:%d -> %s:%d via SOCKS5 (smart proxy disabled)",
+               pcb, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
     }
     hev_session_manager_start_socks5_tcp (pcb);
     return 1;
@@ -365,8 +365,8 @@ hev_traffic_router_handle_udp (struct udp_pcb *pcb, struct pbuf *p,
     ipaddr_ntoa_r (addr, dst_ip, sizeof (dst_ip));
     ipaddr_ntoa_r (&pcb->remote_ip, src_ip, sizeof (src_ip));
     
-    LOG_D ("router: UDP routing decision for %s:%d -> %s:%d (packet_size=%d)",
-           src_ip, pcb->remote_port, dst_ip, port, p ? p->tot_len : 0);
+    LOG_D ("%p router: UDP routing decision for %s:%d -> %s:%d (packet_size=%d)",
+           pcb, src_ip, pcb->remote_port, dst_ip, port, p ? p->tot_len : 0);
     
     /* DNS Forwarder 劫持检查（优先级最高）*/
     if (port == 53) {
@@ -396,8 +396,8 @@ hev_traffic_router_handle_udp (struct udp_pcb *pcb, struct pbuf *p,
                         char tip_str[INET6_ADDRSTRLEN];
                         ipaddr_ntoa_r(&virtual_ip4, vip_str, sizeof(vip_str));
                         ipaddr_ntoa_r(&target_ip, tip_str, sizeof(tip_str));
-                        LOG_I ("router: UDP DNS Forwarder hijack: %s:53 -> %s:%d", 
-                               vip_str, tip_str, target_port);
+                        LOG_I ("%p router: UDP DNS Forwarder hijack: %s:53 -> %s:%d", 
+                               pcb, vip_str, tip_str, target_port);
                     }
                 }
             }
@@ -427,8 +427,8 @@ hev_traffic_router_handle_udp (struct udp_pcb *pcb, struct pbuf *p,
                         char tip_str[INET6_ADDRSTRLEN];
                         ipaddr_ntoa_r(&virtual_ip6, vip_str, sizeof(vip_str));
                         ipaddr_ntoa_r(&target_ip, tip_str, sizeof(tip_str));
-                        LOG_I ("router: UDP DNS Forwarder hijack (IPv6): %s:53 -> %s:%d", 
-                               vip_str, tip_str, target_port);
+                        LOG_I ("%p router: UDP DNS Forwarder hijack (IPv6): %s:53 -> %s:%d", 
+                               pcb, vip_str, tip_str, target_port);
                     }
                 }
             }
@@ -436,8 +436,8 @@ hev_traffic_router_handle_udp (struct udp_pcb *pcb, struct pbuf *p,
         
         /* 如果被劫持，使用目标地址进行UDP直连 */
         if (is_hijacked) {
-            LOG_I ("router: UDP routing %s:%d -> %s:%d via DNS_FORWARD (hijacked DNS query)",
-                   src_ip, pcb->remote_port, dst_ip, target_port);
+            LOG_I ("%p router: UDP routing %s:%d -> %s:%d via DNS_FORWARD (hijacked DNS query)",
+                   pcb, src_ip, pcb->remote_port, dst_ip, target_port);
             pbuf_ref(p);
             hev_session_manager_start_direct_udp (pcb, &target_ip, target_port, addr, port, p);
             return 1;
@@ -446,15 +446,15 @@ hev_traffic_router_handle_udp (struct udp_pcb *pcb, struct pbuf *p,
     
     /* 国内IP直连检查（第二优先级） */
     if (is_domestic (addr)) {
-        LOG_I ("router: UDP routing %s:%d -> %s:%d via DIRECT (domestic IP, packet_size=%d)",
-               src_ip, pcb->remote_port, dst_ip, port, p ? p->tot_len : 0);
+        LOG_I ("%p router: UDP routing %s:%d -> %s:%d via DIRECT (domestic IP, packet_size=%d)",
+               pcb, src_ip, pcb->remote_port, dst_ip, port, p ? p->tot_len : 0);
         pbuf_ref(p);
         hev_session_manager_start_direct_udp (pcb, addr, port, addr, port, p);
         return 1;
     }
     
-    LOG_D ("router: UDP packet %s:%d -> %s:%d not handled by router (will use SOCKS5)",
-           src_ip, pcb->remote_port, dst_ip, port);
+    LOG_D ("%p router: UDP packet %s:%d -> %s:%d not handled by router (will use SOCKS5)",
+           pcb, src_ip, pcb->remote_port, dst_ip, port);
     
     return 0;
 }
