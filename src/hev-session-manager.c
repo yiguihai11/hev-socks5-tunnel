@@ -15,6 +15,7 @@
 #include <arpa/inet.h>
 #include <stddef.h>
 #include <time.h>
+#include <strings.h> /* For strcasestr */
 
 /* ⬇️ TCP Keep-Alive 跨平台兼容性 - 修改顺序,先包含系统头文件 */
 #if defined(__linux__)
@@ -82,6 +83,7 @@
 #include "hev-socks5-tunnel.h"
 #include "hev-traffic-router.h"
 #include "hev-tls-parser.h"
+#include "hev-acl.h"
 
 #include "hev-session-manager.h"
 
@@ -111,6 +113,18 @@ static void run_smart_proxy_task (void *data);
 static void tcp_direct_splice_task_b (void *data);
 static void smart_proxy_splice_task_b (void *data);
 static int sniff_client_hello (HevSocks5SessionTCP *self, HevTLSClientHello *hello);
+static int sniff_http_host (HevSocks5SessionTCP *self, char *hostname_buffer, size_t buffer_len);
+
+// Custom strcasestr implementation for portability
+static char *strcasestr_custom(const char *haystack, const char *needle) {
+    if (!*needle) return (char *)haystack;
+    for (; *haystack; ++haystack) {
+        if (strncasecmp(haystack, needle, strlen(needle)) == 0) {
+            return (char *)haystack;
+        }
+    }
+    return NULL;
+}
 
 /* ============================================================================
    辅助函数:设置 TCP Keep-Alive
@@ -179,13 +193,17 @@ idle_timer_check (HevIdleTimer *timer)
 void
 hev_session_manager_init (void)
 {
-    /* Nothing to do */
+    hev_acl_init ();
+    const char *acl_file = hev_config_get_acl_file_path ();
+    if (acl_file) {
+        hev_acl_load_from_file (acl_file);
+    }
 }
 
 void
 hev_session_manager_fini (void)
 {
-    /* Nothing to do */
+    hev_acl_fini ();
 }
 
 /* ============================================================================
@@ -200,6 +218,7 @@ hev_socks5_session_task_entry (void *data)
     struct tcp_pcb *pcb = tcp->pcb;
     HevTLSClientHello client_hello;
     char dst_ip[INET6_ADDRSTRLEN];
+    char http_hostname[256]; // Buffer for HTTP hostname
 
     LOG_D ("%p session: socks5 proxy task entry", s);
 
@@ -227,6 +246,12 @@ hev_socks5_session_task_entry (void *data)
                 if (client_hello.sni[0]) {
                     LOG_I ("%p session: SOCKS5 proxy detected TLS SNI: %s (target: %s:%d)",
                            tcp, client_hello.sni, dst_ip, pcb->local_port);
+                    // --- SNI-based ACL check ---
+                    if (hev_acl_is_blocked_hostname (client_hello.sni)) {
+                        LOG_W ("%p session: SOCKS5 proxy blocked connection to SNI: %s (target: %s:%d)",
+                               tcp, client_hello.sni, dst_ip, pcb->local_port);
+                        goto exit_cleanup; // Terminate session
+                    }
                 }
                 if (client_hello.alpn[0]) {
                     LOG_I ("%p session: SOCKS5 proxy detected ALPN: %s", tcp, client_hello.alpn);
@@ -236,11 +261,35 @@ hev_socks5_session_task_entry (void *data)
             }
         }
     }
+    // --- HTTP Hostname-based ACL check for ports 80/8080 ---
+    else if (pcb && (pcb->local_port == 80 || pcb->local_port == 8080)) {
+        // Wait for data (similar to SNI)
+        if (!tcp->queue) {
+            LOG_D ("%p session: SOCKS5 task waiting for HTTP data...", tcp);
+            for (int i = 0; i < 150 && !tcp->queue; i++) {
+                hev_task_sleep (10);
+            }
+            if (!tcp->queue) {
+                LOG_W ("%p session: SOCKS5 task timed out waiting for HTTP data (1500ms)", tcp);
+            }
+        }
+        if (tcp->queue && sniff_http_host (tcp, http_hostname, sizeof(http_hostname)) == 0) {
+            ipaddr_ntoa_r (&pcb->local_ip, dst_ip, sizeof (dst_ip));
+            LOG_I ("%p session: SOCKS5 proxy detected HTTP Host: %s (target: %s:%d)",
+                   tcp, http_hostname, dst_ip, pcb->local_port);
+            if (hev_acl_is_blocked_hostname (http_hostname)) {
+                LOG_W ("%p session: SOCKS5 proxy blocked connection to HTTP Host: %s (target: %s:%d)",
+                       tcp, http_hostname, dst_ip, pcb->local_port);
+                goto exit_cleanup; // Terminate session
+            }
+        }
+    }
 
     hev_socks5_session_run (s);
 
     LOG_D ("%p session: socks5 proxy task exit", s);
 
+exit_cleanup: // New label for cleanup
     hev_socks5_tunnel_delete_session (hev_socks5_session_get_node (s));
     hev_object_unref (HEV_OBJECT (s));
 }
@@ -490,6 +539,74 @@ tcp_direct_splice_task_b (void *data)
     LOG_D ("%p session: backward splice task end", self);
 }
 
+
+/* 嗅探 HTTP Host */
+static int
+sniff_http_host (HevSocks5SessionTCP *self, char *hostname_buffer, size_t buffer_len)
+{
+    struct pbuf *p;
+    unsigned char buffer[1024];  // Max size for initial HTTP request part + null terminator
+    size_t total_len = 0;
+    char *request_start = NULL;
+    char *host_header_start = NULL;
+    char *host_header_end = NULL;
+    char *get_url_start = NULL;
+    char *get_url_end = NULL;
+
+    // Copy data from queue (non-consuming)
+    for (p = self->queue; p && total_len < (sizeof(buffer) - 1); p = p->next) {
+        size_t copy_len = p->len;
+        if (total_len + copy_len >= sizeof(buffer)) // Ensure space for null terminator
+            copy_len = sizeof(buffer) - 1 - total_len; // Adjust copy_len
+        
+        memcpy (buffer + total_len, p->payload, copy_len);
+        total_len += copy_len;
+    }
+    buffer[total_len] = '\0'; // Null-terminate for string operations
+
+    if (total_len == 0) {
+        return -1; // No data
+    }
+
+    request_start = (char *)buffer;
+
+    // 1. Try to find Host: header
+    host_header_start = strcasestr_custom (request_start, "\r\nHost: ");
+    if (host_header_start) {
+        host_header_start += strlen("\r\nHost: ");
+        host_header_end = strstr (host_header_start, "\r\n");
+        if (host_header_end) {
+            size_t len = host_header_end - host_header_start;
+            if (len > 0 && len < buffer_len) {
+                strncpy (hostname_buffer, host_header_start, len);
+                hostname_buffer[len] = '\0';
+                return 0;
+            }
+        }
+    }
+
+    // 2. If no Host: header, try to find full URL in GET request line
+    get_url_start = strcasestr_custom (request_start, "GET http://");
+    if (get_url_start) {
+        get_url_start += strlen("GET http://");
+        get_url_end = strchr (get_url_start, '/'); // Find end of hostname
+        if (!get_url_end) { // If no path, then it's just hostname
+            get_url_end = strchr (get_url_start, ' '); // Find end of hostname before HTTP version
+        }
+        
+        if (get_url_end) {
+            size_t len = get_url_end - get_url_start;
+            if (len > 0 && len < buffer_len) {
+                strncpy (hostname_buffer, get_url_start, len);
+                hostname_buffer[len] = '\0';
+                return 0;
+            }
+        }
+    }
+
+    return -1; // Hostname not found
+}
+
 /* 嗅探并解析 ClientHello */
 static int
 sniff_client_hello (HevSocks5SessionTCP *self, HevTLSClientHello *hello)
@@ -538,6 +655,7 @@ run_direct_connect_task (void *data)
     time_t connect_start = 0;
     time_t session_duration = 0;
     HevTLSClientHello client_hello;
+    char http_hostname[256]; // Buffer for HTTP hostname
 
     /* 获取源和目标地址用于日志 */
     ipaddr_ntoa_r (&pcb->remote_ip, src_ip, sizeof (src_ip));
@@ -546,6 +664,7 @@ run_direct_connect_task (void *data)
     LOG_D ("%p session: direct connect task run %s:%d -> %s:%d",
            self, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
 
+    /* 等待一小段时间让数据到达队列 (仅对端口443) */
     if (pcb->local_port == 443 && !self->queue) {
         LOG_D ("%p session: Waiting for TLS ClientHello data...", self);
         for (int i = 0; i < 150 && !self->queue; i++) { /* 延长等待时间 */
@@ -565,6 +684,12 @@ run_direct_connect_task (void *data)
             if (client_hello.sni[0]) {
                 LOG_I ("%p session: Direct connect detected TLS SNI: %s (target: %s:%d)",
                        self, client_hello.sni, dst_ip, pcb->local_port);
+                // --- SNI-based ACL check ---
+                if (hev_acl_is_blocked_hostname (client_hello.sni)) {
+                    LOG_W ("%p session: Direct connect blocked connection to SNI: %s (target: %s:%d)",
+                           self, client_hello.sni, dst_ip, pcb->local_port);
+                    goto exit_cleanup; // Terminate session
+                }
             }
             if (client_hello.alpn[0]) {
                 LOG_I ("%p session: Direct connect detected ALPN: %s", self, client_hello.alpn);
@@ -573,9 +698,18 @@ run_direct_connect_task (void *data)
             LOG_D ("%p session: TLS ClientHello not detected or parsing failed", self);
         }
     }
-
-    LOG_D ("%p session: direct connect task run %s:%d -> %s:%d",
-           self, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
+    // --- HTTP Hostname-based ACL check for ports 80/8080 ---
+    else if (self->queue && (pcb->local_port == 80 || pcb->local_port == 8080)) {
+        if (sniff_http_host (self, http_hostname, sizeof(http_hostname)) == 0) {
+            LOG_I ("%p session: Direct connect detected HTTP Host: %s (target: %s:%d)",
+                   self, http_hostname, dst_ip, pcb->local_port);
+            if (hev_acl_is_blocked_hostname (http_hostname)) {
+                LOG_W ("%p session: Direct connect blocked connection to HTTP Host: %s (target: %s:%d)",
+                       self, http_hostname, dst_ip, pcb->local_port);
+                goto exit_cleanup; // Terminate session
+            }
+        }
+    }
 
     /* 获取超时配置 */
     connect_timeout = hev_config_get_misc_connect_timeout ();
@@ -793,6 +927,7 @@ run_smart_proxy_task (void *data)
     time_t connect_success_time = 0;
     time_t session_duration = 0;
     HevTLSClientHello client_hello;
+    char http_hostname[256]; // Buffer for HTTP hostname
     int gfw_detected = 0;
     int first_loop = 1;
     int probe_success = 0;  /* ✅ 新增：探测成功标志 */
@@ -824,9 +959,27 @@ run_smart_proxy_task (void *data)
             if (client_hello.sni[0]) {
                 LOG_I ("%p session: Smart proxy detected TLS SNI: %s (target: %s:%d)",
                        self, client_hello.sni, dst_ip, pcb->local_port);
+                // --- SNI-based ACL check ---
+                if (hev_acl_is_blocked_hostname (client_hello.sni)) {
+                    LOG_W ("%p session: Smart proxy blocked connection to SNI: %s (target: %s:%d)",
+                           self, client_hello.sni, dst_ip, pcb->local_port);
+                    goto exit_cleanup; // Terminate session
+                }
             }
             if (client_hello.alpn[0]) {
                 LOG_I ("%p session: Smart proxy detected ALPN: %s", self, client_hello.alpn);
+            }
+        }
+    }
+    // --- HTTP Hostname-based ACL check for ports 80/8080 ---
+    else if (self->queue && (pcb->local_port == 80 || pcb->local_port == 8080)) {
+        if (sniff_http_host (self, http_hostname, sizeof(http_hostname)) == 0) {
+            LOG_I ("%p session: Smart proxy detected HTTP Host: %s (target: %s:%d)",
+                   self, http_hostname, dst_ip, pcb->local_port);
+            if (hev_acl_is_blocked_hostname (http_hostname)) {
+                LOG_W ("%p session: Smart proxy blocked connection to HTTP Host: %s (target: %s:%d)",
+                       self, http_hostname, dst_ip, pcb->local_port);
+                goto exit_cleanup; // Terminate session
             }
         }
     }
@@ -1103,10 +1256,7 @@ cleanup_splice:
     }
     
     /* ✅ 探测成功或正常结束，不走 SOCKS5 回退 */
-    hev_socks5_session_terminate (s);
-    hev_socks5_tunnel_delete_session (node);
-    hev_object_unref (HEV_OBJECT (self));
-    return;
+    goto exit_cleanup; // Replaced return with goto exit_cleanup
 
 fallback_socks5:
     LOG_I ("%p session: Smart proxy falling back to SOCKS5 for %s:%d -> %s:%d",
@@ -1122,6 +1272,8 @@ fallback_socks5:
     LOG_I ("%p session: SOCKS5 proxy session ended %s:%d -> %s:%d",
            self, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
     
+exit_cleanup: // Added exit_cleanup label
+    hev_socks5_session_terminate (s);
     hev_socks5_tunnel_delete_session (node);
     hev_object_unref (HEV_OBJECT (self));
 }

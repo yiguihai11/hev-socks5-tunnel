@@ -59,6 +59,9 @@ static char chnroutes_file_path[1024];
 static int smart_proxy_timeout_ms;
 static int smart_proxy_blocked_ip_expiry_minutes;
 
+/* acl */
+static char acl_file_path[1024];
+
 static int
 hev_config_parse_tunnel_ipv4 (yaml_document_t *doc, yaml_node_t *base)
 {
@@ -437,6 +440,39 @@ hev_config_parse_smart_proxy (yaml_document_t *doc, yaml_node_t *base)
 }
 
 static int
+hev_config_parse_acl (yaml_document_t *doc, yaml_node_t *base)
+{
+    yaml_node_pair_t *pair;
+
+    if (!base || YAML_MAPPING_NODE != base->type)
+        return -1;
+
+    for (pair = base->data.mapping.pairs.start;
+         pair < base->data.mapping.pairs.top; pair++) {
+        yaml_node_t *node;
+        const char *key, *value;
+
+        if (!pair->key || !pair->value)
+            break;
+
+        node = yaml_document_get_node (doc, pair->key);
+        if (!node || YAML_SCALAR_NODE != node->type)
+            break;
+        key = (const char *)node->data.scalar.value;
+
+        node = yaml_document_get_node (doc, pair->value);
+        if (!node || YAML_SCALAR_NODE != node->type)
+            break;
+        value = (const char *)node->data.scalar.value;
+
+        if (0 == strcmp (key, "file-path"))
+            strncpy (acl_file_path, value, sizeof (acl_file_path) - 1);
+    }
+
+    return 0;
+}
+
+static int
 hev_config_parse_misc (yaml_document_t *doc, yaml_node_t *base)
 {
     yaml_node_pair_t *pair;
@@ -526,6 +562,8 @@ hev_config_parse_doc (yaml_document_t *doc)
             res = hev_config_parse_chnroutes (doc, node);
         else if (0 == strcmp (key, "smart-proxy"))
             res = hev_config_parse_smart_proxy (doc, node);
+        else if (0 == strcmp (key, "acl"))
+            res = hev_config_parse_acl (doc, node);
 
         if (res < 0)
             return -1;
@@ -809,4 +847,13 @@ int
 hev_config_get_smart_proxy_blocked_ip_expiry_minutes (void)
 {
     return smart_proxy_blocked_ip_expiry_minutes;
+}
+
+/* acl */
+const char *
+hev_config_get_acl_file_path (void)
+{
+    if (!acl_file_path[0])
+        return NULL;
+    return acl_file_path;
 }

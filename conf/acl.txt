@@ -1,0 +1,17 @@
+# ACL (Access Control List) for hev-socks5-tunnel
+# Lines starting with '#' are comments.
+# Each line can be an IP address (IPv4 or IPv6) or a hostname/SNI.
+# Connections matching these entries will be blocked.
+
+# Example IPv4 addresses to block
+192.168.1.100
+10.0.0.5
+
+# Example IPv6 addresses to block
+::1
+2001:db8::1
+
+# Example hostnames/SNI to block (case-insensitive)
+example.com
+www.blocked-site.org
+malicious.domain

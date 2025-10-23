@@ -76,6 +76,12 @@ smart-proxy:
   # Expiry time in minutes for temporarily blocked IPs.
   blocked-ip-expiry-minutes: 360
 
+acl:
+  # Path to the ACL file containing IP addresses and hostnames/SNI to block.
+  # Each line in the file can be an IP address (IPv4 or IPv6) or a hostname/SNI.
+  # Lines starting with '#' are treated as comments.
+  file-path: "conf/acl.txt"
+
 #mapdns:
   # Mapped DNS address
 # address: 198.18.0.2

@@ -21,6 +21,7 @@
 #include "hev-logger.h"
 #include "hev-session-manager.h"
 #include "hev-traffic-router.h"
+#include "hev-acl.h"
 
 typedef struct _HevIPAddressRange4 {
     u32_t start;
@@ -326,6 +327,14 @@ hev_traffic_router_handle_tcp (struct tcp_pcb *pcb) {
     LOG_D ("%p router: TCP routing decision for %s:%d -> %s:%d",
            pcb, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
     
+    // --- IP-based ACL check ---
+    if (hev_acl_is_blocked_ip (local_ip)) {
+        LOG_W ("%p router: TCP connection blocked to IP: %s:%d (from %s:%d) by ACL",
+               pcb, dst_ip, pcb->local_port, src_ip, pcb->remote_port);
+        tcp_abort (pcb); // Abort the connection
+        return 1; // Handled (blocked)
+    }
+
     /* 1. Domestic IPs are connected directly. */
     if (is_domestic (local_ip)) {
         LOG_I ("%p router: TCP routing %s:%d -> %s:%d via DIRECT (domestic IP)",
@@ -368,6 +377,14 @@ hev_traffic_router_handle_udp (struct udp_pcb *pcb, struct pbuf *p,
     LOG_D ("%p router: UDP routing decision for %s:%d -> %s:%d (packet_size=%d)",
            pcb, src_ip, pcb->remote_port, dst_ip, port, p ? p->tot_len : 0);
     
+    // --- IP-based ACL check ---
+    if (hev_acl_is_blocked_ip (addr)) {
+        LOG_W ("%p router: UDP packet blocked to IP: %s:%d (from %s:%d) by ACL",
+               pcb, dst_ip, port, src_ip, pcb->remote_port);
+        pbuf_free(p);
+        return 1; // Handled (blocked)
+    }
+
     /* DNS Forwarder 劫持检查（优先级最高）*/
     if (port == 53) {
         const char *dns_fwd_virtual_ip4 = hev_config_get_dns_forwarder_virtual_ip4();

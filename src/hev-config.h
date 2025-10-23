@@ -70,4 +70,7 @@ const char *hev_config_get_chnroutes_file_path (void);
 int hev_config_get_smart_proxy_timeout_ms (void);
 int hev_config_get_smart_proxy_blocked_ip_expiry_minutes (void);
 
+/* acl */
+const char *hev_config_get_acl_file_path (void);
+
 #endif /* __HEV_CONFIG_H__ */

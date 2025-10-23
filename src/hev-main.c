@@ -23,6 +23,7 @@
 #include "hev-socks5-logger.h"
 #include "hev-socks5-tunnel.h"
 #include "hev-traffic-router.h"
+#include "hev-session-manager.h"
 
 
 #include "hev-main.h"
@@ -51,6 +52,7 @@ hev_socks5_tunnel_main_inner (int tun_fd)
     if (res < 0)
         return -4;
 
+    hev_session_manager_init (); // Call session manager init
 
     nofile = hev_config_get_misc_limit_nofile ();
     res = set_limit_nofile (nofile);
@@ -75,6 +77,7 @@ hev_socks5_tunnel_main_inner (int tun_fd)
 
     hev_socks5_tunnel_fini ();
     hev_traffic_router_fini ();
+    hev_session_manager_fini (); // Call session manager fini
 
     hev_socks5_logger_fini ();
     hev_logger_fini ();
