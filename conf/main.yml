@@ -42,7 +42,7 @@ dns-forwarder:
 
   # Forward IPv4 DNS queries to this target.
   # Port is optional, defaults to 53.
-  target-ip4: 1.1.1.1:53
+  target-ip4: 127.0.0.1:1053
   # target-ip4: 1.1.1.1:53
 
   # Forward IPv6 DNS queries to this target.

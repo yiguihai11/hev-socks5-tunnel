@@ -1141,6 +1141,8 @@ typedef struct _HevDirectUDPSession {
     
     time_t last_activity;
     time_t session_start;
+    ip_addr_t orig_dest_ip;
+    u16_t orig_dest_port;
 } HevDirectUDPSession;
 
 #define UDP_ALIVE_SEND 0x01
@@ -1326,9 +1328,13 @@ direct_udp_recv_task (void *data)
             
             hev_task_mutex_lock (session->mutex);
             if (session->pcb) {
+                char orig_dst_ip[INET6_ADDRSTRLEN];
+                ipaddr_ntoa_r (&session->orig_dest_ip, orig_dst_ip, sizeof (orig_dst_ip));
+                LOG_D ("%p session: UDP sending from spoofed source %s:%d",
+                       session, orig_dst_ip, session->orig_dest_port);
                 err_t err = udp_sendfrom (session->pcb, p,
-                                         &session->dest_ip,
-                                         session->dest_port);
+                                         &session->orig_dest_ip,
+                                         session->orig_dest_port);
                 if (err != ERR_OK) {
                     LOG_E ("%p session: UDP udp_sendfrom failed: %d", session, err);
                 } else {
@@ -1503,9 +1509,9 @@ cleanup:
 
 void
 hev_session_manager_start_direct_udp (struct udp_pcb *pcb,
-                                     const ip_addr_t *dest_addr,
-                                     u16_t dest_port,
-                                     struct pbuf *first_packet)
+                                     const ip_addr_t *addr, u16_t port,
+                                     const ip_addr_t *orig_addr, u16_t orig_port,
+                                     struct pbuf *p)
 {
     HevDirectUDPSession *session;
     HevUDPPacket *pkt;
@@ -1516,8 +1522,7 @@ hev_session_manager_start_direct_udp (struct udp_pcb *pcb,
 
     session = hev_malloc0 (sizeof (HevDirectUDPSession));
     if (!session) {
-        LOG_E ("session: UDP failed to allocate session structure");
-        pbuf_free (first_packet);
+        pbuf_free (p);
         udp_remove (pcb);
         return;
     }
@@ -1527,7 +1532,7 @@ hev_session_manager_start_direct_udp (struct udp_pcb *pcb,
     if (!task) {
         LOG_E ("session: UDP failed to create task");
         hev_free (session);
-        pbuf_free (first_packet);
+        pbuf_free (p);
         udp_remove (pcb);
         return;
     }
@@ -1537,28 +1542,30 @@ hev_session_manager_start_direct_udp (struct udp_pcb *pcb,
     session->task_main = task;
     session->fd = -1;
 
-    ip_addr_copy (session->dest_ip, *dest_addr);
-    session->dest_port = dest_port;
+    ip_addr_copy (session->dest_ip, *addr);
+    session->dest_port = port;
+    ip_addr_copy (session->orig_dest_ip, *orig_addr);
+    session->orig_dest_port = orig_port;
     ip_addr_copy (session->src_ip, pcb->remote_ip);
     session->src_port = pcb->remote_port;
 
     pkt = hev_malloc (sizeof (HevUDPPacket));
     if (pkt) {
-        pkt->data = first_packet;
+        pkt->data = p;
         memset (&pkt->node, 0, sizeof (pkt->node));
         hev_list_add_tail (&session->packet_queue, &pkt->node);
         session->queue_count = 1;
     } else {
         LOG_W ("%p session: UDP failed to allocate first packet structure", session);
-        pbuf_free (first_packet);
+        pbuf_free (p);
     }
 
     ipaddr_ntoa_r (&session->src_ip, src_ip, sizeof (src_ip));
     ipaddr_ntoa_r (&session->dest_ip, dst_ip, sizeof (dst_ip));
     
     LOG_I ("%p session: UDP Direct connect started %s:%d -> %s:%d (first_packet=%d bytes)",
-           session, src_ip, session->src_port, dst_ip, session->dest_port,
-           first_packet ? first_packet->tot_len : 0);
+           session, src_ip, session->src_port, dst_ip, port,
+           p ? p->tot_len : 0);
 
     hev_socks5_tunnel_insert_session (&session->node);
     hev_task_run (task, run_direct_udp_task, session);

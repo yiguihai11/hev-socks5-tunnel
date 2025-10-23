@@ -439,7 +439,7 @@ hev_traffic_router_handle_udp (struct udp_pcb *pcb, struct pbuf *p,
             LOG_I ("router: UDP routing %s:%d -> %s:%d via DNS_FORWARD (hijacked DNS query)",
                    src_ip, pcb->remote_port, dst_ip, target_port);
             pbuf_ref(p);
-            hev_session_manager_start_direct_udp (pcb, &target_ip, target_port, p);
+            hev_session_manager_start_direct_udp (pcb, &target_ip, target_port, addr, port, p);
             return 1;
         }
     }
@@ -449,7 +449,7 @@ hev_traffic_router_handle_udp (struct udp_pcb *pcb, struct pbuf *p,
         LOG_I ("router: UDP routing %s:%d -> %s:%d via DIRECT (domestic IP, packet_size=%d)",
                src_ip, pcb->remote_port, dst_ip, port, p ? p->tot_len : 0);
         pbuf_ref(p);
-        hev_session_manager_start_direct_udp (pcb, addr, port, p);
+        hev_session_manager_start_direct_udp (pcb, addr, port, addr, port, p);
         return 1;
     }
     
