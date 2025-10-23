@@ -208,8 +208,11 @@ hev_socks5_session_task_entry (void *data)
         /* 等待数据到达 */
         if (!tcp->queue) {
             LOG_D ("%p session: SOCKS5 task waiting for TLS ClientHello data...", tcp);
-            for (int i = 0; i < 10 && !tcp->queue; i++) {
-                hev_task_sleep (10);  /* 现在在任务上下文中，可以用 hev_task_sleep */
+            for (int i = 0; i < 150 && !tcp->queue; i++) { /* 延长等待时间 */
+                hev_task_sleep (10);
+            }
+            if (!tcp->queue) {
+                LOG_W ("%p session: SOCKS5 task timed out waiting for TLS ClientHello data (1500ms)", tcp);
             }
         }
 
@@ -543,11 +546,13 @@ run_direct_connect_task (void *data)
     LOG_D ("%p session: direct connect task run %s:%d -> %s:%d",
            self, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
 
-    /* 等待一小段时间让数据到达队列 (仅对端口443) */
     if (pcb->local_port == 443 && !self->queue) {
         LOG_D ("%p session: Waiting for TLS ClientHello data...", self);
-        for (int i = 0; i < 10 && !self->queue; i++) {
+        for (int i = 0; i < 150 && !self->queue; i++) { /* 延长等待时间 */
             hev_task_sleep (10);
+        }
+        if (!self->queue) {
+            LOG_W ("%p session: Direct connect task timed out waiting for TLS ClientHello data (1500ms)", self);
         }
     }
 
@@ -802,8 +807,11 @@ run_smart_proxy_task (void *data)
     /* 等待数据到达队列（用于 SNI 检测） */
     if (pcb->local_port == 443 && !self->queue) {
         LOG_D ("%p session: Waiting for TLS ClientHello data...", self);
-        for (int i = 0; i < 10 && !self->queue; i++) {
+        for (int i = 0; i < 150 && !self->queue; i++) { /* 延长等待时间 */
             hev_task_sleep (10);
+        }
+        if (!self->queue) {
+            LOG_W ("%p session: Smart proxy task timed out waiting for TLS ClientHello data (1500ms)", self);
         }
     }
 
