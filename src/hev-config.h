@@ -2,26 +2,33 @@
  ============================================================================
  Name        : hev-config.h
  Author      : hev <r@hev.cc>
- Copyright   : Copyright (c) 2019 - 2023 hev
- Description : Config
+ Copyright   : Copyright (c) 2019 - 2025 hev
+ Description : Config (支持 TCP/UDP 分离的 SOCKS5 服务器)
  ============================================================================
  */
 
 #ifndef __HEV_CONFIG_H__
 #define __HEV_CONFIG_H__
 
-typedef struct _HevConfigServer HevConfigServer;
+typedef struct _HevConfigSocks5Server HevConfigSocks5Server;
 
-struct _HevConfigServer
+struct _HevConfigSocks5Server
 {
     const char *user;
     const char *pass;
     unsigned int mark;
-    short udp_in_udp;
     unsigned short port;
     unsigned char pipeline;
-    char udp_addr[256];
+    unsigned char udp_relay;  /* 0=tcp, 1=udp */
     char addr[256];
+};
+
+typedef struct _HevConfigSocks5 HevConfigSocks5;
+
+struct _HevConfigSocks5
+{
+    HevConfigSocks5Server tcp;  /* TCP 专用 SOCKS5 服务器 */
+    HevConfigSocks5Server udp;  /* UDP 专用 SOCKS5 服务器 */
 };
 
 int hev_config_init_from_file (const char *config_path);
@@ -39,7 +46,14 @@ const char *hev_config_get_tunnel_ipv6_address (void);
 const char *hev_config_get_tunnel_post_up_script (void);
 const char *hev_config_get_tunnel_pre_down_script (void);
 
-HevConfigServer *hev_config_get_socks5_server (void);
+/* TCP SOCKS5 Server */
+HevConfigSocks5Server *hev_config_get_socks5_tcp_server (void);
+
+/* UDP SOCKS5 Server */
+HevConfigSocks5Server *hev_config_get_socks5_udp_server (void);
+
+/* Legacy: 兼容旧代码，返回 TCP 服务器配置 */
+HevConfigSocks5Server *hev_config_get_socks5_server (void);
 
 int hev_config_get_mapdns_address (void);
 int hev_config_get_mapdns_port (void);

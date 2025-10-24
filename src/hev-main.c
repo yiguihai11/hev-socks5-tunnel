@@ -24,6 +24,7 @@
 #include "hev-socks5-tunnel.h"
 #include "hev-traffic-router.h"
 #include "hev-session-manager.h"
+#include "hev-filter.h"
 
 
 #include "hev-main.h"
@@ -47,6 +48,18 @@ hev_socks5_tunnel_main_inner (int tun_fd)
     res = hev_socks5_logger_init (log_level, log_file);
     if (res < 0)
         return -3;
+
+    res = hev_filter_init ();
+    if (res < 0)
+        return -4;
+
+    const char *acl_path = hev_config_get_acl_file_path ();
+    if (acl_path)
+        hev_filter_load_acl (acl_path);
+
+    const char *chnroutes_path = hev_config_get_chnroutes_file_path ();
+    if (chnroutes_path)
+        hev_filter_load_chnroutes (chnroutes_path);
 
     res = hev_traffic_router_init ();
     if (res < 0)
@@ -79,6 +92,7 @@ hev_socks5_tunnel_main_inner (int tun_fd)
     hev_traffic_router_fini ();
     hev_session_manager_fini (); // Call session manager fini
 
+    hev_filter_fini ();
     hev_socks5_logger_fini ();
     hev_logger_fini ();
     hev_config_fini ();

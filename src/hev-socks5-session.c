@@ -19,14 +19,14 @@ void
 hev_socks5_session_run (HevSocks5Session *self)
 {
     HevSocks5SessionIface *iface;
-    HevConfigServer *srv;
+    HevConfigSocks5Server *srv;
     int read_write_timeout;
     int connect_timeout;
     int res;
 
     LOG_D ("%p socks5 session run", self);
 
-    srv = hev_config_get_socks5_server ();
+    srv = hev_config_get_socks5_tcp_server ();
     connect_timeout = hev_config_get_misc_connect_timeout ();
     read_write_timeout = hev_config_get_misc_read_write_timeout ();
 

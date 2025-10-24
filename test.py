@@ -71,16 +71,22 @@ def _test_single_tcp(target_domain, target_ip, port, iface, timeout):
         sock.sendall(http_request)
         response_data = sock.recv(1024)
         if not response_data:
-            return "无响应数据"
+            return "失败！无响应数据"
         response = response_data.decode('utf-8', errors='ignore')
         lines = response.splitlines()
         if not lines:
-            return "响应解析失败：无行数据"
+            return "失败！响应解析失败：无行数据"
         status_line = lines[0].split()
         if len(status_line) < 2:
-            return "响应解析失败：无效状态行"
+            return "失败！响应解析失败：无效状态行"
         status_code = status_line[1]
-        return f"成功！HTTP状态码：{status_code}"
+        
+        if status_code == '200' or status_code == '204':
+            return f"成功！HTTP状态码：{status_code}"
+        else:
+            return f"失败！非预期HTTP状态码：{status_code}"
+    except ConnectionResetError:
+        return "失败！连接被重置（可能被ACL阻止）"
     except socket.timeout:
         return f"超时：{timeout}秒内未完成连接/接收"
     except ssl.SSLError as e:

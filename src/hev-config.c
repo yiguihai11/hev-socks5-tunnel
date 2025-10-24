@@ -28,7 +28,119 @@ static char tun_ipv6_address[64];
 static char tun_post_up_script[1024];
 static char tun_pre_down_script[1024];
 
-static HevConfigServer srv;
+static HevConfigSocks5 socks5_config;
+
+static int
+yaml_parse_bool (const char *val)
+{
+    if (strcmp (val, "true") == 0)
+        return 1;
+    return 0;
+}
+
+static int
+hev_config_parse_socks5_tcp (yaml_document_t *doc, yaml_node_t *base)
+{
+    yaml_node_pair_t *pair;
+    
+    if (!base || base->type != YAML_MAPPING_NODE)
+        return -1;
+    
+    for (pair = base->data.mapping.pairs.start;
+         pair < base->data.mapping.pairs.top; pair++) {
+        yaml_node_t *node_key = yaml_document_get_node (doc, pair->key);
+        yaml_node_t *node_val = yaml_document_get_node (doc, pair->value);
+        
+        if (!node_key || !node_val)
+            continue;
+        
+        const char *key = (const char *)node_key->data.scalar.value;
+        const char *val = (const char *)node_val->data.scalar.value;
+        
+        if (strcmp (key, "port") == 0) {
+            socks5_config.tcp.port = strtoul (val, NULL, 10);
+        } else if (strcmp (key, "address") == 0) {
+            strncpy (socks5_config.tcp.addr, val, sizeof (socks5_config.tcp.addr) - 1);
+        } else if (strcmp (key, "username") == 0) {
+            socks5_config.tcp.user = strdup (val);
+        } else if (strcmp (key, "password") == 0) {
+            socks5_config.tcp.pass = strdup (val);
+        } else if (strcmp (key, "mark") == 0) {
+            socks5_config.tcp.mark = strtoul (val, NULL, 10);
+        } else if (strcmp (key, "pipeline") == 0) {
+            socks5_config.tcp.pipeline = yaml_parse_bool (val);
+        }
+    }
+    
+    return 0;
+}
+
+static int
+hev_config_parse_socks5_udp (yaml_document_t *doc, yaml_node_t *base)
+{
+    yaml_node_pair_t *pair;
+    
+    if (!base || base->type != YAML_MAPPING_NODE)
+        return -1;
+    
+    for (pair = base->data.mapping.pairs.start;
+         pair < base->data.mapping.pairs.top; pair++) {
+        yaml_node_t *node_key = yaml_document_get_node (doc, pair->key);
+        yaml_node_t *node_val = yaml_document_get_node (doc, pair->value);
+        
+        if (!node_key || !node_val)
+            continue;
+        
+        const char *key = (const char *)node_key->data.scalar.value;
+        const char *val = (const char *)node_val->data.scalar.value;
+        
+        if (strcmp (key, "port") == 0) {
+            socks5_config.udp.port = strtoul (val, NULL, 10);
+        } else if (strcmp (key, "address") == 0) {
+            strncpy (socks5_config.udp.addr, val, sizeof (socks5_config.udp.addr) - 1);
+        } else if (strcmp (key, "username") == 0) {
+            socks5_config.udp.user = strdup (val);
+        } else if (strcmp (key, "password") == 0) {
+            socks5_config.udp.pass = strdup (val);
+        } else if (strcmp (key, "mark") == 0) {
+            socks5_config.udp.mark = strtoul (val, NULL, 10);
+        } else if (strcmp (key, "udp-relay") == 0) {
+            socks5_config.udp.udp_relay = (strcmp (val, "udp") == 0) ? 1 : 0;
+        }
+    }
+    
+    return 0;
+}
+
+static int
+hev_config_parse_socks5 (yaml_document_t *doc, yaml_node_t *base)
+{
+    yaml_node_pair_t *pair;
+    
+    if (!base || base->type != YAML_MAPPING_NODE)
+        return -1;
+    
+    for (pair = base->data.mapping.pairs.start;
+         pair < base->data.mapping.pairs.top; pair++) {
+        yaml_node_t *node_key = yaml_document_get_node (doc, pair->key);
+        yaml_node_t *node_val = yaml_document_get_node (doc, pair->value);
+        
+        if (!node_key || !node_val)
+            continue;
+        
+        const char *key = (const char *)node_key->data.scalar.value;
+        
+        if (strcmp (key, "tcp") == 0) {
+            if (hev_config_parse_socks5_tcp (doc, node_val) < 0)
+                return -1;
+        } else if (strcmp (key, "udp") == 0) {
+            if (hev_config_parse_socks5_udp (doc, node_val) < 0)
+                return -1;
+        }
+    }
+    
+    return 0;
+}
 
 static int mapdns_address;
 static int mapdns_port;
@@ -61,6 +173,24 @@ static int smart_proxy_blocked_ip_expiry_minutes;
 
 /* acl */
 static char acl_file_path[1024];
+
+HevConfigSocks5Server *
+hev_config_get_socks5_tcp_server (void)
+{
+    return &socks5_config.tcp;
+}
+
+HevConfigSocks5Server *
+hev_config_get_socks5_udp_server (void)
+{
+    return &socks5_config.udp;
+}
+
+HevConfigSocks5Server *
+hev_config_get_socks5_server (void)
+{
+    return &socks5_config.tcp;
+}
 
 static int
 hev_config_parse_tunnel_ipv4 (yaml_document_t *doc, yaml_node_t *base)
@@ -181,99 +311,7 @@ hev_config_parse_tunnel (yaml_document_t *doc, yaml_node_t *base)
     return 0;
 }
 
-static int
-hev_config_parse_socks5 (yaml_document_t *doc, yaml_node_t *base)
-{
-    yaml_node_pair_t *pair;
-    static char _user[256];
-    static char _pass[256];
-    const char *addr = NULL;
-    const char *port = NULL;
-    const char *udpm = NULL;
-    const char *udpa = NULL;
-    const char *user = NULL;
-    const char *pass = NULL;
-    const char *mark = NULL;
-    const char *pipe = NULL;
 
-    if (!base || YAML_MAPPING_NODE != base->type)
-        return -1;
-
-    for (pair = base->data.mapping.pairs.start;
-         pair < base->data.mapping.pairs.top; pair++) {
-        yaml_node_t *node;
-        const char *key, *value;
-
-        if (!pair->key || !pair->value)
-            break;
-
-        node = yaml_document_get_node (doc, pair->key);
-        if (!node || YAML_SCALAR_NODE != node->type)
-            break;
-        key = (const char *)node->data.scalar.value;
-
-        node = yaml_document_get_node (doc, pair->value);
-        if (!node || YAML_SCALAR_NODE != node->type)
-            break;
-        value = (const char *)node->data.scalar.value;
-
-        if (0 == strcmp (key, "port"))
-            port = value;
-        else if (0 == strcmp (key, "address"))
-            addr = value;
-        else if (0 == strcmp (key, "udp"))
-            udpm = value;
-        else if (0 == strcmp (key, "udp-address"))
-            udpa = value;
-        else if (0 == strcmp (key, "pipeline"))
-            pipe = value;
-        else if (0 == strcmp (key, "username"))
-            user = value;
-        else if (0 == strcmp (key, "password"))
-            pass = value;
-        else if (0 == strcmp (key, "mark"))
-            mark = value;
-    }
-
-    if (!port) {
-        fprintf (stderr, "Can't found socks5.port!\n");
-        return -1;
-    }
-
-    if (!addr) {
-        fprintf (stderr, "Can't found socks5.address!\n");
-        return -1;
-    }
-
-    if ((user && !pass) || (!user && pass)) {
-        fprintf (stderr, "Must be set both socks5 username and password!\n");
-        return -1;
-    }
-
-    strncpy (srv.addr, addr, 256 - 1);
-    srv.port = strtoul (port, NULL, 10);
-
-    if (pipe && (strcasecmp (pipe, "true") == 0))
-        srv.pipeline = 1;
-
-    if (udpm && (strcasecmp (udpm, "udp") == 0))
-        srv.udp_in_udp = 1;
-
-    if (udpa)
-        strncpy (srv.udp_addr, udpa, 256 - 1);
-
-    if (user && pass) {
-        strncpy (_user, user, 256 - 1);
-        strncpy (_pass, pass, 256 - 1);
-        srv.user = _user;
-        srv.pass = _pass;
-    }
-
-    if (mark)
-        srv.mark = strtoul (mark, NULL, 0);
-
-    return 0;
-}
 
 static int
 hev_config_parse_mapdns (yaml_document_t *doc, yaml_node_t *base)
@@ -698,11 +736,7 @@ hev_config_get_tunnel_pre_down_script (void)
     return tun_pre_down_script;
 }
 
-HevConfigServer *
-hev_config_get_socks5_server (void)
-{
-    return &srv;
-}
+
 
 int
 hev_config_get_mapdns_address (void)

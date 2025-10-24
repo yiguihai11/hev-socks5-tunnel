@@ -208,12 +208,12 @@ static int
 hev_socks5_session_tcp_bind (HevSocks5 *self, int fd,
                              const struct sockaddr *dest)
 {
-    HevConfigServer *srv;
+    HevConfigSocks5Server *srv;
     unsigned int mark;
 
     LOG_D ("%p socks5 session tcp bind", self);
 
-    srv = hev_config_get_socks5_server ();
+    srv = hev_config_get_socks5_tcp_server ();
     mark = srv->mark;
 
     if (mark) {

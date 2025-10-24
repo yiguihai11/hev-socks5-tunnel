@@ -82,8 +82,7 @@
 #include "hev-socks5-session-tcp.h"
 #include "hev-socks5-tunnel.h"
 #include "hev-traffic-router.h"
-#include "hev-tls-parser.h"
-#include "hev-acl.h"
+#include "hev-filter.h"
 
 #include "hev-session-manager.h"
 
@@ -193,17 +192,11 @@ idle_timer_check (HevIdleTimer *timer)
 void
 hev_session_manager_init (void)
 {
-    hev_acl_init ();
-    const char *acl_file = hev_config_get_acl_file_path ();
-    if (acl_file) {
-        hev_acl_load_from_file (acl_file);
-    }
 }
 
 void
 hev_session_manager_fini (void)
 {
-    hev_acl_fini ();
 }
 
 /* ============================================================================
@@ -247,7 +240,7 @@ hev_socks5_session_task_entry (void *data)
                     LOG_I ("%p session: SOCKS5 proxy detected TLS SNI: %s (target: %s:%d)",
                            tcp, client_hello.sni, dst_ip, pcb->local_port);
                     // --- SNI-based ACL check ---
-                    if (hev_acl_is_blocked_hostname (client_hello.sni)) {
+                    if (hev_filter_is_blocked_hostname (client_hello.sni)) {
                         LOG_W ("%p session: SOCKS5 proxy blocked connection to SNI: %s (target: %s:%d)",
                                tcp, client_hello.sni, dst_ip, pcb->local_port);
                         goto exit_cleanup; // Terminate session
@@ -277,7 +270,7 @@ hev_socks5_session_task_entry (void *data)
             ipaddr_ntoa_r (&pcb->local_ip, dst_ip, sizeof (dst_ip));
             LOG_I ("%p session: SOCKS5 proxy detected HTTP Host: %s (target: %s:%d)",
                    tcp, http_hostname, dst_ip, pcb->local_port);
-            if (hev_acl_is_blocked_hostname (http_hostname)) {
+            if (hev_filter_is_blocked_hostname (http_hostname)) {
                 LOG_W ("%p session: SOCKS5 proxy blocked connection to HTTP Host: %s (target: %s:%d)",
                        tcp, http_hostname, dst_ip, pcb->local_port);
                 goto exit_cleanup; // Terminate session
@@ -628,7 +621,7 @@ sniff_client_hello (HevSocks5SessionTCP *self, HevTLSClientHello *hello)
     if (total_len < 5)  /* 至少需要 TLS Record Header */
         return -1;
     
-    return hev_tls_parse_client_hello (self, buffer, total_len, hello);
+    return hev_filter_parse_tls (self, buffer, total_len, hello);
 }
 
 static void
@@ -685,7 +678,7 @@ run_direct_connect_task (void *data)
                 LOG_I ("%p session: Direct connect detected TLS SNI: %s (target: %s:%d)",
                        self, client_hello.sni, dst_ip, pcb->local_port);
                 // --- SNI-based ACL check ---
-                if (hev_acl_is_blocked_hostname (client_hello.sni)) {
+                if (hev_filter_is_blocked_hostname (client_hello.sni)) {
                     LOG_W ("%p session: Direct connect blocked connection to SNI: %s (target: %s:%d)",
                            self, client_hello.sni, dst_ip, pcb->local_port);
                     goto exit_cleanup; // Terminate session
@@ -703,7 +696,7 @@ run_direct_connect_task (void *data)
         if (sniff_http_host (self, http_hostname, sizeof(http_hostname)) == 0) {
             LOG_I ("%p session: Direct connect detected HTTP Host: %s (target: %s:%d)",
                    self, http_hostname, dst_ip, pcb->local_port);
-            if (hev_acl_is_blocked_hostname (http_hostname)) {
+            if (hev_filter_is_blocked_hostname (http_hostname)) {
                 LOG_W ("%p session: Direct connect blocked connection to HTTP Host: %s (target: %s:%d)",
                        self, http_hostname, dst_ip, pcb->local_port);
                 goto exit_cleanup; // Terminate session
@@ -960,7 +953,7 @@ run_smart_proxy_task (void *data)
                 LOG_I ("%p session: Smart proxy detected TLS SNI: %s (target: %s:%d)",
                        self, client_hello.sni, dst_ip, pcb->local_port);
                 // --- SNI-based ACL check ---
-                if (hev_acl_is_blocked_hostname (client_hello.sni)) {
+                if (hev_filter_is_blocked_hostname (client_hello.sni)) {
                     LOG_W ("%p session: Smart proxy blocked connection to SNI: %s (target: %s:%d)",
                            self, client_hello.sni, dst_ip, pcb->local_port);
                     goto exit_cleanup; // Terminate session
@@ -976,7 +969,7 @@ run_smart_proxy_task (void *data)
         if (sniff_http_host (self, http_hostname, sizeof(http_hostname)) == 0) {
             LOG_I ("%p session: Smart proxy detected HTTP Host: %s (target: %s:%d)",
                    self, http_hostname, dst_ip, pcb->local_port);
-            if (hev_acl_is_blocked_hostname (http_hostname)) {
+            if (hev_filter_is_blocked_hostname (http_hostname)) {
                 LOG_W ("%p session: Smart proxy blocked connection to HTTP Host: %s (target: %s:%d)",
                        self, http_hostname, dst_ip, pcb->local_port);
                 goto exit_cleanup; // Terminate session

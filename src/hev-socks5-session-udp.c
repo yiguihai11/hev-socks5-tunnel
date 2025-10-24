@@ -276,12 +276,12 @@ static int
 hev_socks5_session_udp_bind (HevSocks5 *self, int fd,
                              const struct sockaddr *dest)
 {
-    HevConfigServer *srv;
+    HevConfigSocks5Server *srv;
     unsigned int mark;
 
     LOG_D ("%p socks5 session udp bind", self);
 
-    srv = hev_config_get_socks5_server ();
+    srv = hev_config_get_socks5_udp_server ();
     mark = srv->mark;
 
     if (mark) {
@@ -321,14 +321,14 @@ static int
 hev_socks5_session_udp_set_upstream_addr (HevSocks5Client *base,
                                           HevSocks5Addr *addr)
 {
-    HevConfigServer *srv = hev_config_get_socks5_server ();
+    HevConfigSocks5Server *srv = hev_config_get_socks5_udp_server ();
     HevSocks5ClientClass *ckptr;
 
-    if (srv->udp_in_udp && srv->udp_addr[0]) {
+    if (srv->udp_relay && srv->addr[0]) {
         uint16_t port = hev_socks5_addr_get_port (addr);
         LOG_D ("%p socks5 session udp: using UDP relay address %s:%d",
-               base, srv->udp_addr, port);
-        hev_socks5_addr_from_name (addr, srv->udp_addr, port);
+               base, srv->addr, port);
+        hev_socks5_addr_from_name (addr, srv->addr, port);
     }
 
     ckptr = HEV_SOCKS5_CLIENT_CLASS (HEV_SOCKS5_CLIENT_UDP_TYPE);
@@ -446,12 +446,12 @@ int
 hev_socks5_session_udp_construct (HevSocks5SessionUDP *self,
                                   struct udp_pcb *pcb, HevTaskMutex *mutex)
 {
-    HevConfigServer *srv = hev_config_get_socks5_server ();
+    HevConfigSocks5Server *srv = hev_config_get_socks5_udp_server ();
     char dst_ip[INET6_ADDRSTRLEN];
     int type;
     int res;
 
-    if (srv->udp_in_udp) {
+    if (srv->udp_relay) {
         type = HEV_SOCKS5_TYPE_UDP_IN_UDP;
         LOG_D ("%p socks5 session udp construct: using UDP-in-UDP mode", self);
     } else {

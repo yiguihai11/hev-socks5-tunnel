@@ -21,17 +21,7 @@
 #include "hev-logger.h"
 #include "hev-session-manager.h"
 #include "hev-traffic-router.h"
-#include "hev-acl.h"
-
-typedef struct _HevIPAddressRange4 {
-    u32_t start;
-    u32_t end;
-} HevIPAddressRange4;
-
-typedef struct _HevIPAddressRange6 {
-    u8_t start[16];
-    u8_t end[16];
-} HevIPAddressRange6;
+#include "hev-filter.h"
 
 typedef struct _HevBlacklistedIP {
     HevListNode node;
@@ -42,154 +32,19 @@ typedef struct _HevBlacklistedIP {
 
 static HevList blacklist;
 static HevTaskMutex blacklist_mutex;
-static HevIPAddressRange4 *chnroutes_ip4;
-static unsigned int chnroutes_ip4_count;
-static HevIPAddressRange6 *chnroutes_ip6;
-static unsigned int chnroutes_ip6_count;
 
-static int
-compare_ip4_range (const void *a, const void *b) {
-    const HevIPAddressRange4 *ra = a;
-    const HevIPAddressRange4 *rb = b;
-    if (ra->start < rb->start) return -1;
-    if (ra->start > rb->start) return 1;
-    return 0;
-}
-
-static int
-compare_ip6_range (const void *a, const void *b) {
-    const HevIPAddressRange6 *ra = a;
-    const HevIPAddressRange6 *rb = b;
-    return memcmp(ra->start, rb->start, 16);
-}
-
-static int
-chnroutes_init (const char *path) {
-    FILE *fp;
-    char line[128];
-    char ip_str[128];
-    int prefix_len;
-    
-    if (!path) {
-        LOG_D ("router: chnroutes file not configured.");
-        return 0;
-    }
-    
-    fp = fopen (path, "r");
-    if (!fp) {
-        LOG_E ("router: Failed to open chnroutes file: %s", path);
-        return -1;
-    }
-    
-    LOG_I ("router: Loading chnroutes file: %s", path);
-    
-    while (fgets (line, sizeof (line), fp)) {
-        if (sscanf (line, "%[^/]/%d", ip_str, &prefix_len) != 2)
-            continue;
-        
-        if (strchr(ip_str, ':')) {
-            // IPv6
-            chnroutes_ip6_count++;
-            chnroutes_ip6 = realloc (chnroutes_ip6, sizeof(HevIPAddressRange6) * chnroutes_ip6_count);
-            struct in6_addr addr_struct;
-            inet_pton(AF_INET6, ip_str, &addr_struct);
-            HevIPAddressRange6 *range = &chnroutes_ip6[chnroutes_ip6_count - 1];
-            memcpy(range->start, &addr_struct, 16);
-            memcpy(range->end, &addr_struct, 16);
-            int bits_to_mask = 128 - prefix_len;
-            int i = 15;
-            while (bits_to_mask > 0 && i >= 0) {
-                int bits_in_byte = (bits_to_mask > 8) ? 8 : bits_to_mask;
-                u8_t mask = (0xFF >> bits_in_byte);
-                range->start[i] &= mask;
-                range->end[i] |= ~mask;
-                bits_to_mask -= bits_in_byte;
-                i--;
-            }
-        } else {
-            // IPv4
-            chnroutes_ip4_count++;
-            chnroutes_ip4 = realloc (chnroutes_ip4, sizeof(HevIPAddressRange4) * chnroutes_ip4_count);
-            struct in_addr addr_struct;
-            inet_aton(ip_str, &addr_struct);
-            u32_t addr_host = ntohl(addr_struct.s_addr);
-            u32_t mask_host = (prefix_len == 0) ? 0 : (0xFFFFFFFF << (32 - prefix_len));
-            u32_t start_host = addr_host & mask_host;
-            u32_t end_host = start_host | (~mask_host);
-            chnroutes_ip4[chnroutes_ip4_count - 1].start = start_host;
-            chnroutes_ip4[chnroutes_ip4_count - 1].end = end_host;
-        }
-    }
-    
-    fclose (fp);
-    
-    if (chnroutes_ip4)
-        qsort (chnroutes_ip4, chnroutes_ip4_count, sizeof (HevIPAddressRange4),
-               compare_ip4_range);
-    if (chnroutes_ip6)
-        qsort (chnroutes_ip6, chnroutes_ip6_count, sizeof (HevIPAddressRange6),
-               compare_ip6_range);
-    
-    LOG_I ("router: Loaded %u IPv4 and %u IPv6 chnroutes.", chnroutes_ip4_count, chnroutes_ip6_count);
-    return 0;
-}
 
 static void
-chnroutes_fini (void) {
-    if (chnroutes_ip4) {
-        LOG_D ("router: Freeing %u IPv4 chnroutes", chnroutes_ip4_count);
-        free (chnroutes_ip4);
-        chnroutes_ip4 = NULL;
-        chnroutes_ip4_count = 0;
-    }
-    if (chnroutes_ip6) {
-        LOG_D ("router: Freeing %u IPv6 chnroutes", chnroutes_ip6_count);
-        free (chnroutes_ip6);
-        chnroutes_ip6 = NULL;
-        chnroutes_ip6_count = 0;
-    }
-}
-
-static int
-is_domestic (const ip_addr_t *addr) {
-    if (IP_IS_V4 (addr)) {
-        if (!chnroutes_ip4)
-            return 0;
-        
-        u32_t addr_host = ntohl(ip_2_ip4(addr)->addr);
-        int l = 0, r = chnroutes_ip4_count - 1;
-        
-        while (l <= r) {
-            int mid = l + (r - l) / 2;
-            if (addr_host >= chnroutes_ip4[mid].start && addr_host <= chnroutes_ip4[mid].end) {
-                return 1;
-            }
-            if (addr_host < chnroutes_ip4[mid].start) {
-                r = mid - 1;
-            } else {
-                l = mid + 1;
-            }
-        }
-    } else if (IP_IS_V6 (addr)) {
-        if (!chnroutes_ip6)
-            return 0;
-        
-        int l = 0, r = chnroutes_ip6_count - 1;
-        
-        while (l <= r) {
-            int mid = l + (r - l) / 2;
-            if (memcmp(ip_2_ip6(addr)->addr, chnroutes_ip6[mid].start, 16) >= 0 &&
-                memcmp(ip_2_ip6(addr)->addr, chnroutes_ip6[mid].end, 16) <= 0) {
-                return 1;
-            }
-            if (memcmp(ip_2_ip6(addr)->addr, chnroutes_ip6[mid].start, 16) < 0) {
-                r = mid - 1;
-            } else {
-                l = mid + 1;
-            }
-        }
-    }
-    return 0;
+terminate_pcb_task (void *data)
+{
+    struct tcp_pcb *pcb = data;
+    LOG_D ("router: Terminating PCB %p in deferred task", pcb);
+    tcp_arg(pcb, NULL);
+    tcp_recv(pcb, NULL);
+    tcp_sent(pcb, NULL);
+    tcp_err(pcb, NULL);
+    tcp_abort (pcb);
+    LOG_D ("router: PCB %p terminated.", pcb);
 }
 
 void
@@ -270,16 +125,9 @@ hev_traffic_router_blacklist_check (const ip_addr_t *addr) {
 
 int
 hev_traffic_router_init (void) {
-    const char *chnroutes_path = hev_config_get_chnroutes_file_path ();
-    
     LOG_D ("router: Initializing traffic router");
     
     hev_task_mutex_init (&blacklist_mutex);
-    
-    if (chnroutes_init (chnroutes_path) < 0) {
-        LOG_E ("router: Failed to initialize chnroutes!");
-        return -1;
-    }
     
     LOG_I ("router: Traffic router initialized successfully");
     return 0;
@@ -310,8 +158,6 @@ hev_traffic_router_fini (void) {
         LOG_I ("router: Cleaned up %d blacklist entries", blacklist_count);
     }
     
-    chnroutes_fini ();
-    
     LOG_I ("router: Traffic router finalized");
 }
 
@@ -328,15 +174,16 @@ hev_traffic_router_handle_tcp (struct tcp_pcb *pcb) {
            pcb, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
     
     // --- IP-based ACL check ---
-    if (hev_acl_is_blocked_ip (local_ip)) {
-        LOG_W ("%p router: TCP connection blocked to IP: %s:%d (from %s:%d) by ACL",
+    if (hev_filter_is_blocked_ip (local_ip)) {
+        LOG_W ("%p router: TCP connection blocked to IP: %s:%d (from %s:%d) by ACL. Deferring termination.",
                pcb, dst_ip, pcb->local_port, src_ip, pcb->remote_port);
-        tcp_abort (pcb); // Abort the connection
-        return 1; // Handled (blocked)
+        int stack_size = hev_config_get_misc_task_stack_size();
+        hev_task_run (hev_task_new (stack_size), terminate_pcb_task, pcb); // Create a new task to terminate the PCB
+        return 1;
     }
 
     /* 1. Domestic IPs are connected directly. */
-    if (is_domestic (local_ip)) {
+    if (hev_filter_is_domestic (local_ip)) {
         LOG_I ("%p router: TCP routing %s:%d -> %s:%d via DIRECT (domestic IP)",
                pcb, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
         hev_session_manager_start_direct_tcp (pcb);
@@ -378,7 +225,7 @@ hev_traffic_router_handle_udp (struct udp_pcb *pcb, struct pbuf *p,
            pcb, src_ip, pcb->remote_port, dst_ip, port, p ? p->tot_len : 0);
     
     // --- IP-based ACL check ---
-    if (hev_acl_is_blocked_ip (addr)) {
+    if (hev_filter_is_blocked_ip (addr)) {
         LOG_W ("%p router: UDP packet blocked to IP: %s:%d (from %s:%d) by ACL",
                pcb, dst_ip, port, src_ip, pcb->remote_port);
         pbuf_free(p);
@@ -462,7 +309,7 @@ hev_traffic_router_handle_udp (struct udp_pcb *pcb, struct pbuf *p,
     }
     
     /* 国内IP直连检查（第二优先级） */
-    if (is_domestic (addr)) {
+    if (hev_filter_is_domestic (addr)) {
         LOG_I ("%p router: UDP routing %s:%d -> %s:%d via DIRECT (domestic IP, packet_size=%d)",
                pcb, src_ip, pcb->remote_port, dst_ip, port, p ? p->tot_len : 0);
         pbuf_ref(p);

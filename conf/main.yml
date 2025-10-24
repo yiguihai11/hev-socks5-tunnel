@@ -17,22 +17,35 @@ tunnel:
 # pre-down-script: down.sh
 
 socks5:
-  # Socks5 server port
-  port: 1080
-  # Socks5 server address (ipv4/ipv6)
-  address: 64.69.34.166
-  # Socks5 UDP relay mode (tcp|udp)
-  udp: 'tcp'
-  # Override the UDP address provided by the Socks5 server (ipv4/ipv6)
-# udp-address: ''
-  # Socks5 handshake using pipeline mode
-# pipeline: false
-  # Socks5 server username
-  username: 'yiguihai'
-  # Socks5 server password
-  password: 'ygh15177542493'
-  # Socket mark
-# mark: 0
+  # SOCKS5 server for TCP connections
+  tcp:
+    # Socks5 server port
+    port: 1080
+    # Socks5 server address (ipv4/ipv6)
+    address: 127.0.0.1
+    # Socks5 handshake using pipeline mode
+    pipeline: false
+    # Socks5 server username
+    username: 'admin'
+    # Socks5 server password
+    password: 'admin'
+    # Socket mark
+    mark: 123
+  
+  # SOCKS5 server for UDP connections
+  udp:
+    # Socks5 server port
+    port: 1081
+    # Socks5 server address (ipv4/ipv6)
+    address: 64.69.34.166
+    # Socks5 UDP relay mode (tcp|udp)
+    udp-relay: 'tcp'
+    # Socks5 server username
+    username: 'yiguihai'
+    # Socks5 server password
+    password: 'ygh15177542493'
+    # Socket mark
+    mark: 456
 
 dns-forwarder:
   # Hijack DNS queries sent to this IPv4 address inside the tunnel.
