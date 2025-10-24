@@ -65,7 +65,7 @@ hev_socks5_tunnel_main_inner (int tun_fd)
     if (res < 0)
         return -4;
 
-    hev_session_manager_init (); // Call session manager init
+    hev_session_manager_init ();
 
     nofile = hev_config_get_misc_limit_nofile ();
     res = set_limit_nofile (nofile);
@@ -87,17 +87,37 @@ hev_socks5_tunnel_main_inner (int tun_fd)
         return -5;
 
     hev_socks5_tunnel_run ();
-
+    
+    // ✅ 清理顺序:与初始化完全相反
+    LOG_D ("main: Starting cleanup sequence");
+    
+    // 1. 先关闭隧道 (最后初始化的)
     hev_socks5_tunnel_fini ();
+    
+    // 2. 清理 lwIP 相关资源 (在 tunnel_fini 之后,因为 tunnel 依赖 lwIP)
+    // lwIP 没有显式的 fini 函数,资源在 tunnel_fini 中处理
+    
+    // 3. 清理任务系统
+    hev_task_system_fini ();
+    
+    // 4. 清理会话管理器
+    hev_session_manager_fini ();
+    
+    // 5. 清理流量路由器 (依赖 filter)
     hev_traffic_router_fini ();
-    hev_session_manager_fini (); // Call session manager fini
-
+    
+    // 6. 清理过滤器 (最早加载数据的组件)
     hev_filter_fini ();
+    
+    // 7. 清理日志系统
     hev_socks5_logger_fini ();
     hev_logger_fini ();
+    
+    // 8. 清理配置 (最先初始化的)
     hev_config_fini ();
-    hev_task_system_fini ();
-
+    
+    LOG_D ("main: Cleanup sequence completed");
+    
     return 0;
 }
 

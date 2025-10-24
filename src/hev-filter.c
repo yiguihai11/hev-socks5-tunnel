@@ -45,11 +45,22 @@ radix_node_create (void)
 static void
 radix_tree_free (RadixNode *node)
 {
+    RadixNode *left;
+    RadixNode *right;
+    
     if (!node)
         return;
-    radix_tree_free (node->left);
-    radix_tree_free (node->right);
+    
+    // ✅ 先保存子节点指针,避免访问已释放的内存
+    left = node->left;
+    right = node->right;
+    
+    // ✅ 先释放当前节点
     hev_free (node);
+    
+    // ✅ 再递归释放子节点
+    radix_tree_free (left);
+    radix_tree_free (right);
 }
 
 /* ============================================================================
@@ -233,14 +244,28 @@ hostname_table_lookup (const char *hostname)
 static void
 hostname_table_free (void)
 {
+    int freed_count = 0;
+    
     for (int i = 0; i < HOSTNAME_HASH_SIZE; i++) {
         HostnameEntry *entry = hostname_table[i];
+        
+        // ✅ 更安全的清理方式
         while (entry) {
             HostnameEntry *next = entry->next;
+            
+            // ✅ 清零数据,方便调试
+            memset(entry, 0, sizeof(HostnameEntry));
+            
             hev_free (entry);
+            freed_count++;
             entry = next;
         }
+        
         hostname_table[i] = NULL;
+    }
+    
+    if (freed_count > 0) {
+        LOG_D ("filter: Freed %d hostname entries", freed_count);
     }
 }
 
@@ -604,26 +629,47 @@ hev_filter_init (void)
 void
 hev_filter_fini (void)
 {
-    radix_tree_free (acl_ipv4_tree);
-    radix_tree_free (acl_ipv6_tree);
-    acl_ipv4_tree = NULL;
-    acl_ipv6_tree = NULL;
+    LOG_D ("filter: Cleaning up resources");  // 这行日志会验证函数是否被调用
     
-    hostname_table_free ();
-    
-    if (chnroutes_ipv4) {
-        hev_free (chnroutes_ipv4);
-        chnroutes_ipv4 = NULL;
-        chnroutes_ipv4_count = 0;
-    }
-    
+    // ✅ 释放顺序：和分配顺序完全相反（最后分配的先释放）
+    // 1. 释放 chnroutes（最后分配：load_chnroutes）
     if (chnroutes_ipv6) {
+        LOG_D ("filter: Freeing chnroutes IPv6 (%u entries)", chnroutes_ipv6_count);
         hev_free (chnroutes_ipv6);
         chnroutes_ipv6 = NULL;
         chnroutes_ipv6_count = 0;
     }
     
-    LOG_I ("filter: Finalized");
+    if (chnroutes_ipv4) {
+        LOG_D ("filter: Freeing chnroutes IPv4 (%u entries)", chnroutes_ipv4_count);
+        hev_free (chnroutes_ipv4);
+        chnroutes_ipv4 = NULL;
+        chnroutes_ipv4_count = 0;
+    }
+    
+    // 2. 释放 acl 树（中间分配：load_acl）
+    if (acl_ipv6_tree) {
+        LOG_D ("filter: Freeing ACL IPv6 tree");
+        RadixNode *tree = acl_ipv6_tree;
+        acl_ipv6_tree = NULL;  // 先置空，防重复释放
+        radix_tree_free (tree);
+    }
+    
+    if (acl_ipv4_tree) {
+        LOG_D ("filter: Freeing ACL IPv4 tree");
+        RadixNode *tree = acl_ipv4_tree;
+        acl_ipv4_tree = NULL;  // 先置空，防重复释放
+        radix_tree_free (tree);
+    }
+    
+    // 3. 释放 hostname_table（最先分配：hev_filter_init）
+    LOG_D ("filter: Freeing hostname table");
+    hostname_table_free ();
+    
+    // 4. 清零统计信息
+    memset(&stats, 0, sizeof(stats));
+    
+    LOG_I ("filter: Finalized successfully");  // 验证函数执行完成
 }
 
 int
