@@ -73,7 +73,7 @@ radix_tree_free (RadixNode *node)
    ============================================================================ */
 
 
-#define HOSTNAME_HASH_SIZE 4096
+#define HOSTNAME_HASH_SIZE 65536
 
 typedef struct _HostnameEntry {
     char hostname[MAX_HOST_LENGTH + 1];
@@ -109,31 +109,35 @@ static HevFilterStats stats;
    Blacklist Hash Table (O(1) average case lookup)
    ============================================================================ */
 
-#define BLACKLIST_HASH_SIZE 4096
+#define BLACKLIST_HASH_SIZE 65536
 
 static HevBlacklistedIP *blacklist_table[BLACKLIST_HASH_SIZE];
 static size_t blacklist_count = 0;
 static HevTaskMutex blacklist_mutex;
 
+/* High-performance hash function optimized for 65536 buckets */
 static unsigned int
 blacklist_hash_func (const ip_addr_t *addr)
 {
     unsigned int hash = 0;
 
     if (IP_IS_V4 (addr)) {
+        /* Optimized for IPv4 - use full 32-bit address */
         uint32_t ip = ip4_addr_get_u32 (ip_2_ip4 (addr));
-        hash ^= (ip >> 24) & 0xFF;
-        hash ^= (ip >> 16) & 0xFF;
-        hash ^= (ip >> 8) & 0xFF;
-        hash ^= ip & 0xFF;
+        /* Mix bits for better distribution in larger table */
+        hash = (ip ^ (ip >> 16)) * 0x85ebca6b;
+        hash ^= (hash >> 13);
+        hash = hash * 0xc2b2ae35;
     } else if (IP_IS_V6 (addr)) {
+        /* Optimized for IPv6 - use all 128 bits efficiently */
         const u32_t *ip = ip_2_ip6 (addr)->addr;
         for (int i = 0; i < 4; i++) {
-            hash ^= ip[i];
+            hash ^= ip[i] * 0x9e3779b9;
+            hash = (hash << 13) | (hash >> 19);
         }
     }
 
-    return hash % BLACKLIST_HASH_SIZE;
+    return hash & (BLACKLIST_HASH_SIZE - 1); /* Faster than modulo for power of 2 */
 }
 
 static void
@@ -234,16 +238,27 @@ radix_tree_lookup_ipv6 (const uint8_t *ip)
    Hash Table Operations
    ============================================================================ */
 
+/* High-performance hostname hash function optimized for 65536 buckets */
 static uint32_t
 hostname_hash (const char *hostname)
 {
     uint32_t hash = 5381;
     int c;
-    
-    while ((c = tolower ((unsigned char)*hostname++)))
+
+    /* DJB2 hash algorithm with better mixing for large tables */
+    while ((c = tolower ((unsigned char)*hostname++))) {
         hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
-    
-    return hash % HOSTNAME_HASH_SIZE;
+        /* Additional mixing for better distribution in larger table */
+        hash ^= (hash >> 11);
+    }
+
+    /* Final mixing round */
+    hash ^= (hash >> 16);
+    hash *= 0x85ebca6b;
+    hash ^= (hash >> 13);
+    hash *= 0xc2b2ae35;
+
+    return hash & (HOSTNAME_HASH_SIZE - 1); /* Faster than modulo for power of 2 */
 }
 
 static void
