@@ -58,8 +58,8 @@ cd hev-socks5-tunnel
 # 编译项目
 make
 
-# 创建配置文件
-cp conf/main.yml.example conf/main.yml
+# 配置文件已存在，可直接编辑
+# conf/main.yml
 ```
 
 ### 基础配置
@@ -75,9 +75,11 @@ socks5:
     username: your-username
     password: your-password
   udp:
-    udp-relay: tcp                # UDP通过TCP转发(推荐)
-    # 注意：在tcp模式下，UDP块的address、port等配置被忽略
-    # 实际使用TCP块中的连接配置
+    address: your-proxy-server.com  # UDP服务器地址(独立配置)
+    port: 1080                     # UDP服务器端口
+    username: your-username         # UDP认证信息
+    password: your-password         # UDP认证信息
+    udp-relay: tcp                 # UDP转发模式: tcp(推荐) 或 udp
 
 # 智能代理配置
 smart-proxy:
@@ -99,15 +101,21 @@ chnroutes:
 # 启动隧道（需要管理员权限）
 sudo ./bin/hev-socks5-tunnel conf/main.yml
 
-# 后台运行
+# 后台运行方式1：使用nohup
 sudo nohup ./bin/hev-socks5-tunnel conf/main.yml > /dev/null 2>&1 &
+
+# 后台运行方式2：使用配置文件中的pid-file选项
+# 在conf/main.yml的misc部分添加：
+# pid-file: /run/hev-socks5-tunnel.pid
+# 然后运行：
+sudo ./bin/hev-socks5-tunnel conf/main.yml
 ```
 
 ## 📖 详细配置
 
 ### UDP转发模式详解
 
-HevSocks5Tunnel支持两种UDP转发模式，各有优势：
+HevSocks5Tunnel支持两种UDP转发模式，**UDP配置始终独立**：
 
 #### 🚀 UDP-in-TCP模式（推荐）
 ```yaml
@@ -118,26 +126,27 @@ socks5:
     username: your-username
     password: your-password
   udp:
-    udp-relay: 'tcp'    # 关键：使用TCP转发模式
-    # 注意：UDP块中的address、port、username、password等配置在tcp模式下被忽略！
-    # UDP连接将使用上面TCP块中的配置。
+    address: proxy-server.com      # UDP服务器地址(独立配置)
+    port: 1080                     # UDP服务器端口
+    username: your-username        # UDP认证信息
+    password: your-password        # UDP认证信息
+    udp-relay: 'tcp'               # 使用TCP转发模式
 ```
 
-**重要配置说明：**
-- ⚠️ **配置忽略**：UDP块中的`address`、`port`、`username`、`password`在TCP模式下**完全无效**
-- 🔗 **实际连接**：UDP数据通过TCP块中定义的`address:port`进行连接
-- 📋 **简化配置**：只需要正确配置TCP块，UDP块只需设置`udp-relay: 'tcp'`
+**配置说明：**
+- ✅ **独立配置**：UDP块中的`address`、`port`、`username`、`password`**必须正确配置**
+- 🔗 **独立连接**：UDP数据使用UDP块中定义的`address:port`进行连接
+- 📋 **完整配置**：TCP和UDP块都需要完整配置相关信息
 
 **优势：**
 - ✅ **稳定可靠**：TCP连接保证数据完整性
 - ✅ **NAT穿透**：能轻松穿越各种NAT和防火墙
-- ✅ **简化配置**：只需要开放一个TCP端口
 - ✅ **兼容性好**：适用于所有网络环境
 
 **工作原理：**
-UDP数据包被封装在TCP连接中发送到SOCKS5服务器，服务器负责解封装并转发到最终目标。
+UDP数据包被封装在TCP连接中发送到SOCKS5服务器的UDP地址，服务器负责解封装并转发到最终目标。
 
-#### ⚡ UDP-in-UDP模式（独立UDP）
+#### ⚡ UDP-in-UDP模式（直接UDP）
 ```yaml
 socks5:
   tcp:
@@ -146,17 +155,17 @@ socks5:
     username: your-username
     password: your-password
   udp:
-    address: proxy-server.com      # 必须配置：UDP服务器地址
-    port: 1081                     # 必须配置：UDP服务器端口
-    username: your-username        # 必须配置：UDP认证信息
-    password: your-password        # 必须配置：UDP认证信息
-    udp-relay: 'udp'               # 关键：使用独立UDP转发
+    address: proxy-server.com      # UDP服务器地址(独立配置)
+    port: 1080                     # UDP服务器端口
+    username: your-username        # UDP认证信息
+    password: your-password        # UDP认证信息
+    udp-relay: 'udp'               # 使用直接UDP转发
 ```
 
-**配置要求：**
-- ✅ **必需配置**：UDP块中的`address`、`port`、`username`、`password`都必须正确配置
-- 🎯 **独立连接**：使用与TCP不同的服务器和端口进行UDP通信
-- 📡 **服务器要求**：SOCKS5服务器必须在指定端口监听UDP连接
+**配置说明：**
+- ✅ **独立配置**：UDP块中的配置项必须正确设置
+- 🎯 **直接转发**：UDP数据直接转发，无TCP封装
+- 📡 **服务器要求**：SOCKS5服务器必须在指定地址监听UDP连接
 
 **优势：**
 - ⚡ **低延迟**：直接UDP转发，延迟更低
@@ -197,6 +206,7 @@ misc:
   max-session-count: 0         # 最大会话数 (0=无限制)
   connect-timeout: 10000       # 连接超时 (毫秒)
   read-write-timeout: 300000   # 读写超时 (毫秒)
+  pid-file: /run/hev-socks5-tunnel.pid  # PID文件路径(启用守护进程模式)
 ```
 
 ## 🔍 ACL 过滤规则
@@ -291,8 +301,10 @@ make CROSS=arm-linux-gnueabihf-
 ### 调试模式
 
 ```bash
-# 启用详细日志
-./bin/hev-socks5-tunnel conf/main.yml --log-level debug
+# 启用详细日志（通过配置文件设置log-level: debug）
+./bin/hev-socks5-tunnel conf/main.yml
+
+# 或临时修改配置文件中的log-level为debug
 ```
 
 ## 🤝 贡献指南
