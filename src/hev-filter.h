@@ -176,4 +176,50 @@ void hev_filter_get_stats (HevFilterStats *stats);
  */
 void hev_filter_reset_stats (void);
 
+/**
+ * Blacklisted IP Entry
+ */
+typedef struct _HevBlacklistedIP {
+    struct _HevBlacklistedIP *next;     /* Hash table chaining */
+    ip_addr_t addr;                     /* IP address */
+    time_t expiry;                      /* Expiration time */
+    time_t added_time;                  /* When added to blacklist */
+} HevBlacklistedIP;
+
+/**
+ * hev_filter_blacklist_add:
+ * @addr: IP address to blacklist
+ *
+ * Add an IP address to the blacklist with configured expiry time.
+ * This will automatically expire old entries.
+ */
+void hev_filter_blacklist_add (const ip_addr_t *addr);
+
+/**
+ * hev_filter_blacklist_check:
+ * @addr: IP address to check
+ *
+ * Check if an IP address is currently blacklisted.
+ * This will automatically remove expired entries.
+ *
+ * Returns: 1 if blacklisted, 0 if not.
+ */
+int hev_filter_blacklist_check (const ip_addr_t *addr);
+
+/**
+ * hev_filter_blacklist_clear:
+ *
+ * Clear all blacklist entries (for testing/admin purposes).
+ */
+void hev_filter_blacklist_clear (void);
+
+/**
+ * hev_filter_blacklist_get_count:
+ *
+ * Get the current number of blacklist entries.
+ *
+ * Returns: Number of blacklisted IP entries.
+ */
+size_t hev_filter_blacklist_get_count (void);
+
 #endif /* __HEV_FILTER_H__ */

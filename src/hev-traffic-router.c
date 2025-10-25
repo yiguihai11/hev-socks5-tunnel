@@ -23,15 +23,7 @@
 #include "hev-traffic-router.h"
 #include "hev-filter.h"
 
-typedef struct _HevBlacklistedIP {
-    HevListNode node;
-    ip_addr_t addr;
-    time_t expiry;
-    time_t added_time;  /* 新增：记录加入黑名单的时间 */
-} HevBlacklistedIP;
-
-static HevList blacklist;
-static HevTaskMutex blacklist_mutex;
+/* Blacklist functionality moved to hev-filter.c for unified management */
 
 
 static void
@@ -49,115 +41,32 @@ terminate_pcb_task (void *data)
 
 void
 hev_traffic_router_blacklist_add (const ip_addr_t *addr) {
-    HevBlacklistedIP *bip;
-    int expiry_minutes;
-    char ip_str[INET6_ADDRSTRLEN];
-    
-    expiry_minutes = hev_config_get_smart_proxy_blocked_ip_expiry_minutes ();
-    if (expiry_minutes <= 0)
-        return;
-    
-    bip = hev_malloc (sizeof (HevBlacklistedIP));
-    if (!bip) {
-        LOG_E ("router: Failed to allocate blacklist entry");
-        return;
-    }
-    
-    ip_addr_copy (bip->addr, *addr);
-    bip->added_time = time (NULL);
-    bip->expiry = bip->added_time + expiry_minutes * 60;
-    
-    ipaddr_ntoa_r (addr, ip_str, sizeof (ip_str));
-    
-    hev_task_mutex_lock (&blacklist_mutex);
-    hev_list_add_tail (&blacklist, &bip->node);
-    hev_task_mutex_unlock (&blacklist_mutex);
-    
-    LOG_I ("router: Added %s to blacklist (expires in %d minutes)",
-           ip_str, expiry_minutes);
+    LOG_D ("router: Delegating blacklist_add to filter module");
+    hev_filter_blacklist_add (addr);
 }
 
 int
 hev_traffic_router_blacklist_check (const ip_addr_t *addr) {
-    HevListNode *node, *next;
-    time_t now = time (NULL);
-    int found = 0;
-    int expired_count = 0;
-    char ip_str[INET6_ADDRSTRLEN];
-    
-    hev_task_mutex_lock (&blacklist_mutex);
-    
-    for (node = hev_list_first (&blacklist); node; node = next) {
-        HevBlacklistedIP *bip = container_of (node, HevBlacklistedIP, node);
-        next = hev_list_node_next (node);
-        
-        if (now > bip->expiry) {
-            char expired_ip[INET6_ADDRSTRLEN];
-            ipaddr_ntoa_r (&bip->addr, expired_ip, sizeof (expired_ip));
-            
-            time_t blacklisted_duration = now - bip->added_time;
-            LOG_D ("router: Removing expired blacklist entry %s (was blacklisted for %ld seconds)",
-                   expired_ip, blacklisted_duration);
-            
-            hev_list_del (&blacklist, node);
-            hev_free (bip);
-            expired_count++;
-            continue;
-        }
-        
-        if (ip_addr_cmp (&bip->addr, addr)) {
-            found = 1;
-            ipaddr_ntoa_r (addr, ip_str, sizeof (ip_str));
-            time_t time_remaining = bip->expiry - now;
-            LOG_D ("router: IP %s found in blacklist (expires in %ld seconds)",
-                   ip_str, time_remaining);
-        }
-    }
-    
-    hev_task_mutex_unlock (&blacklist_mutex);
-    
-    if (expired_count > 0) {
-        LOG_D ("router: Cleaned up %d expired blacklist entries", expired_count);
-    }
-    
-    return found;
+    LOG_D ("router: Delegating blacklist_check to filter module");
+    return hev_filter_blacklist_check (addr);
 }
 
 int
 hev_traffic_router_init (void) {
     LOG_D ("router: Initializing traffic router");
-    
-    hev_task_mutex_init (&blacklist_mutex);
-    
+
+    /* Blacklist functionality now handled by filter module */
+
     LOG_I ("router: Traffic router initialized successfully");
     return 0;
 }
 
 void
 hev_traffic_router_fini (void) {
-    HevListNode *node;
-    int blacklist_count = 0;
-    
     LOG_D ("router: Finalizing traffic router");
-    
-    hev_task_mutex_lock (&blacklist_mutex);
-    for (node = hev_list_first (&blacklist); node; node = hev_list_first (&blacklist)) {
-        HevBlacklistedIP *bip = container_of (node, HevBlacklistedIP, node);
-        char ip_str[INET6_ADDRSTRLEN];
-        ipaddr_ntoa_r (&bip->addr, ip_str, sizeof (ip_str));
-        
-        LOG_D ("router: Removing blacklist entry %s", ip_str);
-        
-        hev_list_del (&blacklist, node);
-        hev_free (bip);
-        blacklist_count++;
-    }
-    hev_task_mutex_unlock (&blacklist_mutex);
-    
-    if (blacklist_count > 0) {
-        LOG_I ("router: Cleaned up %d blacklist entries", blacklist_count);
-    }
-    
+
+    /* Blacklist functionality now handled by filter module */
+
     LOG_I ("router: Traffic router finalized");
 }
 

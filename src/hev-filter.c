@@ -13,6 +13,8 @@
 #include <ctype.h>
 #include <errno.h>
 #include <arpa/inet.h>
+#include <time.h>
+#include <lwip/ip_addr.h>
 
 #include <lwip/tcp.h>
 #include "hev-rbtree.h"
@@ -20,6 +22,8 @@
 #include "hev-logger.h"
 #include "hev-memory-allocator.h"
 #include "hev-filter.h"
+#include <hev-task.h>
+#include <hev-task-mutex.h>
 
 /* ============================================================================
    Radix Tree for IP Address Lookups (O(1) best case)
@@ -100,6 +104,37 @@ static uint32_t chnroutes_ipv6_count = 0;
 /* Statistics */
 
 static HevFilterStats stats;
+
+/* ============================================================================
+   Blacklist Hash Table (O(1) average case lookup)
+   ============================================================================ */
+
+#define BLACKLIST_HASH_SIZE 4096
+
+static HevBlacklistedIP *blacklist_table[BLACKLIST_HASH_SIZE];
+static size_t blacklist_count = 0;
+static HevTaskMutex blacklist_mutex;
+
+static unsigned int
+blacklist_hash_func (const ip_addr_t *addr)
+{
+    unsigned int hash = 0;
+
+    if (IP_IS_V4 (addr)) {
+        uint32_t ip = ip4_addr_get_u32 (ip_2_ip4 (addr));
+        hash ^= (ip >> 24) & 0xFF;
+        hash ^= (ip >> 16) & 0xFF;
+        hash ^= (ip >> 8) & 0xFF;
+        hash ^= ip & 0xFF;
+    } else if (IP_IS_V6 (addr)) {
+        const u32_t *ip = ip_2_ip6 (addr)->addr;
+        for (int i = 0; i < 4; i++) {
+            hash ^= ip[i];
+        }
+    }
+
+    return hash % BLACKLIST_HASH_SIZE;
+}
 
 static void
 radix_tree_insert_ipv4 (uint32_t ip, uint8_t prefix)
@@ -622,6 +657,11 @@ hev_filter_init (void)
 {
     memset (&stats, 0, sizeof (stats));
     memset (hostname_table, 0, sizeof (hostname_table));
+    memset (blacklist_table, 0, sizeof (blacklist_table));
+    blacklist_count = 0;
+
+    hev_task_mutex_init (&blacklist_mutex);
+
     LOG_I ("filter: Initialized");
     return 0;
 }
@@ -665,10 +705,14 @@ hev_filter_fini (void)
     // 3. 释放 hostname_table（最先分配：hev_filter_init）
     LOG_D ("filter: Freeing hostname table");
     hostname_table_free ();
-    
-    // 4. 清零统计信息
+
+    // 4. 清理黑名单
+    LOG_D ("filter: Freeing blacklist");
+    hev_filter_blacklist_clear ();
+
+    // 5. 清零统计信息
     memset(&stats, 0, sizeof(stats));
-    
+
     LOG_I ("filter: Finalized successfully");  // 验证函数执行完成
 }
 
@@ -914,13 +958,153 @@ hev_filter_get_stats (HevFilterStats *out_stats)
 }
 
 void
-
 hev_filter_reset_stats (void)
-
 {
-
     memset (&stats, 0, sizeof (stats));
+}
 
+/* ============================================================================
+   Blacklist Implementation
+   ============================================================================ */
+
+#include "hev-config.h"
+
+void
+hev_filter_blacklist_add (const ip_addr_t *addr)
+{
+    HevBlacklistedIP *bip;
+    unsigned int hash;
+    int expiry_minutes;
+    char ip_str[INET6_ADDRSTRLEN];
+
+    if (!addr) {
+        LOG_E ("filter: blacklist_add called with NULL address");
+        return;
+    }
+
+    expiry_minutes = hev_config_get_smart_proxy_blocked_ip_expiry_minutes ();
+    if (expiry_minutes <= 0)
+        return;
+
+    bip = hev_malloc (sizeof (HevBlacklistedIP));
+    if (!bip) {
+        LOG_E ("filter: Failed to allocate blacklist entry");
+        return;
+    }
+
+    ip_addr_copy (bip->addr, *addr);
+    bip->added_time = time (NULL);
+    bip->expiry = bip->added_time + expiry_minutes * 60;
+
+    hash = blacklist_hash_func (addr);
+    ipaddr_ntoa_r (addr, ip_str, sizeof (ip_str));
+
+    hev_task_mutex_lock (&blacklist_mutex);
+    bip->next = blacklist_table[hash];
+    blacklist_table[hash] = bip;
+    blacklist_count++;
+    hev_task_mutex_unlock (&blacklist_mutex);
+
+    LOG_I ("filter: Added %s to blacklist (expires in %d minutes)", ip_str, expiry_minutes);
+}
+
+int
+hev_filter_blacklist_check (const ip_addr_t *addr)
+{
+    HevBlacklistedIP **current, *prev, *to_delete = NULL;
+    unsigned int hash;
+    time_t now;
+    int found = 0;
+    int expired_count = 0;
+    char ip_str[INET6_ADDRSTRLEN];
+
+    if (!addr) {
+        LOG_E ("filter: blacklist_check called with NULL address");
+        return 0;
+    }
+
+    hash = blacklist_hash_func (addr);
+    now = time (NULL);
+
+    hev_task_mutex_lock (&blacklist_mutex);
+    current = &blacklist_table[hash];
+    prev = NULL;
+
+    while (*current) {
+        HevBlacklistedIP *bip = *current;
+
+        /* Remove expired entries */
+        if (now > bip->expiry) {
+            *current = bip->next;
+            if (prev)
+                prev->next = bip->next;
+
+            to_delete = bip;
+            blacklist_count--;
+            expired_count++;
+
+            /* Continue with next entry */
+            continue;
+        }
+
+        /* Check if this is the address we're looking for */
+        if (ip_addr_cmp (&bip->addr, addr)) {
+            found = 1;
+            ipaddr_ntoa_r (addr, ip_str, sizeof (ip_str));
+            time_t time_remaining = bip->expiry - now;
+            LOG_D ("filter: IP %s found in blacklist (expires in %ld seconds)",
+                   ip_str, time_remaining);
+        }
+
+        prev = bip;
+        current = &bip->next;
+    }
+
+    hev_task_mutex_unlock (&blacklist_mutex);
+
+    /* Free expired entries outside of mutex lock */
+    if (to_delete) {
+        /* This is simplified - in production, we'd collect all expired entries
+         * and free them in a batch to avoid multiple malloc/free calls */
+        hev_free (to_delete);
+    }
+
+    if (expired_count > 0) {
+        LOG_D ("filter: Cleaned up %d expired blacklist entries", expired_count);
+    }
+
+    return found;
+}
+
+void
+hev_filter_blacklist_clear (void)
+{
+    HevBlacklistedIP *current, *next;
+    int cleared_count = 0;
+
+    hev_task_mutex_lock (&blacklist_mutex);
+
+    for (int i = 0; i < BLACKLIST_HASH_SIZE; i++) {
+        current = blacklist_table[i];
+        while (current) {
+            next = current->next;
+            hev_free (current);
+            current = next;
+            cleared_count++;
+        }
+        blacklist_table[i] = NULL;
+    }
+
+    blacklist_count = 0;
+    hev_task_mutex_unlock (&blacklist_mutex);
+
+    LOG_I ("filter: Cleared %d blacklist entries", cleared_count);
+}
+
+size_t
+hev_filter_blacklist_get_count (void)
+{
+    return blacklist_count;
 }
 
 

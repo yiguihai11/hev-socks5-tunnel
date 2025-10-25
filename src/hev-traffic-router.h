@@ -54,8 +54,24 @@ int hev_traffic_router_handle_udp (struct udp_pcb *pcb, struct pbuf *p,
  */
 int hev_traffic_router_handle_tcp (struct tcp_pcb *pcb);
 
+/**
+ * hev_traffic_router_blacklist_add:
+ * @addr: IP address to blacklist
+ *
+ * Add an IP address to the blacklist (delegated to filter module).
+ * NOTE: This function is deprecated - use hev_filter_blacklist_add instead.
+ */
 void hev_traffic_router_blacklist_add (const ip_addr_t *addr);
-int hev_traffic_router_blacklist_check (const ip_addr_t *addr);
 
+/**
+ * hev_traffic_router_blacklist_check:
+ * @addr: IP address to check
+ *
+ * Check if an IP address is blacklisted (delegated to filter module).
+ * NOTE: This function is deprecated - use hev_filter_blacklist_check instead.
+ *
+ * Returns: 1 if blacklisted, 0 if not.
+ */
+int hev_traffic_router_blacklist_check (const ip_addr_t *addr);
 
 #endif /* __HEV_TRAFFIC_ROUTER_H__ */
