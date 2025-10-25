@@ -46,12 +46,17 @@ hev_socks5_tunnel_main_inner (int tun_fd)
         return -2;
 
     res = hev_socks5_logger_init (log_level, log_file);
-    if (res < 0)
+    if (res < 0) {
+        hev_logger_fini ();
         return -3;
+    }
 
     res = hev_filter_init ();
-    if (res < 0)
+    if (res < 0) {
+        hev_socks5_logger_fini ();
+        hev_logger_fini ();
         return -4;
+    }
 
     const char *acl_path = hev_config_get_acl_file_path ();
     if (acl_path)
@@ -62,8 +67,12 @@ hev_socks5_tunnel_main_inner (int tun_fd)
         hev_filter_load_chnroutes (chnroutes_path);
 
     res = hev_traffic_router_init ();
-    if (res < 0)
+    if (res < 0) {
+        hev_filter_fini ();
+        hev_socks5_logger_fini ();
+        hev_logger_fini ();
         return -4;
+    }
 
     hev_session_manager_init ();
 
@@ -77,14 +86,27 @@ hev_socks5_tunnel_main_inner (int tun_fd)
         run_as_daemon (pid_file);
 
     res = hev_task_system_init ();
-    if (res < 0)
+    if (res < 0) {
+        hev_session_manager_fini ();
+        hev_traffic_router_fini ();
+        hev_filter_fini ();
+        hev_socks5_logger_fini ();
+        hev_logger_fini ();
         return -4;
+    }
 
     lwip_init ();
 
     res = hev_socks5_tunnel_init (tun_fd);
-    if (res < 0)
+    if (res < 0) {
+        hev_task_system_fini ();
+        hev_session_manager_fini ();
+        hev_traffic_router_fini ();
+        hev_filter_fini ();
+        hev_socks5_logger_fini ();
+        hev_logger_fini ();
         return -5;
+    }
 
     hev_socks5_tunnel_run ();
     
@@ -113,9 +135,9 @@ hev_socks5_tunnel_main_inner (int tun_fd)
     hev_socks5_logger_fini ();
     hev_logger_fini ();
     
-    // 8. 清理配置 (最先初始化的)
-    hev_config_fini ();
-    
+    // 8. 配置清理由调用者负责（在 main_from_file/main_from_str 中）
+    // 注意：hev_config_fini() 不在这里调用，因为配置可能来自不同源
+
     LOG_D ("main: Cleanup sequence completed");
     
     return 0;
@@ -128,7 +150,12 @@ hev_socks5_tunnel_main_from_file (const char *config_path, int tun_fd)
     if (res < 0)
         return -1;
 
-    return hev_socks5_tunnel_main_inner (tun_fd);
+    res = hev_socks5_tunnel_main_inner (tun_fd);
+
+    /* 清理配置资源 */
+    hev_config_fini ();
+
+    return res;
 }
 
 int
@@ -139,7 +166,12 @@ hev_socks5_tunnel_main_from_str (const unsigned char *config_str,
     if (res < 0)
         return -1;
 
-    return hev_socks5_tunnel_main_inner (tun_fd);
+    res = hev_socks5_tunnel_main_inner (tun_fd);
+
+    /* 清理配置资源 */
+    hev_config_fini ();
+
+    return res;
 }
 
 int
@@ -181,7 +213,6 @@ main (int argc, char *argv[])
     
     if (argc < 2 || strcmp (argv[1], "--test") == 0) {
         return hev_test_run ();
-        return -1;
     }
 
     signal (SIGINT, sigint_handler);
