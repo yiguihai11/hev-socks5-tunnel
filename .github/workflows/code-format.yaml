@@ -1,26 +1,38 @@
-name: "Check code formatting"
+name: "Check & Fix code formatting"
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
 
 jobs:
-  checker:
+  formatter:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
-      - name: Prepare
+          # 关键：允许后续 git push（需仓库设置 Actions 有写权限）
+          persist-credentials: true
+      
+      - name: Prepare (install clang-format)
+        run: sudo apt install -y clang-format
+      
+      - name: Auto-format code
+        run: find src -iname "*.[h,c]" -exec clang-format -i {} \;
+      
+      - name: Commit & push formatting fixes (if any)
         run: |
-          sudo apt install -y clang-format
-      - name: Format
-        run: |
-          find src -iname "*.[h,c]" -exec clang-format -i {} \;
-      - name: Check
-        run: |
-          git status
-          git diff --quiet
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          
+          # 仅当有变更时才提交
+          if git diff --quiet; then
+            echo "✅ No formatting changes needed."
+          else
+            git add .
+            git commit -m "chore: auto-fix code formatting via clang-format"
+            git push  # 推送修正到当前分支（仅 main 分支触发，PR 不建议）
+            echo "✅ Formatted changes pushed successfully."
+          fi
