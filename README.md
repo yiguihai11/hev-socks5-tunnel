@@ -76,8 +76,8 @@ socks5:
     password: your-password
   udp:
     address: your-proxy-server.com
-    port: 1081
-    udp-relay: tcp
+    port: 1080                    # 建议使用与TCP相同的端口
+    udp-relay: tcp                # UDP通过TCP转发(推荐)，更稳定能穿越NAT
 
 # 智能代理配置
 smart-proxy:
@@ -104,6 +104,44 @@ sudo nohup ./bin/hev-socks5-tunnel conf/main.yml > /dev/null 2>&1 &
 ```
 
 ## 📖 详细配置
+
+### UDP转发模式详解
+
+HevSocks5Tunnel支持两种UDP转发模式，各有优势：
+
+#### 🚀 UDP-in-TCP模式（推荐）
+```yaml
+socks5:
+  udp:
+    udp-relay: 'tcp'    # UDP通过TCP连接转发
+    port: 1080          # 使用与TCP相同的端口
+```
+
+**优势：**
+- ✅ **稳定可靠**：TCP连接保证数据完整性
+- ✅ **NAT穿透**：能轻松穿越各种NAT和防火墙
+- ✅ **简化配置**：只需要开放一个TCP端口
+- ✅ **兼容性好**：适用于所有网络环境
+
+**工作原理：**
+UDP数据包被封装在TCP连接中发送到SOCKS5服务器，服务器负责解封装并转发到最终目标。
+
+#### ⚡ UDP-in-UDP模式（高性能）
+```yaml
+socks5:
+  udp:
+    udp-relay: 'udp'    # UDP直接转发
+    port: 1081          # 需要单独的UDP端口
+```
+
+**优势：**
+- ⚡ **低延迟**：直接UDP转发，延迟更低
+- ⚡ **高性能**：无TCP封装开销
+
+**注意事项：**
+- 需要SOCKS5服务器在指定UDP端口监听
+- 可能受NAT/防火墙影响
+- 在复杂网络环境下可能不稳定
 
 ### 隧道接口配置
 
