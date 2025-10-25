@@ -248,8 +248,14 @@ static time_t get_current_time_seconds (void);
 static void
 safe_str_copy (char *dest, const char *src, size_t max_len)
 {
-    strncpy (dest, src, max_len - 1);
-    dest[max_len - 1] = '\0';
+    if (max_len == 0)
+        return;
+
+    size_t src_len = strlen (src);
+    size_t copy_len = (src_len < max_len - 1) ? src_len : max_len - 1;
+
+    memcpy (dest, src, copy_len);
+    dest[copy_len] = '\0';
 }
 
 /* Enhanced memory cleanup with debugging */
