@@ -25,6 +25,7 @@
 #include "hev-logger.h"
 #include "hev-compiler.h"
 #include "hev-config-const.h"
+#include "hev-memory-pool.h"
 #include "hev-socks5-tunnel.h"
 
 #include "hev-socks5-session-udp.h"
@@ -216,9 +217,20 @@ udp_recv_handler (void *arg, struct udp_pcb *pcb, struct pbuf *p,
     LOG_D ("%p socks5 session udp: received %d bytes from %s:%d",
            self, p->tot_len, src_ip, port);
 
-    if (self->frames > UDP_POOL_SIZE) {
-        LOG_W ("%p socks5 session udp: frame pool full (%d frames), dropping packet",
-               self, self->frames);
+    /* 使用动态UDP池大小，并在接近满载时尝试调整 */
+    int current_pool_size = hev_memory_pool_get_udp_size ();
+    if (self->frames >= current_pool_size) {
+        LOG_W ("%p socks5 session udp: frame pool full (%d/%d frames), dropping packet",
+               self, self->frames, current_pool_size);
+
+        /* 尝试动态调整池大小 */
+        int new_size = hev_memory_pool_adjust_udp_size (self->frames, current_pool_size);
+        if (new_size > current_pool_size) {
+            LOG_I ("%p socks5 session udp: pool expanded to %d, retrying", self, new_size);
+        } else {
+            LOG_D ("%p socks5 session udp: pool cannot expand further", self);
+        }
+
         pbuf_free (p);
         return;
     }

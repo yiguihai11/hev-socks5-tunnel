@@ -25,6 +25,7 @@
 #include "hev-traffic-router.h"
 #include "hev-session-manager.h"
 #include "hev-filter.h"
+#include "hev-memory-pool.h"
 #include "hev-test.h"
 
 #include "hev-main.h"
@@ -75,6 +76,9 @@ hev_socks5_tunnel_main_inner (int tun_fd)
     }
 
     hev_session_manager_init ();
+
+    /* 初始化动态内存池管理器 */
+    hev_memory_pool_init ();
 
     nofile = hev_config_get_misc_limit_nofile ();
     res = set_limit_nofile (nofile);
@@ -130,12 +134,15 @@ hev_socks5_tunnel_main_inner (int tun_fd)
     
     // 6. 清理过滤器 (最早加载数据的组件)
     hev_filter_fini ();
-    
-    // 7. 清理日志系统
+
+    // 7. 清理内存池管理器
+    hev_memory_pool_fini ();
+
+    // 8. 清理日志系统
     hev_socks5_logger_fini ();
     hev_logger_fini ();
     
-    // 8. 配置清理由调用者负责（在 main_from_file/main_from_str 中）
+    // 9. 配置清理由调用者负责（在 main_from_file/main_from_str 中）
     // 注意：hev_config_fini() 不在这里调用，因为配置可能来自不同源
 
     LOG_D ("main: Cleanup sequence completed");
