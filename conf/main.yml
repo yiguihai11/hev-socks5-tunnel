@@ -34,21 +34,33 @@ socks5:
   
   # SOCKS5 server for UDP connections
   udp:
-    # Socks5 server port (建议使用与TCP相同的端口1080)
-    # 当udp-relay为'tcp'时，UDP数据会通过TCP连接转发，实际不会监听此端口
-    # 当udp-relay为'udp'时，需要服务器在此端口上监听UDP连接
-    port: 1080
-    # Socks5 server address (ipv4/ipv6)
+    # ⚠️ 重要说明：当udp-relay为'tcp'时，以下address和port配置实际上被忽略！
+    # UDP连接将使用上面TCP块中定义的address:port进行连接。
+    # 只有当udp-relay为'udp'时，这里的address和port才会被真正使用。
+
+    # Socks5 server address (仅在udp-relay为'udp'时有效)
     address: 64.69.34.166
-    # Socks5 UDP relay mode:
-    #   'tcp' - UDP通过TCP连接转发(推荐): UDP数据封装在TCP中发送，更稳定，能穿越NAT
-    #   'udp' - UDP通过UDP转发: 直接UDP转发，需要服务器在指定端口监听UDP
+    # Socks5 server port (仅在udp-relay为'udp'时有效)
+    port: 1080
+
+    # Socks5 UDP relay mode (关键配置):
+    #   'tcp' - UDP-in-TCP模式(推荐):
+    #           • 实际使用TCP块中的服务器地址和端口(64.69.34.166:1080)
+    #           • UDP数据被封装在TCP连接中发送
+    #           • 本地UDP块中的address和port配置被忽略
+    #           • 稳定可靠，能穿越NAT和防火墙
+    #
+    #   'udp' - UDP-in-UDP模式:
+    #           • 使用本块中定义的address和port进行UDP连接
+    #           • 需要SOCKS5服务器在指定地址和端口上监听UDP
+    #           • 直接UDP转发，性能稍好但可能受NAT影响
     udp-relay: 'tcp'
-    # Socks5 server username
+
+    # 认证信息 (仅在udp-relay为'udp'时有效，tcp模式使用TCP块的认证)
     username: 'yiguihai'
-    # Socks5 server password
     password: 'ygh15177542493'
-    # Socket mark
+
+    # Socket mark (仅在udp-relay为'udp'时有效)
 #   mark: 456
 
 dns-forwarder:

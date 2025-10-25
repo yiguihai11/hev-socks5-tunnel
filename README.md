@@ -75,9 +75,9 @@ socks5:
     username: your-username
     password: your-password
   udp:
-    address: your-proxy-server.com
-    port: 1080                    # 建议使用与TCP相同的端口
-    udp-relay: tcp                # UDP通过TCP转发(推荐)，更稳定能穿越NAT
+    udp-relay: tcp                # UDP通过TCP转发(推荐)
+    # 注意：在tcp模式下，UDP块的address、port等配置被忽略
+    # 实际使用TCP块中的连接配置
 
 # 智能代理配置
 smart-proxy:
@@ -112,10 +112,21 @@ HevSocks5Tunnel支持两种UDP转发模式，各有优势：
 #### 🚀 UDP-in-TCP模式（推荐）
 ```yaml
 socks5:
+  tcp:
+    address: proxy-server.com
+    port: 1080
+    username: your-username
+    password: your-password
   udp:
-    udp-relay: 'tcp'    # UDP通过TCP连接转发
-    port: 1080          # 使用与TCP相同的端口
+    udp-relay: 'tcp'    # 关键：使用TCP转发模式
+    # 注意：UDP块中的address、port、username、password等配置在tcp模式下被忽略！
+    # UDP连接将使用上面TCP块中的配置。
 ```
+
+**重要配置说明：**
+- ⚠️ **配置忽略**：UDP块中的`address`、`port`、`username`、`password`在TCP模式下**完全无效**
+- 🔗 **实际连接**：UDP数据通过TCP块中定义的`address:port`进行连接
+- 📋 **简化配置**：只需要正确配置TCP块，UDP块只需设置`udp-relay: 'tcp'`
 
 **优势：**
 - ✅ **稳定可靠**：TCP连接保证数据完整性
@@ -126,17 +137,31 @@ socks5:
 **工作原理：**
 UDP数据包被封装在TCP连接中发送到SOCKS5服务器，服务器负责解封装并转发到最终目标。
 
-#### ⚡ UDP-in-UDP模式（高性能）
+#### ⚡ UDP-in-UDP模式（独立UDP）
 ```yaml
 socks5:
+  tcp:
+    address: proxy-server.com
+    port: 1080
+    username: your-username
+    password: your-password
   udp:
-    udp-relay: 'udp'    # UDP直接转发
-    port: 1081          # 需要单独的UDP端口
+    address: proxy-server.com      # 必须配置：UDP服务器地址
+    port: 1081                     # 必须配置：UDP服务器端口
+    username: your-username        # 必须配置：UDP认证信息
+    password: your-password        # 必须配置：UDP认证信息
+    udp-relay: 'udp'               # 关键：使用独立UDP转发
 ```
+
+**配置要求：**
+- ✅ **必需配置**：UDP块中的`address`、`port`、`username`、`password`都必须正确配置
+- 🎯 **独立连接**：使用与TCP不同的服务器和端口进行UDP通信
+- 📡 **服务器要求**：SOCKS5服务器必须在指定端口监听UDP连接
 
 **优势：**
 - ⚡ **低延迟**：直接UDP转发，延迟更低
 - ⚡ **高性能**：无TCP封装开销
+- 🔗 **独立控制**：可以为TCP和UDP使用不同的服务器
 
 **注意事项：**
 - 需要SOCKS5服务器在指定UDP端口监听
