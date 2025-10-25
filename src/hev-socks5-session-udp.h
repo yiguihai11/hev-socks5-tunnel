@@ -58,4 +58,6 @@ int hev_socks5_session_udp_construct (HevSocks5SessionUDP *self,
 HevSocks5SessionUDP *hev_socks5_session_udp_new (struct udp_pcb *pcb,
                                                  HevTaskMutex *mutex);
 
+void hev_socks5_session_udp_run (HevSocks5SessionUDP *self);
+
 #endif /* __HEV_SOCKS5_SESSION_UDP_H__ */

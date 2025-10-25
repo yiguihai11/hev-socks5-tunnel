@@ -152,7 +152,7 @@ hev_socks5_tunnel_update_session (HevListNode *node)
     hev_list_add_tail (&session_set, node);
 }
 
-static void
+static void __attribute__((unused))
 hev_socks5_session_task_entry (void *data)
 {
     HevSocks5Session *s = data;
@@ -161,6 +161,18 @@ hev_socks5_session_task_entry (void *data)
 
     hev_socks5_tunnel_delete_session (hev_socks5_session_get_node (s));
     hev_object_unref (HEV_OBJECT (s));
+}
+
+/* UDP会话专用的task entry函数 */
+static void
+hev_socks5_session_udp_task_entry (void *data)
+{
+    HevSocks5SessionUDP *udp = data;
+
+    hev_socks5_session_udp_run (udp);
+
+    hev_socks5_tunnel_delete_session (hev_socks5_session_get_node (HEV_SOCKS5_SESSION (udp)));
+    hev_object_unref (HEV_OBJECT (udp));
 }
 
 static err_t
@@ -311,7 +323,7 @@ udp_recv_handler (void *arg, struct udp_pcb *pcb, struct pbuf *p,
     hev_socks5_session_set_task (HEV_SOCKS5_SESSION (udp), task);
     node = hev_socks5_session_get_node (HEV_SOCKS5_SESSION (udp));
     hev_socks5_tunnel_insert_session (node);
-    hev_task_run (task, hev_socks5_session_task_entry, udp);
+    hev_task_run (task, hev_socks5_session_udp_task_entry, udp);
     hev_task_wakeup (task_lwip_timer);
 }
 

@@ -386,10 +386,11 @@ hev_socks5_session_udp_set_upstream_addr (HevSocks5Client *base,
     HevConfigSocks5Server *srv = hev_config_get_socks5_udp_server ();
     HevSocks5ClientClass *ckptr;
 
-    if (srv->udp_relay && srv->addr[0]) {
+    /* 始终使用UDP块的地址配置，不管udp_relay模式如何 */
+    if (srv->addr[0]) {
         uint16_t port = hev_socks5_addr_get_port (addr);
-        LOG_D ("%p socks5 session udp: using UDP relay address %s:%d",
-               base, srv->addr, port);
+        LOG_D ("%p socks5 session udp: using UDP server address %s:%d (mode=%s)",
+               base, srv->addr, port, srv->udp_relay ? "UDP" : "TCP");
         hev_socks5_addr_from_name (addr, srv->addr, port);
     }
 
@@ -622,4 +623,47 @@ hev_socks5_session_udp_class (void)
     }
 
     return okptr;
+}
+
+/* UDP会话独立的运行函数，使用UDP块的配置 */
+void
+hev_socks5_session_udp_run (HevSocks5SessionUDP *self)
+{
+    HevConfigSocks5Server *srv;
+    int read_write_timeout;
+    int connect_timeout;
+    int res;
+
+    LOG_D ("%p socks5 session udp run", self);
+
+    /* 使用UDP块的配置而不是TCP块 */
+    srv = hev_config_get_socks5_udp_server ();
+    connect_timeout = hev_config_get_misc_connect_timeout ();
+    read_write_timeout = hev_config_get_misc_read_write_timeout ();
+
+    hev_socks5_set_timeout (HEV_SOCKS5 (self), connect_timeout);
+
+    res = hev_socks5_client_connect (HEV_SOCKS5_CLIENT (self), srv->addr,
+                                     srv->port);
+    if (res < 0) {
+        LOG_E ("%p socks5 session udp connect", self);
+        return;
+    }
+
+    hev_socks5_set_timeout (HEV_SOCKS5 (self), read_write_timeout);
+
+    if (srv->user && srv->pass) {
+        hev_socks5_client_set_auth (HEV_SOCKS5_CLIENT (self), srv->user,
+                                    srv->pass);
+        LOG_D ("%p socks5 session udp auth %s:%s (using UDP config)", self, srv->user, srv->pass);
+    }
+
+    res = hev_socks5_client_handshake (HEV_SOCKS5_CLIENT (self), srv->pipeline);
+    if (res < 0) {
+        LOG_E ("%p socks5 session udp handshake", self);
+        return;
+    }
+
+    /* 运行UDP splicer */
+    hev_socks5_session_udp_splice (HEV_SOCKS5_SESSION (self));
 }
