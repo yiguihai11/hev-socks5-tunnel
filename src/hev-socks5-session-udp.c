@@ -37,6 +37,9 @@ struct _HevSocks5UDPFrame
     HevListNode node;
     HevSocks5Addr addr;
     struct pbuf *data;
+    /* 零拷贝优化：缓存数据指针，避免重复计算 */
+    void *payload_cache;
+    size_t payload_len;
 };
 
 static int
@@ -61,6 +64,56 @@ task_io_yielder (HevTaskYieldType type, void *data)
     res = hev_socks5_task_io_yielder (type, data);
     node = hev_socks5_session_get_node (HEV_SOCKS5_SESSION (self));
     hev_socks5_tunnel_update_session (node);
+
+    return res;
+}
+
+/* 零拷贝优化：创建UDP帧并缓存关键信息 */
+static HevSocks5UDPFrame *
+hev_socks5_session_udp_frame_new (struct pbuf *p, struct udp_pcb *pcb)
+{
+    HevSocks5UDPFrame *frame;
+
+    frame = hev_malloc (sizeof (HevSocks5UDPFrame));
+    if (!frame) {
+        LOG_E ("socks5 session udp: failed to allocate frame");
+        return NULL;
+    }
+
+    /* 初始化帧结构 */
+    frame->data = p;
+    frame->payload_cache = p->payload;  /* 缓存payload指针 */
+    frame->payload_len = p->len;        /* 缓存长度信息 */
+
+    /* 初始化链表节点 */
+    memset (&frame->node, 0, sizeof (frame->node));
+
+    /* 设置地址信息 */
+    hev_socks5_addr_from_lwip (&frame->addr, &pcb->local_ip, pcb->local_port);
+
+    LOG_D ("socks5 session udp: created frame with cached payload (len=%d)",
+           frame->payload_len);
+
+    return frame;
+}
+
+/* 零拷贝优化：直接发送数据，避免额外的内存拷贝 */
+static int
+hev_socks5_session_udp_send_direct (HevSocks5UDPFrame *frame, HevSocks5UDP *udp)
+{
+    int res;
+
+    LOG_D ("socks5 session udp: direct send %d bytes (cached)", frame->payload_len);
+
+    /* 直接使用缓存的指针，避免从pbuf重新获取 */
+    res = hev_socks5_udp_sendto (udp, frame->payload_cache,
+                                 frame->payload_len, &frame->addr);
+
+    if (res > 0) {
+        LOG_D ("socks5 session udp: direct send succeeded %d bytes", res);
+    } else {
+        LOG_D ("socks5 session udp: direct send failed (res=%d)", res);
+    }
 
     return res;
 }
@@ -92,13 +145,14 @@ hev_socks5_session_udp_fwd_f (HevSocks5SessionUDP *self)
     }
 
     frame = container_of (node, HevSocks5UDPFrame, node);
-    buf = frame->data;
 
-    LOG_D ("%p socks5 session udp fwd f: sending %d bytes", self, buf->len);
-
+    /* 使用零拷贝优化发送 */
     udp = HEV_SOCKS5_UDP (self);
-    res = hev_socks5_udp_sendto (udp, buf->payload, buf->len, &frame->addr);
+    res = hev_socks5_session_udp_send_direct (frame, udp);
+
+    /* 清理资源 */
     hev_list_del (&self->frame_list, node);
+    buf = frame->data;
     hev_free (frame);
     pbuf_free (buf);
     self->frames--;
@@ -235,16 +289,12 @@ udp_recv_handler (void *arg, struct udp_pcb *pcb, struct pbuf *p,
         return;
     }
 
-    frame = hev_malloc (sizeof (HevSocks5UDPFrame));
+    /* 使用零拷贝优化的帧创建函数 */
+    frame = hev_socks5_session_udp_frame_new (p, pcb);
     if (!frame) {
-        LOG_E ("%p socks5 session udp: failed to allocate frame", self);
         pbuf_free (p);
         return;
     }
-
-    frame->data = p;
-    memset (&frame->node, 0, sizeof (frame->node));
-    hev_socks5_addr_from_lwip (&frame->addr, &pcb->local_ip, pcb->local_port);
 
     if (frame->addr.atype == HEV_SOCKS5_ADDR_TYPE_NAME) {
         self->addr = ip_2_ip4 (&pcb->local_ip)->addr;

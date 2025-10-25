@@ -27,6 +27,7 @@
 #include "hev-filter.h"
 #include "hev-memory-pool.h"
 #include "hev-test.h"
+#include "hev-socks5-misc.h"
 
 #include "hev-main.h"
 
@@ -79,6 +80,9 @@ hev_socks5_tunnel_main_inner (int tun_fd)
 
     /* 初始化动态内存池管理器 */
     hev_memory_pool_init ();
+
+    /* 初始化智能缓冲区管理器 */
+    hev_socks5_init_smart_buffer ();
 
     nofile = hev_config_get_misc_limit_nofile ();
     res = set_limit_nofile (nofile);

@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <time.h>
 #include <arpa/inet.h>
 
 #include <hev-task.h>
@@ -26,6 +27,21 @@
 
 static int task_stack_size = 8192;
 static int udp_recv_buffer_size = 512 * 1024;
+
+/* 智能缓冲区管理 */
+static int udp_buffer_min_size = 64 * 1024;    // 最小64KB
+static int udp_buffer_max_size = 2 * 1024 * 1024; // 最大2MB
+static int udp_buffer_default_size = 512 * 1024; // 默认512KB
+
+/* 网络状态监控 */
+static struct {
+    int current_buffer_size;
+    unsigned long total_rx_bytes;
+    unsigned long total_rx_packets;
+    time_t last_adjust_time;
+    double avg_latency_ms;
+    int congestion_level; // 0=正常, 1=轻微拥塞, 2=严重拥塞
+} buffer_stats = {0};
 
 int
 hev_socks5_task_io_yielder (HevTaskYieldType type, void *data)
@@ -329,4 +345,97 @@ void
 hev_socks5_set_udp_recv_buffer_size (int buffer_size)
 {
     udp_recv_buffer_size = buffer_size;
+}
+
+/* 智能缓冲区管理：初始化 */
+void
+hev_socks5_init_smart_buffer (void)
+{
+    buffer_stats.current_buffer_size = udp_buffer_default_size;
+    buffer_stats.total_rx_bytes = 0;
+    buffer_stats.total_rx_packets = 0;
+    buffer_stats.last_adjust_time = time (NULL);
+    buffer_stats.avg_latency_ms = 50.0; // 默认50ms
+    buffer_stats.congestion_level = 0;
+
+    /* 设置初始缓冲区大小 */
+    udp_recv_buffer_size = buffer_stats.current_buffer_size;
+
+    LOG_D ("smart_buffer: Initialized with size %d bytes", buffer_stats.current_buffer_size);
+}
+
+/* 智能缓冲区管理：更新网络统计 */
+void
+hev_socks5_update_buffer_stats (unsigned long rx_bytes, double latency_ms)
+{
+    buffer_stats.total_rx_bytes += rx_bytes;
+    buffer_stats.total_rx_packets++;
+
+    /* 更新平均延迟（指数加权移动平均） */
+    if (buffer_stats.avg_latency_ms == 0.0) {
+        buffer_stats.avg_latency_ms = latency_ms;
+    } else {
+        buffer_stats.avg_latency_ms = 0.8 * buffer_stats.avg_latency_ms + 0.2 * latency_ms;
+    }
+
+    /* 根据延迟判断拥塞程度 */
+    if (latency_ms > 200.0) {
+        buffer_stats.congestion_level = 2; // 严重拥塞
+    } else if (latency_ms > 100.0) {
+        buffer_stats.congestion_level = 1; // 轻微拥塞
+    } else {
+        buffer_stats.congestion_level = 0; // 正常
+    }
+
+    LOG_D ("smart_buffer: Stats updated - bytes=%lu, packets=%lu, latency=%.2fms, congestion=%d",
+           buffer_stats.total_rx_bytes, buffer_stats.total_rx_packets,
+           buffer_stats.avg_latency_ms, buffer_stats.congestion_level);
+}
+
+/* 智能缓冲区管理：动态调整缓冲区大小 */
+void
+hev_socks5_adjust_buffer_size (void)
+{
+    time_t current_time = time (NULL);
+    int new_size = buffer_stats.current_buffer_size;
+
+    /* 调整间隔：至少60秒 */
+    if (current_time - buffer_stats.last_adjust_time < 60) {
+        return;
+    }
+
+    /* 根据网络状况调整缓冲区大小 */
+    if (buffer_stats.congestion_level == 2) {
+        /* 严重拥塞：增加缓冲区大小，减少丢包 */
+        new_size = (int)(buffer_stats.current_buffer_size * 1.5);
+        if (new_size > udp_buffer_max_size) {
+            new_size = udp_buffer_max_size;
+        }
+        LOG_I ("smart_buffer: Expanding buffer due to congestion: %d -> %d bytes",
+               buffer_stats.current_buffer_size, new_size);
+    } else if (buffer_stats.congestion_level == 0 && buffer_stats.avg_latency_ms < 30.0) {
+        /* 网络良好且延迟低：可以适当减少缓冲区节省内存 */
+        new_size = (int)(buffer_stats.current_buffer_size * 0.8);
+        if (new_size < udp_buffer_min_size) {
+            new_size = udp_buffer_min_size;
+        }
+        LOG_I ("smart_buffer: Shrinking buffer due to good network: %d -> %d bytes",
+               buffer_stats.current_buffer_size, new_size);
+    }
+
+    /* 应用新的缓冲区大小 */
+    if (new_size != buffer_stats.current_buffer_size) {
+        buffer_stats.current_buffer_size = new_size;
+        udp_recv_buffer_size = new_size;
+        buffer_stats.last_adjust_time = current_time;
+    }
+}
+
+/* 智能缓冲区管理：获取当前缓冲区统计 */
+void
+hev_socks5_get_buffer_stats (int *current_size, double *avg_latency, int *congestion_level)
+{
+    if (current_size) *current_size = buffer_stats.current_buffer_size;
+    if (avg_latency) *avg_latency = buffer_stats.avg_latency_ms;
+    if (congestion_level) *congestion_level = buffer_stats.congestion_level;
 }

@@ -25,6 +25,12 @@ int hev_socks5_task_io_yielder (HevTaskYieldType type, void *data);
 void hev_socks5_set_task_stack_size (int stack_size);
 void hev_socks5_set_udp_recv_buffer_size (int buffer_size);
 
+/* 智能缓冲区管理 */
+void hev_socks5_init_smart_buffer (void);
+void hev_socks5_update_buffer_stats (unsigned long rx_bytes, double latency_ms);
+void hev_socks5_adjust_buffer_size (void);
+void hev_socks5_get_buffer_stats (int *current_size, double *avg_latency, int *congestion_level);
+
 int hev_socks5_addr_len (const HevSocks5Addr *addr);
 int hev_socks5_addr_from_name (HevSocks5Addr *addr, const char *name, int port);
 int hev_socks5_addr_from_ipv4 (HevSocks5Addr *addr, const void *ipv4, int port);
