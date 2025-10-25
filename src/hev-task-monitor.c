@@ -8,6 +8,7 @@
  */
 
 #include <sys/time.h>
+#include <stddef.h>
 
 #include "hev-task-monitor.h"
 #include "hev-task-optimizer.h"
