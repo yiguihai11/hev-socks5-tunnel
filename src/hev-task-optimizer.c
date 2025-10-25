@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 #include <time.h>
 #include <sys/time.h>
 #include <unistd.h>
@@ -62,7 +63,7 @@ get_or_create_task_stats (HevTask *task)
         stats = &optimizer.task_stats[(index + i) % optimizer.task_stats_capacity];
         if (stats->total_runs > 0 && stats->last_run_time > 0) {
             /* 检查是否是同一个任务（简单的指针匹配） */
-            if ((unsigned long)stats->last_run_time == (unsigned long)task) {
+            if ((uintptr_t)stats->last_run_time == (uintptr_t)task) {
                 return stats;
             }
         }
@@ -71,7 +72,7 @@ get_or_create_task_stats (HevTask *task)
     /* 创建新的统计记录 */
     stats = &optimizer.task_stats[index];
     memset (stats, 0, sizeof (HevTaskStats));
-    stats->last_run_time = (time_t)task; /* 使用指针作为临时标识 */
+    stats->last_run_time = (time_t)(uintptr_t)task; /* 使用指针作为临时标识 */
     optimizer.task_stats_count++;
 
     LOG_D ("task_optimizer: created stats for task %p", task);
