@@ -238,6 +238,29 @@ radix_tree_lookup_ipv6 (const uint8_t *ip)
    Hash Table Operations
    ============================================================================ */
 
+/* Helper Functions - must be declared before use */
+static void safe_str_copy (char *dest, const char *src, size_t max_len);
+static void debug_free_and_clear (void *ptr, size_t size, const char *name);
+
+/* Safe string copy with null termination */
+static void
+safe_str_copy (char *dest, const char *src, size_t max_len)
+{
+    strncpy (dest, src, max_len - 1);
+    dest[max_len - 1] = '\0';
+}
+
+/* Enhanced memory cleanup with debugging */
+static void
+debug_free_and_clear (void *ptr, size_t size, const char *name)
+{
+    if (ptr) {
+        memset (ptr, 0, size);  /* Clear sensitive data */
+        LOG_D ("filter: Freed %s (%p)", name, ptr);
+        hev_free (ptr);
+    }
+}
+
 /* High-performance hostname hash function optimized for 65536 buckets */
 static uint32_t
 hostname_hash (const char *hostname)
@@ -266,12 +289,11 @@ hostname_table_insert (const char *hostname)
 {
     uint32_t hash = hostname_hash (hostname);
     HostnameEntry *entry = hev_malloc (sizeof (HostnameEntry));
-    
+
     if (!entry)
         return;
-    
-    strncpy (entry->hostname, hostname, MAX_HOST_LENGTH);
-    entry->hostname[MAX_HOST_LENGTH] = '\0';
+
+    safe_str_copy (entry->hostname, hostname, MAX_HOST_LENGTH + 1);
     entry->next = hostname_table[hash];
     hostname_table[hash] = entry;
 }
@@ -295,25 +317,18 @@ static void
 hostname_table_free (void)
 {
     int freed_count = 0;
-    
+
     for (int i = 0; i < HOSTNAME_HASH_SIZE; i++) {
         HostnameEntry *entry = hostname_table[i];
-        
-        // ✅ 更安全的清理方式
         while (entry) {
             HostnameEntry *next = entry->next;
-            
-            // ✅ 清零数据,方便调试
-            memset(entry, 0, sizeof(HostnameEntry));
-            
-            hev_free (entry);
+            debug_free_and_clear (entry, sizeof (HostnameEntry), "hostname entry");
             freed_count++;
             entry = next;
         }
-        
         hostname_table[i] = NULL;
     }
-    
+
     if (freed_count > 0) {
         LOG_D ("filter: Freed %d hostname entries", freed_count);
     }
@@ -664,13 +679,29 @@ hev_filter_parse_http_host (void *log_data, const unsigned char *data, size_t le
 }
 
 /* ============================================================================
+   Hash Table Operations
+   ============================================================================ */
+
+/* File opening with error handling */
+static FILE *
+safe_fopen (const char *path, const char *mode)
+{
+    FILE *fp = fopen (path, mode);
+    if (!fp) {
+        LOG_E ("filter: Failed to open file '%s': %s", path, strerror (errno));
+    }
+    return fp;
+}
+
+/* ============================================================================
    Public API
    ============================================================================ */
 
 int
 hev_filter_init (void)
 {
-    memset (&stats, 0, sizeof (stats));
+    /* Use single memset for all zero-initialization */
+    memset (&stats, 0, sizeof (HevFilterStats));
     memset (hostname_table, 0, sizeof (hostname_table));
     memset (blacklist_table, 0, sizeof (blacklist_table));
     blacklist_count = 0;
@@ -743,9 +774,8 @@ hev_filter_load_acl (const char *file_path)
         return 0;
     }
     
-    fp = fopen (file_path, "r");
+    fp = safe_fopen (file_path, "r");
     if (!fp) {
-        LOG_W ("filter: Failed to open ACL file %s: %s", file_path, strerror (errno));
         return -1;
     }
     
