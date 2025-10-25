@@ -13,6 +13,7 @@
 
 #include "hev-socks5-misc-priv.h"
 #include "hev-socks5-logger-priv.h"
+#include "hev-connection-pool.h"
 
 #include "hev-socks5-client-tcp.h"
 
@@ -182,4 +183,72 @@ hev_socks5_client_tcp_class (void)
     }
 
     return okptr;
+}
+
+/* 连接池版本：从连接池获取或创建连接 */
+HevSocks5ClientTCP *
+hev_socks5_client_tcp_new_pooled (const char *name, int port)
+{
+    HevSocks5ClientTCP *self;
+    HevSocks5Addr addr;
+    HevConnectionPoolEntry *pool_entry;
+    int res;
+
+    /* 首先尝试从连接池获取连接 */
+    pool_entry = hev_connection_pool_get (name, port, HEV_SOCKS5_TYPE_TCP);
+    if (pool_entry && pool_entry->fd >= 0) {
+        /* 使用池中的连接 */
+        self = hev_malloc0 (sizeof (HevSocks5ClientTCP));
+        if (!self) {
+            LOG_E ("socks5 client tcp: failed to allocate client for pooled connection");
+            return NULL;
+        }
+
+        self->pool_entry = pool_entry;
+        self->from_pool = 1;
+
+        /* 设置fd，避免创建新连接 */
+        HEV_SOCKS5 (self)->fd = pool_entry->fd;
+
+        /* 构造客户端，但不建立新连接 */
+        hev_socks5_addr_from_name (&addr, name, port);
+        res = hev_socks5_client_tcp_construct (self, &addr);
+        if (res < 0) {
+            LOG_E ("socks5 client tcp: failed to construct pooled client");
+            hev_free (self);
+            hev_connection_pool_remove (pool_entry);
+            return NULL;
+        }
+
+        LOG_D ("%p socks5 client tcp new pooled (fd=%d)", self, pool_entry->fd);
+        return self;
+    }
+
+    /* 池中没有可用连接，创建新连接 */
+    LOG_D ("socks5 client tcp: no pooled connection available, creating new");
+    return hev_socks5_client_tcp_new_name (name, port);
+}
+
+/* 将连接返回到连接池 */
+void
+hev_socks5_client_tcp_return_to_pool (HevSocks5ClientTCP *self)
+{
+    if (!self || !self->from_pool) {
+        /* 不是来自连接池的连接，直接销毁 */
+        if (self) {
+            hev_socks5_client_tcp_destruct (HEV_OBJECT (self));
+            hev_free (self);
+        }
+        return;
+    }
+
+    /* 将连接返回池中 */
+    if (self->pool_entry) {
+        hev_connection_pool_put (self->pool_entry);
+        LOG_D ("%p socks5 client tcp: returned to pool (fd=%d)", self, self->pool_entry->fd);
+    }
+
+    /* 清理客户端结构，但保留连接池条目 */
+    self->pool_entry = NULL;
+    hev_free (self);
 }

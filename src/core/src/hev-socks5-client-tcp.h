@@ -14,6 +14,7 @@
 #include "hev-socks5-proto.h"
 
 #include "hev-socks5-client.h"
+#include "hev-connection-pool.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -31,6 +32,8 @@ struct _HevSocks5ClientTCP
     HevSocks5Client base;
 
     HevSocks5Addr *addr;
+    HevConnectionPoolEntry *pool_entry;  /* 连接池条目 */
+    int from_pool;                        /* 是否来自连接池 */
 };
 
 struct _HevSocks5ClientTCPClass
@@ -48,6 +51,10 @@ int hev_socks5_client_tcp_construct (HevSocks5ClientTCP *self,
 HevSocks5ClientTCP *hev_socks5_client_tcp_new_name (const char *name, int port);
 HevSocks5ClientTCP *hev_socks5_client_tcp_new_ipv4 (const void *ipv4, int port);
 HevSocks5ClientTCP *hev_socks5_client_tcp_new_ipv6 (const void *ipv6, int port);
+
+/* 连接池相关函数 */
+HevSocks5ClientTCP *hev_socks5_client_tcp_new_pooled (const char *name, int port);
+void hev_socks5_client_tcp_return_to_pool (HevSocks5ClientTCP *self);
 
 #ifdef __cplusplus
 }
