@@ -12,6 +12,7 @@
 #include <errno.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
+#include <sys/time.h>
 #include <arpa/inet.h>
 #include <stddef.h>
 #include <time.h>
@@ -126,6 +127,29 @@ static char *strcasestr_custom(const char *haystack, const char *needle) {
 }
 
 /* ============================================================================
+   High-Precision Time Functions
+   ============================================================================ */
+
+static time_t
+get_current_time_ms (void)
+{
+    struct timeval tv;
+    gettimeofday (&tv, NULL);
+    return (time_t)tv.tv_sec * 1000 + tv.tv_usec / 1000;
+}
+
+static time_t
+get_current_time_seconds (void)
+{
+    struct timeval tv;
+    gettimeofday (&tv, NULL);
+    return tv.tv_sec;
+}
+
+/* High-precision timeout check for smart proxy (placeholder for future use) */
+/* static int check_smart_proxy_timeout_ms (time_t start_time_ms, int timeout_ms); */
+
+/* ============================================================================
    辅助函数:设置 TCP Keep-Alive
    ⬇️ 使用我们保存的 HEV_TCP_KEEPIDLE 等宏
    ============================================================================ */
@@ -166,14 +190,14 @@ set_tcp_keepalive (void *session, int fd)
 static void
 idle_timer_init (HevIdleTimer *timer, int timeout_seconds)
 {
-    timer->last_activity = time (NULL);
+    timer->last_activity = get_current_time_seconds ();
     timer->idle_timeout = timeout_seconds;
 }
 
 static void
 idle_timer_update (HevIdleTimer *timer)
 {
-    timer->last_activity = time (NULL);
+    timer->last_activity = get_current_time_seconds ();
 }
 
 static int
@@ -1530,8 +1554,12 @@ run_direct_udp_task (void *data)
     LOG_D ("%p session: UDP send task start %s:%d -> %s:%d",
            session, src_ip, session->src_port, dst_ip, session->dest_port);
 
-    session->last_activity = time (NULL);
-    session->session_start = time (NULL);
+    session->last_activity = get_current_time_seconds ();
+    session->session_start = get_current_time_seconds ();
+
+    /* Log with millisecond precision for debugging */
+    time_t current_ms = get_current_time_ms ();
+    LOG_D ("%p session: UDP session created at %ld ms", session, current_ms % 1000);
 
     session->fd = hev_task_io_socket_socket (AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
     if (session->fd < 0) {
@@ -1592,7 +1620,7 @@ run_direct_udp_task (void *data)
                 break;
             }
             
-            time_t now = time (NULL);
+            time_t now = get_current_time_seconds ();
             time_t idle_time = now - session->last_activity;
             if (idle_time > UDP_IDLE_TIMEOUT) {
                 LOG_I ("%p session: UDP send task idle timeout (no activity for %ld seconds)", 
@@ -1633,7 +1661,7 @@ run_direct_udp_task (void *data)
             }
             LOG_W ("%p session: UDP sendto failed: %s", session, strerror (errno));
         } else {
-            session->last_activity = time (NULL);
+            session->last_activity = get_current_time_seconds ();
             total_sent_bytes += sent;
             total_sent_packets++;
             

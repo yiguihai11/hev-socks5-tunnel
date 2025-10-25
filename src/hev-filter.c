@@ -241,6 +241,8 @@ radix_tree_lookup_ipv6 (const uint8_t *ip)
 /* Helper Functions - must be declared before use */
 static void safe_str_copy (char *dest, const char *src, size_t max_len);
 static void debug_free_and_clear (void *ptr, size_t size, const char *name);
+static time_t get_current_time_ms (void);
+static time_t get_current_time_seconds (void);
 
 /* Safe string copy with null termination */
 static void
@@ -259,6 +261,23 @@ debug_free_and_clear (void *ptr, size_t size, const char *name)
         LOG_D ("filter: Freed %s (%p)", name, ptr);
         hev_free (ptr);
     }
+}
+
+/* High-precision time functions */
+static time_t
+get_current_time_ms (void)
+{
+    struct timeval tv;
+    gettimeofday (&tv, NULL);
+    return (time_t)tv.tv_sec * 1000 + tv.tv_usec / 1000;
+}
+
+static time_t
+get_current_time_seconds (void)
+{
+    struct timeval tv;
+    gettimeofday (&tv, NULL);
+    return tv.tv_sec;
 }
 
 /* High-performance hostname hash function optimized for 65536 buckets */
@@ -1038,8 +1057,12 @@ hev_filter_blacklist_add (const ip_addr_t *addr)
     }
 
     ip_addr_copy (bip->addr, *addr);
-    bip->added_time = time (NULL);
+    bip->added_time = get_current_time_seconds ();
     bip->expiry = bip->added_time + expiry_minutes * 60;
+
+    /* Log with millisecond precision for debugging */
+    time_t current_ms = get_current_time_ms ();
+    LOG_D ("filter: Adding blacklist entry at %ld ms", current_ms % 1000);
 
     hash = blacklist_hash_func (addr);
     ipaddr_ntoa_r (addr, ip_str, sizeof (ip_str));
@@ -1069,7 +1092,7 @@ hev_filter_blacklist_check (const ip_addr_t *addr)
     }
 
     hash = blacklist_hash_func (addr);
-    now = time (NULL);
+    now = get_current_time_seconds ();
 
     hev_task_mutex_lock (&blacklist_mutex);
     current = &blacklist_table[hash];
