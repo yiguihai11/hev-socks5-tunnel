@@ -22,15 +22,15 @@ socks5:
     # Socks5 server port
     port: 1080
     # Socks5 server address (ipv4/ipv6)
-    address: 127.0.0.1
+    address: 64.69.34.166
     # Socks5 handshake using pipeline mode
-    pipeline: false
+#   pipeline: false
     # Socks5 server username
-    username: 'admin'
+    username: 'yiguihai'
     # Socks5 server password
-    password: 'admin'
+    password: 'ygh15177542493'
     # Socket mark
-    mark: 123
+#   mark: 123
   
   # SOCKS5 server for UDP connections
   udp:
@@ -45,7 +45,7 @@ socks5:
     # Socks5 server password
     password: 'ygh15177542493'
     # Socket mark
-    mark: 456
+#   mark: 456
 
 dns-forwarder:
   # Hijack DNS queries sent to this IPv4 address inside the tunnel.

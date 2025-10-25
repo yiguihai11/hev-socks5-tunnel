@@ -25,7 +25,7 @@
 #include "hev-traffic-router.h"
 #include "hev-session-manager.h"
 #include "hev-filter.h"
-
+#include "hev-test.h"
 
 #include "hev-main.h"
 
@@ -176,6 +176,11 @@ main (int argc, char *argv[])
 
     if (argc < 2 || strcmp (argv[1], "--version") == 0) {
         show_help (argv[0]);
+        return -1;
+    }
+    
+    if (argc < 2 || strcmp (argv[1], "--test") == 0) {
+        return hev_test_run ();
         return -1;
     }
 
