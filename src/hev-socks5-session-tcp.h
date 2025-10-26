@@ -55,5 +55,4 @@ HevSocks5SessionTCP *hev_socks5_session_tcp_new (struct tcp_pcb *pcb,
 
 int hev_socks5_session_tcp_splice (HevSocks5Session *base);
 
-
 #endif /* __HEV_SOCKS5_SESSION_TCP_H__ */

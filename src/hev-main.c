@@ -91,28 +91,24 @@ hev_socks5_tunnel_main_inner (int tun_fd)
     hev_connection_pool_init (32, 300, 1800); // 最大32个连接，空闲5-30分钟
 
     /* 初始化任务调度器优化器 */
-    HevTaskOptimizerConfig task_config = {
-        .batch_wakeup_enabled = 1,
-        .max_batch_size = 16,
-        .priority_boost_enabled = 1,
-        .boost_threshold_us = 1000.0,
-        .load_balance_enabled = 1,
-        .stats_enabled = 1
-    };
+    HevTaskOptimizerConfig task_config = { .batch_wakeup_enabled = 1,
+                                           .max_batch_size = 16,
+                                           .priority_boost_enabled = 1,
+                                           .boost_threshold_us = 1000.0,
+                                           .load_balance_enabled = 1,
+                                           .stats_enabled = 1 };
     hev_task_optimizer_init (&task_config);
 
     /* 初始化批量处理器 */
-    HevBatchProcessorConfig batch_config = {
-        .network_io_enabled = 1,
-        .packet_forward_enabled = 1,
-        .session_mgmt_enabled = 1,
-        .buffer_ops_enabled = 1,
-        .max_network_io_batch = 32,
-        .max_packet_batch = 64,
-        .max_session_batch = 16,
-        .max_buffer_batch = 128,
-        .batch_timeout_us = 1000.0
-    };
+    HevBatchProcessorConfig batch_config = { .network_io_enabled = 1,
+                                             .packet_forward_enabled = 1,
+                                             .session_mgmt_enabled = 1,
+                                             .buffer_ops_enabled = 1,
+                                             .max_network_io_batch = 32,
+                                             .max_packet_batch = 64,
+                                             .max_session_batch = 16,
+                                             .max_buffer_batch = 128,
+                                             .batch_timeout_us = 1000.0 };
     hev_batch_processor_init (&batch_config);
 
     nofile = hev_config_get_misc_limit_nofile ();
@@ -148,25 +144,25 @@ hev_socks5_tunnel_main_inner (int tun_fd)
     }
 
     hev_socks5_tunnel_run ();
-    
+
     // ✅ 清理顺序:与初始化完全相反
     LOG_D ("main: Starting cleanup sequence");
-    
+
     // 1. 先关闭隧道 (最后初始化的)
     hev_socks5_tunnel_fini ();
-    
+
     // 2. 清理 lwIP 相关资源 (在 tunnel_fini 之后,因为 tunnel 依赖 lwIP)
     // lwIP 没有显式的 fini 函数,资源在 tunnel_fini 中处理
-    
+
     // 3. 清理任务系统
     hev_task_system_fini ();
-    
+
     // 4. 清理会话管理器
     hev_session_manager_fini ();
-    
+
     // 5. 清理流量路由器 (依赖 filter)
     hev_traffic_router_fini ();
-    
+
     // 6. 清理过滤器 (最早加载数据的组件)
     hev_filter_fini ();
 
@@ -185,12 +181,12 @@ hev_socks5_tunnel_main_inner (int tun_fd)
     // 11. 清理日志系统
     hev_socks5_logger_fini ();
     hev_logger_fini ();
-    
+
     // 12. 配置清理由调用者负责（在 main_from_file/main_from_str 中）
     // 注意：hev_config_fini() 不在这里调用，因为配置可能来自不同源
 
     LOG_D ("main: Cleanup sequence completed");
-    
+
     return 0;
 }
 
@@ -261,7 +257,7 @@ main (int argc, char *argv[])
         show_help (argv[0]);
         return -1;
     }
-    
+
     if (argc < 2 || strcmp (argv[1], "--test") == 0) {
         return hev_test_run ();
     }

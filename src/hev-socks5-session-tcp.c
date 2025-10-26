@@ -100,7 +100,8 @@ tcp_splice_b (HevSocks5SessionTCP *self)
             else
                 res = -1;
         } else {
-            LOG_D ("%p socks5 session tcp: backward received %zd bytes", self, s);
+            LOG_D ("%p socks5 session tcp: backward received %zd bytes", self,
+                   s);
             hev_ring_buffer_write_finish (self->buffer, s);
             self->initial_data_received = 1;
         }
@@ -122,7 +123,9 @@ tcp_splice_b (HevSocks5SessionTCP *self)
             err |= tcp_output (self->pcb);
             res = 1;
         } else if (res < 0) {
-            LOG_D ("%p socks5 session tcp: backward EOF, shutting down pcb write", self);
+            LOG_D (
+                "%p socks5 session tcp: backward EOF, shutting down pcb write",
+                self);
             tcp_shutdown (self->pcb, 0, 1);
         }
     }
@@ -139,7 +142,8 @@ tcp_recv_handler (void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err)
     HevSocks5SessionTCP *self = arg;
 
     if (p) {
-        LOG_D ("%p socks5 session tcp: received %d bytes from client", self, p->tot_len);
+        LOG_D ("%p socks5 session tcp: received %d bytes from client", self,
+               p->tot_len);
         if (!self->queue) {
             self->queue = p;
         } else {
@@ -175,7 +179,8 @@ tcp_err_handler (void *arg, err_t err)
 {
     HevSocks5SessionTCP *self = arg;
 
-    LOG_W ("%p socks5 session tcp: error occurred (err=%d), terminating", self, err);
+    LOG_W ("%p socks5 session tcp: error occurred (err=%d), terminating", self,
+           err);
     self->pcb = NULL;
     hev_socks5_session_terminate (HEV_SOCKS5_SESSION (self));
 }
@@ -250,7 +255,8 @@ hev_socks5_session_tcp_splice (HevSocks5Session *base)
     tcp_buffer_size = hev_config_get_misc_tcp_buffer_size ();
     self->buffer = hev_ring_buffer_alloca (tcp_buffer_size);
     if (!self->buffer) {
-        LOG_E ("%p socks5 session tcp splice: failed to allocate ring buffer", self);
+        LOG_E ("%p socks5 session tcp splice: failed to allocate ring buffer",
+               self);
         return 0;
     }
 
@@ -279,10 +285,13 @@ hev_socks5_session_tcp_splice (HevSocks5Session *base)
 
         if (task_io_yielder (type, base) < 0) {
             if (self->is_smart_proxy_probe && !self->initial_data_received) {
-                LOG_W ("%p socks5 session tcp splice: GFW detected (smart proxy probe failed)", self);
+                LOG_W (
+                    "%p socks5 session tcp splice: GFW detected (smart proxy probe failed)",
+                    self);
                 return -1; /* GFW detected */
             }
-            LOG_D ("%p socks5 session tcp splice: yielder returned error", self);
+            LOG_D ("%p socks5 session tcp splice: yielder returned error",
+                   self);
             break;
         }
     }
@@ -297,8 +306,9 @@ hev_socks5_session_tcp_splice (HevSocks5Session *base)
             break;
     }
 
-    LOG_D ("%p socks5 session tcp splice: completed (forward_cycles=%zu, backward_cycles=%zu)",
-           self, total_forward, total_backward);
+    LOG_D (
+        "%p socks5 session tcp splice: completed (forward_cycles=%zu, backward_cycles=%zu)",
+        self, total_forward, total_backward);
 
     return 0;
 }
@@ -338,18 +348,21 @@ hev_socks5_session_tcp_construct (HevSocks5SessionTCP *self,
 
     res = hev_socks5_addr_from_lwip (&addr, &pcb->local_ip, pcb->local_port);
     if (res < 0) {
-        LOG_E ("%p socks5 session tcp construct: failed to convert address", self);
+        LOG_E ("%p socks5 session tcp construct: failed to convert address",
+               self);
         return -1;
     }
 
     res = hev_socks5_client_tcp_construct (&self->base, &addr);
     if (res < 0) {
-        LOG_E ("%p socks5 session tcp construct: failed to construct client", self);
+        LOG_E ("%p socks5 session tcp construct: failed to construct client",
+               self);
         return -1;
     }
 
     ipaddr_ntoa_r (&pcb->local_ip, dst_ip, sizeof (dst_ip));
-    LOG_D ("%p socks5 session tcp construct for %s:%d", self, dst_ip, pcb->local_port);
+    LOG_D ("%p socks5 session tcp construct for %s:%d", self, dst_ip,
+           pcb->local_port);
 
     HEV_OBJECT (self)->klass = HEV_SOCKS5_SESSION_TCP_TYPE;
 

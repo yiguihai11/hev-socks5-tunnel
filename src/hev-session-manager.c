@@ -20,51 +20,52 @@
 
 /* ⬇️ TCP Keep-Alive 跨平台兼容性 - 修改顺序,先包含系统头文件 */
 #if defined(__linux__)
-    /* 先包含系统头文件,然后保存需要的宏 */
-    #include <netinet/tcp.h>
-    /* 保存 TCP Keep-Alive 相关的宏值 */
-    #ifdef TCP_KEEPIDLE
-        #define HEV_TCP_KEEPIDLE TCP_KEEPIDLE
-    #endif
-    #ifdef TCP_KEEPINTVL
-        #define HEV_TCP_KEEPINTVL TCP_KEEPINTVL
-    #endif
-    #ifdef TCP_KEEPCNT
-        #define HEV_TCP_KEEPCNT TCP_KEEPCNT
-    #endif
-    
-    /* 取消可能与 lwIP 冲突的宏定义 */
-    #ifdef TCP_MSS
-        #undef TCP_MSS
-    #endif
-    
-#elif defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)
-    #include <netinet/tcp.h>
-    /* BSD 系统宏保存 */
-    #ifdef TCP_KEEPALIVE
-        #define HEV_TCP_KEEPIDLE TCP_KEEPALIVE
-    #endif
-    #ifdef TCP_KEEPINTVL
-        #define HEV_TCP_KEEPINTVL TCP_KEEPINTVL
-    #endif
-    #ifdef TCP_KEEPCNT
-        #define HEV_TCP_KEEPCNT TCP_KEEPCNT
-    #endif
-    
-    /* 取消冲突宏 */
-    #ifdef TCP_MSS
-        #undef TCP_MSS
-    #endif
-    
+/* 先包含系统头文件,然后保存需要的宏 */
+#include <netinet/tcp.h>
+/* 保存 TCP Keep-Alive 相关的宏值 */
+#ifdef TCP_KEEPIDLE
+#define HEV_TCP_KEEPIDLE TCP_KEEPIDLE
+#endif
+#ifdef TCP_KEEPINTVL
+#define HEV_TCP_KEEPINTVL TCP_KEEPINTVL
+#endif
+#ifdef TCP_KEEPCNT
+#define HEV_TCP_KEEPCNT TCP_KEEPCNT
+#endif
+
+/* 取消可能与 lwIP 冲突的宏定义 */
+#ifdef TCP_MSS
+#undef TCP_MSS
+#endif
+
+#elif defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__) || \
+    defined(__NetBSD__)
+#include <netinet/tcp.h>
+/* BSD 系统宏保存 */
+#ifdef TCP_KEEPALIVE
+#define HEV_TCP_KEEPIDLE TCP_KEEPALIVE
+#endif
+#ifdef TCP_KEEPINTVL
+#define HEV_TCP_KEEPINTVL TCP_KEEPINTVL
+#endif
+#ifdef TCP_KEEPCNT
+#define HEV_TCP_KEEPCNT TCP_KEEPCNT
+#endif
+
+/* 取消冲突宏 */
+#ifdef TCP_MSS
+#undef TCP_MSS
+#endif
+
 #elif defined(_WIN32)
-    #include <winsock2.h>
-    #include <ws2tcpip.h>
-    #define HEV_TCP_KEEPIDLE TCP_KEEPALIVE
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#define HEV_TCP_KEEPIDLE TCP_KEEPALIVE
 #endif
 
 /* 如果系统不支持 TCP Keep-Alive,禁用该功能 */
 #ifndef HEV_TCP_KEEPIDLE
-    #define TCP_KEEPALIVE_UNSUPPORTED
+#define TCP_KEEPALIVE_UNSUPPORTED
 #endif
 
 /* ⬇️ 现在包含 hev 项目的头文件(包括 lwIP) */
@@ -90,19 +91,21 @@
 /* container_of macro */
 #ifndef container_of
 #define container_of(ptr, type, member) \
-    ((type *)((char *)(ptr) - offsetof(type, member)))
+    ((type *)((char *)(ptr) - offsetof (type, member)))
 #endif
 
 /* ============================================================================
    空闲超时检查机制
    ============================================================================ */
 
-typedef struct _HevIdleTimer {
+typedef struct _HevIdleTimer
+{
     time_t last_activity;
-    int idle_timeout;  /* 秒, 0 = 禁用空闲超时 */
+    int idle_timeout; /* 秒, 0 = 禁用空闲超时 */
 } HevIdleTimer;
 
-typedef struct _HevSpliceTaskData {
+typedef struct _HevSpliceTaskData
+{
     HevSocks5SessionTCP *session;
     HevIdleTimer *timer;
 } HevSpliceTaskData;
@@ -112,14 +115,19 @@ static void run_direct_connect_task (void *data);
 static void run_smart_proxy_task (void *data);
 static void tcp_direct_splice_task_b (void *data);
 static void smart_proxy_splice_task_b (void *data);
-static int sniff_client_hello (HevSocks5SessionTCP *self, HevTLSClientHello *hello);
-static int sniff_http_host (HevSocks5SessionTCP *self, char *hostname_buffer, size_t buffer_len);
+static int sniff_client_hello (HevSocks5SessionTCP *self,
+                               HevTLSClientHello *hello);
+static int sniff_http_host (HevSocks5SessionTCP *self, char *hostname_buffer,
+                            size_t buffer_len);
 
 // Custom strcasestr implementation for portability
-static char *strcasestr_custom(const char *haystack, const char *needle) {
-    if (!*needle) return (char *)haystack;
+static char *
+strcasestr_custom (const char *haystack, const char *needle)
+{
+    if (!*needle)
+        return (char *)haystack;
     for (; *haystack; ++haystack) {
-        if (strncasecmp(haystack, needle, strlen(needle)) == 0) {
+        if (strncasecmp (haystack, needle, strlen (needle)) == 0) {
             return (char *)haystack;
         }
     }
@@ -158,32 +166,38 @@ set_tcp_keepalive (void *session, int fd)
 {
 #ifndef TCP_KEEPALIVE_UNSUPPORTED
     int enable = 1;
-    int keepidle = 60;      // 60秒后开始探测
-    int keepintvl = 10;     // 每10秒探测一次
-    int keepcnt = 3;        // 3次失败后断开
+    int keepidle = 60; // 60秒后开始探测
+    int keepintvl = 10; // 每10秒探测一次
+    int keepcnt = 3; // 3次失败后断开
 
-    if (setsockopt (fd, SOL_SOCKET, SO_KEEPALIVE, &enable, sizeof (enable)) < 0) {
-        LOG_W ("%p session: Failed to enable TCP Keep-Alive: %s", session, strerror (errno));
+    if (setsockopt (fd, SOL_SOCKET, SO_KEEPALIVE, &enable, sizeof (enable)) <
+        0) {
+        LOG_W ("%p session: Failed to enable TCP Keep-Alive: %s", session,
+               strerror (errno));
         return;
     }
 
     /* ⬇️ 使用重命名后的宏 */
 #ifdef HEV_TCP_KEEPIDLE
-    setsockopt (fd, IPPROTO_TCP, HEV_TCP_KEEPIDLE, &keepidle, sizeof (keepidle));
+    setsockopt (fd, IPPROTO_TCP, HEV_TCP_KEEPIDLE, &keepidle,
+                sizeof (keepidle));
 #endif
 
 #ifdef HEV_TCP_KEEPINTVL
-    setsockopt (fd, IPPROTO_TCP, HEV_TCP_KEEPINTVL, &keepintvl, sizeof (keepintvl));
+    setsockopt (fd, IPPROTO_TCP, HEV_TCP_KEEPINTVL, &keepintvl,
+                sizeof (keepintvl));
 #endif
 
 #ifdef HEV_TCP_KEEPCNT
     setsockopt (fd, IPPROTO_TCP, HEV_TCP_KEEPCNT, &keepcnt, sizeof (keepcnt));
 #endif
 
-    LOG_D ("%p session: TCP Keep-Alive enabled (idle=%ds, interval=%ds, count=%d)",
-           session, keepidle, keepintvl, keepcnt);
+    LOG_D (
+        "%p session: TCP Keep-Alive enabled (idle=%ds, interval=%ds, count=%d)",
+        session, keepidle, keepintvl, keepcnt);
 #else
-    LOG_D ("%p session: TCP Keep-Alive not supported on this platform", session);
+    LOG_D ("%p session: TCP Keep-Alive not supported on this platform",
+           session);
 #endif
 }
 
@@ -204,11 +218,11 @@ static int
 idle_timer_check (HevIdleTimer *timer)
 {
     if (timer->idle_timeout <= 0)
-        return 0;  /* 空闲超时禁用 */
+        return 0; /* 空闲超时禁用 */
 
     time_t now = time (NULL);
     if (now - timer->last_activity > timer->idle_timeout) {
-        return -1;  /* 超时 */
+        return -1; /* 超时 */
     }
     return 0;
 }
@@ -243,38 +257,49 @@ hev_socks5_session_task_entry (void *data)
     if (pcb && pcb->local_port == 443) {
         /* 等待数据到达 */
         if (!tcp->queue) {
-            LOG_D ("%p session: SOCKS5 task waiting for TLS ClientHello data...", tcp);
+            LOG_D (
+                "%p session: SOCKS5 task waiting for TLS ClientHello data...",
+                tcp);
             for (int i = 0; i < 150 && !tcp->queue; i++) { /* 延长等待时间 */
                 hev_task_sleep (10);
             }
             if (!tcp->queue) {
-                LOG_W ("%p session: SOCKS5 task timed out waiting for TLS ClientHello data (1500ms)", tcp);
+                LOG_W (
+                    "%p session: SOCKS5 task timed out waiting for TLS ClientHello data (1500ms)",
+                    tcp);
             }
         }
 
         /* 尝试嗅探 */
         if (tcp->queue) {
-            LOG_D ("%p session: SOCKS5 task attempting to sniff TLS ClientHello (%d bytes in queue)",
-                   tcp, tcp->queue->tot_len);
-            
-            if (sniff_client_hello (tcp, &client_hello) == 0 && client_hello.detected) {
+            LOG_D (
+                "%p session: SOCKS5 task attempting to sniff TLS ClientHello (%d bytes in queue)",
+                tcp, tcp->queue->tot_len);
+
+            if (sniff_client_hello (tcp, &client_hello) == 0 &&
+                client_hello.detected) {
                 ipaddr_ntoa_r (&pcb->local_ip, dst_ip, sizeof (dst_ip));
-                
+
                 if (client_hello.sni[0]) {
-                    LOG_I ("%p session: SOCKS5 proxy detected TLS SNI: %s (target: %s:%d)",
-                           tcp, client_hello.sni, dst_ip, pcb->local_port);
+                    LOG_I (
+                        "%p session: SOCKS5 proxy detected TLS SNI: %s (target: %s:%d)",
+                        tcp, client_hello.sni, dst_ip, pcb->local_port);
                     // --- SNI-based ACL check ---
                     if (hev_filter_is_blocked_hostname (client_hello.sni)) {
-                        LOG_W ("%p session: SOCKS5 proxy blocked connection to SNI: %s (target: %s:%d)",
-                               tcp, client_hello.sni, dst_ip, pcb->local_port);
+                        LOG_W (
+                            "%p session: SOCKS5 proxy blocked connection to SNI: %s (target: %s:%d)",
+                            tcp, client_hello.sni, dst_ip, pcb->local_port);
                         goto exit_cleanup; // Terminate session
                     }
                 }
                 if (client_hello.alpn[0]) {
-                    LOG_I ("%p session: SOCKS5 proxy detected ALPN: %s", tcp, client_hello.alpn);
+                    LOG_I ("%p session: SOCKS5 proxy detected ALPN: %s", tcp,
+                           client_hello.alpn);
                 }
             } else {
-                LOG_D ("%p session: SOCKS5 TLS ClientHello not detected or parsing failed", tcp);
+                LOG_D (
+                    "%p session: SOCKS5 TLS ClientHello not detected or parsing failed",
+                    tcp);
             }
         }
     }
@@ -287,16 +312,21 @@ hev_socks5_session_task_entry (void *data)
                 hev_task_sleep (10);
             }
             if (!tcp->queue) {
-                LOG_W ("%p session: SOCKS5 task timed out waiting for HTTP data (1500ms)", tcp);
+                LOG_W (
+                    "%p session: SOCKS5 task timed out waiting for HTTP data (1500ms)",
+                    tcp);
             }
         }
-        if (tcp->queue && sniff_http_host (tcp, http_hostname, sizeof(http_hostname)) == 0) {
+        if (tcp->queue &&
+            sniff_http_host (tcp, http_hostname, sizeof (http_hostname)) == 0) {
             ipaddr_ntoa_r (&pcb->local_ip, dst_ip, sizeof (dst_ip));
-            LOG_I ("%p session: SOCKS5 proxy detected HTTP Host: %s (target: %s:%d)",
-                   tcp, http_hostname, dst_ip, pcb->local_port);
+            LOG_I (
+                "%p session: SOCKS5 proxy detected HTTP Host: %s (target: %s:%d)",
+                tcp, http_hostname, dst_ip, pcb->local_port);
             if (hev_filter_is_blocked_hostname (http_hostname)) {
-                LOG_W ("%p session: SOCKS5 proxy blocked connection to HTTP Host: %s (target: %s:%d)",
-                       tcp, http_hostname, dst_ip, pcb->local_port);
+                LOG_W (
+                    "%p session: SOCKS5 proxy blocked connection to HTTP Host: %s (target: %s:%d)",
+                    tcp, http_hostname, dst_ip, pcb->local_port);
                 goto exit_cleanup; // Terminate session
             }
         }
@@ -329,8 +359,8 @@ hev_session_manager_start_socks5_tcp (struct tcp_pcb *pcb)
 
     ipaddr_ntoa_r (&pcb->remote_ip, src_ip, sizeof (src_ip));
     ipaddr_ntoa_r (&pcb->local_ip, dst_ip, sizeof (dst_ip));
-    LOG_I ("%p session: SOCKS5 proxy started %s:%d -> %s:%d",
-           tcp, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
+    LOG_I ("%p session: SOCKS5 proxy started %s:%d -> %s:%d", tcp, src_ip,
+           pcb->remote_port, dst_ip, pcb->local_port);
 
     stack_size = hev_config_get_misc_task_stack_size ();
     task = hev_task_new (stack_size);
@@ -364,8 +394,8 @@ hev_session_manager_start_direct_tcp (struct tcp_pcb *pcb)
 
     ipaddr_ntoa_r (&pcb->remote_ip, src_ip, sizeof (src_ip));
     ipaddr_ntoa_r (&pcb->local_ip, dst_ip, sizeof (dst_ip));
-    LOG_I ("%p session: Direct connect started %s:%d -> %s:%d",
-           tcp, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
+    LOG_I ("%p session: Direct connect started %s:%d -> %s:%d", tcp, src_ip,
+           pcb->remote_port, dst_ip, pcb->local_port);
 
     stack_size = hev_config_get_misc_task_stack_size ();
     task = hev_task_new (stack_size);
@@ -399,8 +429,8 @@ hev_session_manager_start_smart_proxy (struct tcp_pcb *pcb)
 
     ipaddr_ntoa_r (&pcb->remote_ip, src_ip, sizeof (src_ip));
     ipaddr_ntoa_r (&pcb->local_ip, dst_ip, sizeof (dst_ip));
-    LOG_I ("%p session: Smart proxy started %s:%d -> %s:%d",
-           tcp, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
+    LOG_I ("%p session: Smart proxy started %s:%d -> %s:%d", tcp, src_ip,
+           pcb->remote_port, dst_ip, pcb->local_port);
 
     stack_size = hev_config_get_misc_task_stack_size ();
     task = hev_task_new (stack_size);
@@ -450,9 +480,9 @@ tcp_direct_splice_f (HevSocks5SessionTCP *self, HevIdleTimer *timer)
             /* 有数据传输,更新活动时间 */
             if (timer)
                 idle_timer_update (timer);
-            
+
             LOG_D ("%p session: forward sent %zd bytes", self, s);
-            
+
             hev_task_mutex_lock (self->mutex);
             self->queue = pbuf_free_header (self->queue, s);
             if (self->pcb)
@@ -487,9 +517,9 @@ tcp_direct_splice_b (HevSocks5SessionTCP *self, HevIdleTimer *timer)
             /* 有数据传输,更新活动时间 */
             if (timer)
                 idle_timer_update (timer);
-            
+
             LOG_D ("%p session: backward received %zd bytes", self, s);
-            
+
             hev_ring_buffer_write_finish (self->buffer, s);
             self->initial_data_received = 1;
         }
@@ -556,13 +586,14 @@ tcp_direct_splice_task_b (void *data)
     LOG_D ("%p session: backward splice task end", self);
 }
 
-
 /* 嗅探 HTTP Host */
 static int
-sniff_http_host (HevSocks5SessionTCP *self, char *hostname_buffer, size_t buffer_len)
+sniff_http_host (HevSocks5SessionTCP *self, char *hostname_buffer,
+                 size_t buffer_len)
 {
     struct pbuf *p;
-    unsigned char buffer[1024];  // Max size for initial HTTP request part + null terminator
+    unsigned char
+        buffer[1024]; // Max size for initial HTTP request part + null terminator
     size_t total_len = 0;
     char *request_start = NULL;
     char *host_header_start = NULL;
@@ -571,11 +602,12 @@ sniff_http_host (HevSocks5SessionTCP *self, char *hostname_buffer, size_t buffer
     char *get_url_end = NULL;
 
     // Copy data from queue (non-consuming)
-    for (p = self->queue; p && total_len < (sizeof(buffer) - 1); p = p->next) {
+    for (p = self->queue; p && total_len < (sizeof (buffer) - 1); p = p->next) {
         size_t copy_len = p->len;
-        if (total_len + copy_len >= sizeof(buffer)) // Ensure space for null terminator
-            copy_len = sizeof(buffer) - 1 - total_len; // Adjust copy_len
-        
+        if (total_len + copy_len >=
+            sizeof (buffer)) // Ensure space for null terminator
+            copy_len = sizeof (buffer) - 1 - total_len; // Adjust copy_len
+
         memcpy (buffer + total_len, p->payload, copy_len);
         total_len += copy_len;
     }
@@ -590,7 +622,7 @@ sniff_http_host (HevSocks5SessionTCP *self, char *hostname_buffer, size_t buffer
     // 1. Try to find Host: header
     host_header_start = strcasestr_custom (request_start, "\r\nHost: ");
     if (host_header_start) {
-        host_header_start += strlen("\r\nHost: ");
+        host_header_start += strlen ("\r\nHost: ");
         host_header_end = strstr (host_header_start, "\r\n");
         if (host_header_end) {
             size_t len = host_header_end - host_header_start;
@@ -605,12 +637,13 @@ sniff_http_host (HevSocks5SessionTCP *self, char *hostname_buffer, size_t buffer
     // 2. If no Host: header, try to find full URL in GET request line
     get_url_start = strcasestr_custom (request_start, "GET http://");
     if (get_url_start) {
-        get_url_start += strlen("GET http://");
+        get_url_start += strlen ("GET http://");
         get_url_end = strchr (get_url_start, '/'); // Find end of hostname
         if (!get_url_end) { // If no path, then it's just hostname
-            get_url_end = strchr (get_url_start, ' '); // Find end of hostname before HTTP version
+            get_url_end = strchr (
+                get_url_start, ' '); // Find end of hostname before HTTP version
         }
-        
+
         if (get_url_end) {
             size_t len = get_url_end - get_url_start;
             if (len > 0 && len < buffer_len) {
@@ -629,22 +662,22 @@ static int
 sniff_client_hello (HevSocks5SessionTCP *self, HevTLSClientHello *hello)
 {
     struct pbuf *p;
-    unsigned char buffer[1024];  /* ClientHello 通常在第一个包内 */
+    unsigned char buffer[1024]; /* ClientHello 通常在第一个包内 */
     size_t total_len = 0;
-    
+
     /* 从队列中复制数据(不消费) */
-    for (p = self->queue; p && total_len < sizeof(buffer); p = p->next) {
+    for (p = self->queue; p && total_len < sizeof (buffer); p = p->next) {
         size_t copy_len = p->len;
-        if (total_len + copy_len > sizeof(buffer))
-            copy_len = sizeof(buffer) - total_len;
-        
+        if (total_len + copy_len > sizeof (buffer))
+            copy_len = sizeof (buffer) - total_len;
+
         memcpy (buffer + total_len, p->payload, copy_len);
         total_len += copy_len;
     }
-    
-    if (total_len < 5)  /* 至少需要 TLS Record Header */
+
+    if (total_len < 5) /* 至少需要 TLS Record Header */
         return -1;
-    
+
     return hev_filter_parse_tls (self, buffer, total_len, hello);
 }
 
@@ -654,7 +687,8 @@ run_direct_connect_task (void *data)
     HevSocks5SessionTCP *self = data;
     HevSocks5Session *s = HEV_SOCKS5_SESSION (self);
     HevObjectClass *klass = HEV_OBJECT_GET_CLASS (s);
-    HevSocks5SessionIface *iface = klass->iface (HEV_OBJECT (s), HEV_SOCKS5_SESSION_TYPE);
+    HevSocks5SessionIface *iface =
+        klass->iface (HEV_OBJECT (s), HEV_SOCKS5_SESSION_TYPE);
     struct tcp_pcb *pcb = self->pcb;
     HevTask *task = iface->get_task (s);
     HevTask *task_b = NULL;
@@ -678,8 +712,8 @@ run_direct_connect_task (void *data)
     ipaddr_ntoa_r (&pcb->remote_ip, src_ip, sizeof (src_ip));
     ipaddr_ntoa_r (&pcb->local_ip, dst_ip, sizeof (dst_ip));
 
-    LOG_D ("%p session: direct connect task run %s:%d -> %s:%d",
-           self, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
+    LOG_D ("%p session: direct connect task run %s:%d -> %s:%d", self, src_ip,
+           pcb->remote_port, dst_ip, pcb->local_port);
 
     /* 等待一小段时间让数据到达队列 (仅对端口443) */
     if (pcb->local_port == 443 && !self->queue) {
@@ -688,41 +722,53 @@ run_direct_connect_task (void *data)
             hev_task_sleep (10);
         }
         if (!self->queue) {
-            LOG_W ("%p session: Direct connect task timed out waiting for TLS ClientHello data (1500ms)", self);
+            LOG_W (
+                "%p session: Direct connect task timed out waiting for TLS ClientHello data (1500ms)",
+                self);
         }
     }
 
     /* 尝试嗅探 TLS ClientHello (端口443) */
     if (self->queue && pcb->local_port == 443) {
-        LOG_D ("%p session: Attempting to sniff TLS ClientHello (%d bytes in queue)",
-               self, self->queue ? self->queue->tot_len : 0);
-        
-        if (sniff_client_hello (self, &client_hello) == 0 && client_hello.detected) {
+        LOG_D (
+            "%p session: Attempting to sniff TLS ClientHello (%d bytes in queue)",
+            self, self->queue ? self->queue->tot_len : 0);
+
+        if (sniff_client_hello (self, &client_hello) == 0 &&
+            client_hello.detected) {
             if (client_hello.sni[0]) {
-                LOG_I ("%p session: Direct connect detected TLS SNI: %s (target: %s:%d)",
-                       self, client_hello.sni, dst_ip, pcb->local_port);
+                LOG_I (
+                    "%p session: Direct connect detected TLS SNI: %s (target: %s:%d)",
+                    self, client_hello.sni, dst_ip, pcb->local_port);
                 // --- SNI-based ACL check ---
                 if (hev_filter_is_blocked_hostname (client_hello.sni)) {
-                    LOG_W ("%p session: Direct connect blocked connection to SNI: %s (target: %s:%d)",
-                           self, client_hello.sni, dst_ip, pcb->local_port);
+                    LOG_W (
+                        "%p session: Direct connect blocked connection to SNI: %s (target: %s:%d)",
+                        self, client_hello.sni, dst_ip, pcb->local_port);
                     goto exit_cleanup; // Terminate session
                 }
             }
             if (client_hello.alpn[0]) {
-                LOG_I ("%p session: Direct connect detected ALPN: %s", self, client_hello.alpn);
+                LOG_I ("%p session: Direct connect detected ALPN: %s", self,
+                       client_hello.alpn);
             }
         } else {
-            LOG_D ("%p session: TLS ClientHello not detected or parsing failed", self);
+            LOG_D ("%p session: TLS ClientHello not detected or parsing failed",
+                   self);
         }
     }
     // --- HTTP Hostname-based ACL check for ports 80/8080 ---
-    else if (self->queue && (pcb->local_port == 80 || pcb->local_port == 8080)) {
-        if (sniff_http_host (self, http_hostname, sizeof(http_hostname)) == 0) {
-            LOG_I ("%p session: Direct connect detected HTTP Host: %s (target: %s:%d)",
-                   self, http_hostname, dst_ip, pcb->local_port);
+    else if (self->queue &&
+             (pcb->local_port == 80 || pcb->local_port == 8080)) {
+        if (sniff_http_host (self, http_hostname, sizeof (http_hostname)) ==
+            0) {
+            LOG_I (
+                "%p session: Direct connect detected HTTP Host: %s (target: %s:%d)",
+                self, http_hostname, dst_ip, pcb->local_port);
             if (hev_filter_is_blocked_hostname (http_hostname)) {
-                LOG_W ("%p session: Direct connect blocked connection to HTTP Host: %s (target: %s:%d)",
-                       self, http_hostname, dst_ip, pcb->local_port);
+                LOG_W (
+                    "%p session: Direct connect blocked connection to HTTP Host: %s (target: %s:%d)",
+                    self, http_hostname, dst_ip, pcb->local_port);
                 goto exit_cleanup; // Terminate session
             }
         }
@@ -740,7 +786,7 @@ run_direct_connect_task (void *data)
     saddr_len = sizeof (struct sockaddr_in6);
     memset (sa6, 0, saddr_len);
     sa6->sin6_family = AF_INET6;
-    sa6->sin6_port = htons(pcb->local_port);
+    sa6->sin6_port = htons (pcb->local_port);
 
     if (IP_IS_V6 (&pcb->local_ip)) {
         memcpy (&sa6->sin6_addr, ip_2_ip6 (&pcb->local_ip), 16);
@@ -754,7 +800,8 @@ run_direct_connect_task (void *data)
     /* Create socket */
     fd = hev_task_io_socket_socket (AF_INET6, SOCK_STREAM, IPPROTO_TCP);
     if (fd < 0) {
-        LOG_E ("%p session: failed to create socket: %s", self, strerror (errno));
+        LOG_E ("%p session: failed to create socket: %s", self,
+               strerror (errno));
         goto exit_cleanup;
     }
 
@@ -770,22 +817,22 @@ run_direct_connect_task (void *data)
     /* 连接阶段:使用 connect_timeout */
     connect_start = time (NULL);
     hev_socks5_set_timeout (s, connect_timeout);
-    
-    LOG_D ("%p session: connecting to %s:%d (timeout=%dms)",
-           self, dst_ip, pcb->local_port, connect_timeout);
-    
+
+    LOG_D ("%p session: connecting to %s:%d (timeout=%dms)", self, dst_ip,
+           pcb->local_port, connect_timeout);
+
     if (hev_task_io_socket_connect (fd, (struct sockaddr *)&saddr, saddr_len,
                                     hev_socks5_task_io_yielder, s) < 0) {
         time_t connect_duration = time (NULL) - connect_start;
-        LOG_E ("%p session: direct connect failed after %ld seconds: %s",
-               self, connect_duration, strerror (errno));
+        LOG_E ("%p session: direct connect failed after %ld seconds: %s", self,
+               connect_duration, strerror (errno));
         hev_task_del_fd (task, fd);
         close (fd);
         goto exit_cleanup;
     }
 
-    LOG_I ("%p session: Direct connect established %s:%d -> %s:%d",
-           self, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
+    LOG_I ("%p session: Direct connect established %s:%d -> %s:%d", self,
+           src_ip, pcb->remote_port, dst_ip, pcb->local_port);
 
     /* Allocate ring buffer */
     tcp_buffer_size = hev_config_get_misc_tcp_buffer_size ();
@@ -840,8 +887,10 @@ run_direct_connect_task (void *data)
         if (res_f == 0) {
             if (idle_timer_check (&idle_timer) < 0) {
                 time_t idle_duration = time (NULL) - idle_timer.last_activity;
-                LOG_I ("%p session: Direct connect %s:%d -> %s:%d idle timeout (no activity for %ld seconds)",
-                       self, src_ip, pcb->remote_port, dst_ip, pcb->local_port, idle_duration);
+                LOG_I (
+                    "%p session: Direct connect %s:%d -> %s:%d idle timeout (no activity for %ld seconds)",
+                    self, src_ip, pcb->remote_port, dst_ip, pcb->local_port,
+                    idle_duration);
                 break;
             }
         }
@@ -858,9 +907,9 @@ run_direct_connect_task (void *data)
 
 cleanup_splice:
     LOG_D ("%p session: cleaning up connection", self);
-    
+
     HEV_SOCKS5 (s)->fd = -1;
-    
+
     /* 优雅关闭 */
     shutdown (fd, SHUT_RDWR);
     hev_task_del_fd (task, fd);
@@ -869,13 +918,16 @@ cleanup_splice:
 exit_cleanup:
     if (connect_start > 0) {
         session_duration = time (NULL) - connect_start;
-        LOG_I ("%p session: Direct connect %s:%d -> %s:%d ended (duration=%ld seconds)",
-               self, src_ip, pcb->remote_port, dst_ip, pcb->local_port, session_duration);
+        LOG_I (
+            "%p session: Direct connect %s:%d -> %s:%d ended (duration=%ld seconds)",
+            self, src_ip, pcb->remote_port, dst_ip, pcb->local_port,
+            session_duration);
     } else {
-        LOG_I ("%p session: Direct connect %s:%d -> %s:%d ended (failed before connection)",
-               self, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
+        LOG_I (
+            "%p session: Direct connect %s:%d -> %s:%d ended (failed before connection)",
+            self, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
     }
-    
+
     hev_socks5_session_terminate (s);
     hev_socks5_tunnel_delete_session (node);
     hev_object_unref (HEV_OBJECT (self));
@@ -898,7 +950,8 @@ smart_proxy_splice_task_b (void *data)
 
     fd = hev_task_io_dup (HEV_SOCKS5 (self)->fd);
     if (fd < 0) {
-        LOG_E ("%p session: failed to dup fd for smart proxy backward splice", self);
+        LOG_E ("%p session: failed to dup fd for smart proxy backward splice",
+               self);
         hev_free (task_data);
         return;
     }
@@ -925,7 +978,8 @@ run_smart_proxy_task (void *data)
     HevSocks5SessionTCP *self = data;
     HevSocks5Session *s = HEV_SOCKS5_SESSION (self);
     HevObjectClass *klass = HEV_OBJECT_GET_CLASS (s);
-    HevSocks5SessionIface *iface = klass->iface (HEV_OBJECT (s), HEV_SOCKS5_SESSION_TYPE);
+    HevSocks5SessionIface *iface =
+        klass->iface (HEV_OBJECT (s), HEV_SOCKS5_SESSION_TYPE);
     struct tcp_pcb *pcb = self->pcb;
     HevTask *task = iface->get_task (s);
     HevTask *task_b = NULL;
@@ -947,14 +1001,14 @@ run_smart_proxy_task (void *data)
     char http_hostname[256]; // Buffer for HTTP hostname
     int gfw_detected = 0;
     int first_loop = 1;
-    int probe_success = 0;  /* ✅ 新增：探测成功标志 */
+    int probe_success = 0; /* ✅ 新增：探测成功标志 */
     self->is_smart_proxy_probe = 1; //一个开关标记
 
     ipaddr_ntoa_r (&pcb->remote_ip, src_ip, sizeof (src_ip));
     ipaddr_ntoa_r (&pcb->local_ip, dst_ip, sizeof (dst_ip));
 
-    LOG_D ("%p session: smart proxy task run %s:%d -> %s:%d",
-           self, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
+    LOG_D ("%p session: smart proxy task run %s:%d -> %s:%d", self, src_ip,
+           pcb->remote_port, dst_ip, pcb->local_port);
 
     /* 等待数据到达队列（用于 SNI 检测） */
     if (pcb->local_port == 443 && !self->queue) {
@@ -963,39 +1017,50 @@ run_smart_proxy_task (void *data)
             hev_task_sleep (10);
         }
         if (!self->queue) {
-            LOG_W ("%p session: Smart proxy task timed out waiting for TLS ClientHello data (1500ms)", self);
+            LOG_W (
+                "%p session: Smart proxy task timed out waiting for TLS ClientHello data (1500ms)",
+                self);
         }
     }
 
     /* 尝试嗅探 TLS ClientHello */
     if (self->queue && pcb->local_port == 443) {
-        LOG_D ("%p session: Attempting to sniff TLS ClientHello (%d bytes in queue)",
-               self, self->queue ? self->queue->tot_len : 0);
-        
-        if (sniff_client_hello (self, &client_hello) == 0 && client_hello.detected) {
+        LOG_D (
+            "%p session: Attempting to sniff TLS ClientHello (%d bytes in queue)",
+            self, self->queue ? self->queue->tot_len : 0);
+
+        if (sniff_client_hello (self, &client_hello) == 0 &&
+            client_hello.detected) {
             if (client_hello.sni[0]) {
-                LOG_I ("%p session: Smart proxy detected TLS SNI: %s (target: %s:%d)",
-                       self, client_hello.sni, dst_ip, pcb->local_port);
+                LOG_I (
+                    "%p session: Smart proxy detected TLS SNI: %s (target: %s:%d)",
+                    self, client_hello.sni, dst_ip, pcb->local_port);
                 // --- SNI-based ACL check ---
                 if (hev_filter_is_blocked_hostname (client_hello.sni)) {
-                    LOG_W ("%p session: Smart proxy blocked connection to SNI: %s (target: %s:%d)",
-                           self, client_hello.sni, dst_ip, pcb->local_port);
+                    LOG_W (
+                        "%p session: Smart proxy blocked connection to SNI: %s (target: %s:%d)",
+                        self, client_hello.sni, dst_ip, pcb->local_port);
                     goto exit_cleanup; // Terminate session
                 }
             }
             if (client_hello.alpn[0]) {
-                LOG_I ("%p session: Smart proxy detected ALPN: %s", self, client_hello.alpn);
+                LOG_I ("%p session: Smart proxy detected ALPN: %s", self,
+                       client_hello.alpn);
             }
         }
     }
     // --- HTTP Hostname-based ACL check for ports 80/8080 ---
-    else if (self->queue && (pcb->local_port == 80 || pcb->local_port == 8080)) {
-        if (sniff_http_host (self, http_hostname, sizeof(http_hostname)) == 0) {
-            LOG_I ("%p session: Smart proxy detected HTTP Host: %s (target: %s:%d)",
-                   self, http_hostname, dst_ip, pcb->local_port);
+    else if (self->queue &&
+             (pcb->local_port == 80 || pcb->local_port == 8080)) {
+        if (sniff_http_host (self, http_hostname, sizeof (http_hostname)) ==
+            0) {
+            LOG_I (
+                "%p session: Smart proxy detected HTTP Host: %s (target: %s:%d)",
+                self, http_hostname, dst_ip, pcb->local_port);
             if (hev_filter_is_blocked_hostname (http_hostname)) {
-                LOG_W ("%p session: Smart proxy blocked connection to HTTP Host: %s (target: %s:%d)",
-                       self, http_hostname, dst_ip, pcb->local_port);
+                LOG_W (
+                    "%p session: Smart proxy blocked connection to HTTP Host: %s (target: %s:%d)",
+                    self, http_hostname, dst_ip, pcb->local_port);
                 goto exit_cleanup; // Terminate session
             }
         }
@@ -1039,27 +1104,30 @@ run_smart_proxy_task (void *data)
     timeout = hev_config_get_smart_proxy_timeout_ms ();
     hev_socks5_set_timeout (s, timeout);
     connect_start = time (NULL);
-    
-    LOG_D ("%p session: smart proxy attempting TCP handshake to %s:%d (timeout=%dms)",
-           self, dst_ip, pcb->local_port, timeout);
-    
+
+    LOG_D (
+        "%p session: smart proxy attempting TCP handshake to %s:%d (timeout=%dms)",
+        self, dst_ip, pcb->local_port, timeout);
+
     if (hev_task_io_socket_connect (fd, (struct sockaddr *)&saddr, saddr_len,
                                     hev_socks5_task_io_yielder, s) < 0) {
         time_t connect_duration = time (NULL) - connect_start;
-        
-        LOG_W ("%p session: Smart proxy TCP handshake FAILED to %s:%d after %ld ms, "
-               "fallback to SOCKS5 (NOT blacklisting - may be temporary network issue)",
-               self, dst_ip, pcb->local_port, connect_duration * 1000);
-        
+
+        LOG_W (
+            "%p session: Smart proxy TCP handshake FAILED to %s:%d after %ld ms, "
+            "fallback to SOCKS5 (NOT blacklisting - may be temporary network issue)",
+            self, dst_ip, pcb->local_port, connect_duration * 1000);
+
         hev_task_del_fd (task, fd);
         close (fd);
         goto fallback_socks5;
     }
 
     connect_success_time = time (NULL);
-    LOG_I ("%p session: Smart proxy TCP handshake SUCCESS %s:%d -> %s:%d (took %ld ms)",
-           self, src_ip, pcb->remote_port, dst_ip, pcb->local_port,
-           (connect_success_time - connect_start) * 1000);
+    LOG_I (
+        "%p session: Smart proxy TCP handshake SUCCESS %s:%d -> %s:%d (took %ld ms)",
+        self, src_ip, pcb->remote_port, dst_ip, pcb->local_port,
+        (connect_success_time - connect_start) * 1000);
 
     /* ====================================================================
        🔍 阶段 2：等待服务器数据并验证
@@ -1080,7 +1148,8 @@ run_smart_proxy_task (void *data)
     stack_size = hev_config_get_misc_task_stack_size ();
     task_b = hev_task_new (stack_size);
     if (!task_b) {
-        LOG_E ("%p session: smart proxy failed to create backward splice task", self);
+        LOG_E ("%p session: smart proxy failed to create backward splice task",
+               self);
         goto cleanup_splice;
     }
 
@@ -1100,43 +1169,48 @@ run_smart_proxy_task (void *data)
     if (hev_task_mod_fd (task, fd, POLLOUT) < 0)
         hev_task_add_fd (task, fd, POLLOUT);
 
-    LOG_D ("%p session: smart proxy waiting for initial data from server (timeout=%dms)",
-           self, timeout);
+    LOG_D (
+        "%p session: smart proxy waiting for initial data from server (timeout=%dms)",
+        self, timeout);
 
     /* ====================================================================
        🔍 数据传输循环，检测真实数据
        ==================================================================== */
     for (;;) {
         int res_f = tcp_direct_splice_f (self, &idle_timer);
-        
+
         /* ====================================================================
            🔧 关键修复：先验证数据，再处理连接结束
            ==================================================================== */
-        
+
         /* 🔍 关键检测点:收到数据后验证是否为真实应用数据 */
-        if (first_loop && self->initial_data_received && self->is_smart_proxy_probe) {
+        if (first_loop && self->initial_data_received &&
+            self->is_smart_proxy_probe) {
             time_t elapsed_ms = (time (NULL) - connect_success_time) * 1000;
             struct iovec iov[2];
             int iovc = hev_ring_buffer_reading (self->buffer, iov);
             int is_valid_response = 0;
-            
+
             if (iovc > 0 && iov[0].iov_len > 0) {
                 unsigned char *data = (unsigned char *)iov[0].iov_base;
                 unsigned char first_byte = data[0];
-                
+
                 /* 🔍 检测 HTTP (端口 80, 8080) */
                 if (pcb->local_port == 80 || pcb->local_port == 8080) {
-                    if (iov[0].iov_len >= 7 && 
-                        (memcmp (data, "HTTP/1.", 7) == 0 || 
+                    if (iov[0].iov_len >= 7 &&
+                        (memcmp (data, "HTTP/1.", 7) == 0 ||
                          memcmp (data, "HTTP/2", 6) == 0)) {
-                        LOG_I ("%p session: ✅ Smart proxy SUCCESS for HTTP port %d: "
-                               "Valid HTTP response from %s (data received in %ld ms)",
-                               self, pcb->local_port, dst_ip, elapsed_ms);
+                        LOG_I (
+                            "%p session: ✅ Smart proxy SUCCESS for HTTP port %d: "
+                            "Valid HTTP response from %s (data received in %ld ms)",
+                            self, pcb->local_port, dst_ip, elapsed_ms);
                         is_valid_response = 1;
                     } else {
-                        LOG_W ("%p session: ❌ Smart proxy received INVALID HTTP response on port %d from %s "
-                               "(expected 'HTTP/', got %d bytes starting with 0x%02x), BLACKLIST",
-                               self, pcb->local_port, dst_ip, (int)iov[0].iov_len, first_byte);
+                        LOG_W (
+                            "%p session: ❌ Smart proxy received INVALID HTTP response on port %d from %s "
+                            "(expected 'HTTP/', got %d bytes starting with 0x%02x), BLACKLIST",
+                            self, pcb->local_port, dst_ip, (int)iov[0].iov_len,
+                            first_byte);
                         hev_traffic_router_blacklist_add (&pcb->local_ip);
                         gfw_detected = 1;
                         break;
@@ -1144,28 +1218,34 @@ run_smart_proxy_task (void *data)
                 }
                 /* 🔍 检测 HTTPS (端口 443) */
                 else if (pcb->local_port == 443) {
-                    if (first_byte == 0x14 || first_byte == 0x16 || first_byte == 0x17) {
+                    if (first_byte == 0x14 || first_byte == 0x16 ||
+                        first_byte == 0x17) {
                         /* ✅ Valid TLS: ChangeCipherSpec (0x14), Handshake (0x16), Application Data (0x17) */
-                        const char *tls_type = (first_byte == 0x14) ? "ChangeCipherSpec" :
-                                               (first_byte == 0x16) ? "Handshake (ServerHello)" : 
-                                               "Application Data";
-                        LOG_I ("%p session: ✅ Smart proxy SUCCESS for HTTPS: "
-                               "Valid TLS %s (0x%02x) from %s:%d (data received in %ld ms)",
-                               self, tls_type, first_byte, dst_ip, pcb->local_port, elapsed_ms);
+                        const char *tls_type =
+                            (first_byte == 0x14) ? "ChangeCipherSpec" :
+                            (first_byte == 0x16) ? "Handshake (ServerHello)" :
+                                                   "Application Data";
+                        LOG_I (
+                            "%p session: ✅ Smart proxy SUCCESS for HTTPS: "
+                            "Valid TLS %s (0x%02x) from %s:%d (data received in %ld ms)",
+                            self, tls_type, first_byte, dst_ip, pcb->local_port,
+                            elapsed_ms);
                         is_valid_response = 1;
                     } else if (first_byte == 0x15) {
                         /* ❌ TLS Alert (服务器拒绝,如 SNI 不匹配) */
-                        LOG_W ("%p session: ❌ Smart proxy received TLS Alert (0x15) from %s:%d "
-                               "(likely SNI mismatch or certificate error), BLACKLIST",
-                               self, dst_ip, pcb->local_port);
+                        LOG_W (
+                            "%p session: ❌ Smart proxy received TLS Alert (0x15) from %s:%d "
+                            "(likely SNI mismatch or certificate error), BLACKLIST",
+                            self, dst_ip, pcb->local_port);
                         hev_traffic_router_blacklist_add (&pcb->local_ip);
                         gfw_detected = 1;
                         break;
                     } else {
                         /* ❌ Invalid TLS response */
-                        LOG_W ("%p session: ❌ Smart proxy received INVALID TLS response (0x%02x) from %s:%d "
-                               "(expected 0x14/0x16/0x17), BLACKLIST",
-                               self, first_byte, dst_ip, pcb->local_port);
+                        LOG_W (
+                            "%p session: ❌ Smart proxy received INVALID TLS response (0x%02x) from %s:%d "
+                            "(expected 0x14/0x16/0x17), BLACKLIST",
+                            self, first_byte, dst_ip, pcb->local_port);
                         hev_traffic_router_blacklist_add (&pcb->local_ip);
                         gfw_detected = 1;
                         break;
@@ -1173,22 +1253,24 @@ run_smart_proxy_task (void *data)
                 }
                 /* 🔍 其他端口:任意数据都算成功 */
                 else {
-                    LOG_I ("%p session: ✅ Smart proxy SUCCESS for port %d: "
-                           "Received %zu bytes from %s (data received in %ld ms)",
-                           self, pcb->local_port, iov[0].iov_len, dst_ip, elapsed_ms);
+                    LOG_I (
+                        "%p session: ✅ Smart proxy SUCCESS for port %d: "
+                        "Received %zu bytes from %s (data received in %ld ms)",
+                        self, pcb->local_port, iov[0].iov_len, dst_ip,
+                        elapsed_ms);
                     is_valid_response = 1;
                 }
             }
-            
+
             if (is_valid_response) {
                 /* ✅ 收到真实数据,标记探测成功 */
-                probe_success = 1;  /* 🔧 关键修复:设置成功标志 */
+                probe_success = 1; /* 🔧 关键修复:设置成功标志 */
                 LOG_I ("%p session: ✅ Smart proxy probe SUCCESS for %s:%d "
                        "(handshake OK + valid application data in %ld ms), "
                        "NOT blacklisting, continue direct connection",
                        self, dst_ip, pcb->local_port, elapsed_ms);
                 hev_socks5_set_timeout (s, 0);
-                first_loop = 0;  /* 🔧 退出探测循环 */
+                first_loop = 0; /* 🔧 退出探测循环 */
             } else if (elapsed_ms >= timeout) {
                 /* ❌ 超时无数据(严格按照 timeout-ms 判断) */
                 LOG_W ("%p session: ❌ Smart proxy TIMEOUT for %s:%d "
@@ -1201,20 +1283,22 @@ run_smart_proxy_task (void *data)
             }
             /* 否则继续等待数据 */
         }
-        
+
         /* ====================================================================
            🔧 关键修复：处理连接结束，但区分探测成功和失败
            ==================================================================== */
         if (res_f < 0) {
             if (probe_success) {
                 /* ✅ 探测已成功，客户端关闭是正常的（HTTP 短连接） */
-                LOG_D ("%p session: forward splice ended after successful probe "
-                       "(HTTP short connection is normal behavior)",
-                       self);
+                LOG_D (
+                    "%p session: forward splice ended after successful probe "
+                    "(HTTP short connection is normal behavior)",
+                    self);
             } else if (first_loop) {
                 /* ❌ 探测未完成就结束，认为失败 */
-                LOG_D ("%p session: forward splice ended during probe (probe incomplete, considered failed)",
-                       self);
+                LOG_D (
+                    "%p session: forward splice ended during probe (probe incomplete, considered failed)",
+                    self);
             } else {
                 /* 正常结束 */
                 LOG_D ("%p session: forward splice ended normally", self);
@@ -1228,7 +1312,8 @@ run_smart_proxy_task (void *data)
                 time_t idle_duration = time (NULL) - idle_timer.last_activity;
                 LOG_I ("%p session: Smart proxy %s:%d -> %s:%d idle timeout "
                        "(no activity for %ld seconds)",
-                       self, src_ip, pcb->remote_port, dst_ip, pcb->local_port, idle_duration);
+                       self, src_ip, pcb->remote_port, dst_ip, pcb->local_port,
+                       idle_duration);
                 break;
             }
         }
@@ -1246,49 +1331,53 @@ cleanup_splice:
     shutdown (fd, SHUT_RDWR);
     hev_task_del_fd (task, fd);
     close (fd);
-    
+
     if (connect_success_time > 0) {
         session_duration = time (NULL) - connect_success_time;
-        
+
         if (gfw_detected) {
             LOG_I ("%p session: ❌ Smart proxy FAILED %s:%d -> %s:%d "
                    "(detected issue, fallback to SOCKS5)",
                    self, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
         } else if (probe_success) {
-            LOG_I ("%p session: ✅ Smart proxy direct connect %s:%d -> %s:%d ended "
-                   "(duration=%ld seconds, probe was successful)",
-                   self, src_ip, pcb->remote_port, dst_ip, pcb->local_port, session_duration);
+            LOG_I (
+                "%p session: ✅ Smart proxy direct connect %s:%d -> %s:%d ended "
+                "(duration=%ld seconds, probe was successful)",
+                self, src_ip, pcb->remote_port, dst_ip, pcb->local_port,
+                session_duration);
         } else {
-            LOG_I ("%p session: Smart proxy direct connect %s:%d -> %s:%d ended "
-                   "(duration=%ld seconds)",
-                   self, src_ip, pcb->remote_port, dst_ip, pcb->local_port, session_duration);
+            LOG_I (
+                "%p session: Smart proxy direct connect %s:%d -> %s:%d ended "
+                "(duration=%ld seconds)",
+                self, src_ip, pcb->remote_port, dst_ip, pcb->local_port,
+                session_duration);
         }
     }
-    
+
     /* ====================================================================
        🔧 关键修复：只有真正失败才走 fallback，探测成功就正常结束
        ==================================================================== */
     if (gfw_detected) {
         goto fallback_socks5;
     }
-    
+
     /* ✅ 探测成功或正常结束，不走 SOCKS5 回退 */
     goto exit_cleanup; // Replaced return with goto exit_cleanup
 
 fallback_socks5:
     LOG_I ("%p session: Smart proxy falling back to SOCKS5 for %s:%d -> %s:%d",
            self, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
-    
+
     /* 重置 buffer 指针，让 SOCKS5 可以复用 */
     if (self->buffer) {
         LOG_D ("%p session: Smart proxy buffer will be reused by SOCKS5", self);
     }
-    
+
     hev_socks5_session_run (s);
-    
-    LOG_I ("%p session: SOCKS5 proxy session ended %s:%d -> %s:%d",
-           self, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
-    
+
+    LOG_I ("%p session: SOCKS5 proxy session ended %s:%d -> %s:%d", self,
+           src_ip, pcb->remote_port, dst_ip, pcb->local_port);
+
 exit_cleanup: // Added exit_cleanup label
     hev_socks5_session_terminate (s);
     hev_socks5_tunnel_delete_session (node);
@@ -1299,7 +1388,8 @@ exit_cleanup: // Added exit_cleanup label
    UDP Direct Connect Implementation (继续保持完整...)
    ============================================================================ */
 
-typedef struct _HevDirectUDPSession {
+typedef struct _HevDirectUDPSession
+{
     struct udp_pcb *pcb;
     HevTaskMutex *mutex;
     HevTask *task_main;
@@ -1307,15 +1397,15 @@ typedef struct _HevDirectUDPSession {
     HevListNode node;
     int fd;
     int alive;
-    
+
     HevList packet_queue;
     int queue_count;
-    
+
     ip_addr_t dest_ip;
     u16_t dest_port;
     ip_addr_t src_ip;
     u16_t src_port;
-    
+
     time_t last_activity;
     time_t session_start;
     ip_addr_t orig_dest_ip;
@@ -1326,7 +1416,8 @@ typedef struct _HevDirectUDPSession {
 #define UDP_ALIVE_RECV 0x02
 #define UDP_IDLE_TIMEOUT 300
 
-typedef struct _HevUDPPacket {
+typedef struct _HevUDPPacket
+{
     HevListNode node;
     struct pbuf *data;
 } HevUDPPacket;
@@ -1343,8 +1434,8 @@ direct_udp_cleanup (HevDirectUDPSession *session)
     ipaddr_ntoa_r (&session->dest_ip, dst_ip, sizeof (dst_ip));
     session_duration = time (NULL) - session->session_start;
 
-    LOG_D ("%p session: UDP cleanup started %s:%d -> %s:%d",
-           session, src_ip, session->src_port, dst_ip, session->dest_port);
+    LOG_D ("%p session: UDP cleanup started %s:%d -> %s:%d", session, src_ip,
+           session->src_port, dst_ip, session->dest_port);
 
     if (session->fd >= 0) {
         if (session->task_main)
@@ -1377,9 +1468,10 @@ direct_udp_cleanup (HevDirectUDPSession *session)
                session, dropped_packets);
     }
 
-    LOG_I ("%p session: UDP Direct connect %s:%d -> %s:%d ended (duration=%ld seconds, packets_dropped=%d)",
-           session, src_ip, session->src_port, dst_ip, session->dest_port,
-           session_duration, dropped_packets);
+    LOG_I (
+        "%p session: UDP Direct connect %s:%d -> %s:%d ended (duration=%ld seconds, packets_dropped=%d)",
+        session, src_ip, session->src_port, dst_ip, session->dest_port,
+        session_duration, dropped_packets);
 
     hev_socks5_tunnel_delete_session (&session->node);
     hev_free (session);
@@ -1387,13 +1479,15 @@ direct_udp_cleanup (HevDirectUDPSession *session)
 
 static void
 direct_udp_recv_handler (void *arg, struct udp_pcb *pcb, struct pbuf *p,
-                        const ip_addr_t *addr, u16_t port)
+                         const ip_addr_t *addr, u16_t port)
 {
     HevDirectUDPSession *session = arg;
     HevUDPPacket *pkt;
 
     if (!p) {
-        LOG_D ("%p session: UDP recv_handler got NULL pbuf, closing send direction", session);
+        LOG_D (
+            "%p session: UDP recv_handler got NULL pbuf, closing send direction",
+            session);
         session->alive &= ~UDP_ALIVE_SEND;
         if (session->task_main)
             hev_task_wakeup (session->task_main);
@@ -1403,8 +1497,9 @@ direct_udp_recv_handler (void *arg, struct udp_pcb *pcb, struct pbuf *p,
     session->last_activity = time (NULL);
 
     if (session->queue_count > 100) {
-        LOG_W ("%p session: UDP queue full (%d packets), dropping packet of %d bytes",
-               session, session->queue_count, p->tot_len);
+        LOG_W (
+            "%p session: UDP queue full (%d packets), dropping packet of %d bytes",
+            session, session->queue_count, p->tot_len);
         pbuf_free (p);
         return;
     }
@@ -1421,10 +1516,10 @@ direct_udp_recv_handler (void *arg, struct udp_pcb *pcb, struct pbuf *p,
 
     session->queue_count++;
     hev_list_add_tail (&session->packet_queue, &pkt->node);
-    
-    LOG_D ("%p session: UDP queued packet (%d bytes, queue_size=%d)",
-           session, p->tot_len, session->queue_count);
-    
+
+    LOG_D ("%p session: UDP queued packet (%d bytes, queue_size=%d)", session,
+           p->tot_len, session->queue_count);
+
     if (session->task_main)
         hev_task_wakeup (session->task_main);
 }
@@ -1446,13 +1541,13 @@ direct_udp_recv_task (void *data)
     ipaddr_ntoa_r (&session->src_ip, src_ip, sizeof (src_ip));
     ipaddr_ntoa_r (&session->dest_ip, dst_ip, sizeof (dst_ip));
 
-    LOG_D ("%p session: UDP recv task start %s:%d <- %s:%d",
-           session, src_ip, session->src_port, dst_ip, session->dest_port);
+    LOG_D ("%p session: UDP recv task start %s:%d <- %s:%d", session, src_ip,
+           session->src_port, dst_ip, session->dest_port);
 
     fd = hev_task_io_dup (session->fd);
     if (fd < 0) {
-        LOG_E ("%p session: UDP recv task failed to dup fd: %s",
-               session, strerror(errno));
+        LOG_E ("%p session: UDP recv task failed to dup fd: %s", session,
+               strerror (errno));
         session->alive &= ~UDP_ALIVE_RECV;
         return;
     }
@@ -1466,24 +1561,27 @@ direct_udp_recv_task (void *data)
 
     while (session->alive & UDP_ALIVE_RECV) {
         addr_len = sizeof (remote_addr);
-        
+
         time_t now = time (NULL);
         time_t idle_time = now - session->last_activity;
         if (idle_time > UDP_IDLE_TIMEOUT) {
-            LOG_I ("%p session: UDP recv task idle timeout (no activity for %ld seconds)", 
-                   session, idle_time);
+            LOG_I (
+                "%p session: UDP recv task idle timeout (no activity for %ld seconds)",
+                session, idle_time);
             break;
         }
 
         ssize_t received = recvfrom (fd, buffer, sizeof (buffer), 0,
-                                    (struct sockaddr *)&remote_addr, &addr_len);
+                                     (struct sockaddr *)&remote_addr,
+                                     &addr_len);
 
         if (received < 0) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 hev_task_yield (HEV_TASK_WAITIO);
                 continue;
             }
-            LOG_E ("%p session: UDP recvfrom failed: %s", session, strerror (errno));
+            LOG_E ("%p session: UDP recvfrom failed: %s", session,
+                   strerror (errno));
             break;
         }
 
@@ -1496,42 +1594,47 @@ direct_udp_recv_task (void *data)
         total_received_bytes += received;
         total_received_packets++;
 
-        LOG_D ("%p session: UDP received %zd bytes from server (total=%zu packets, %zu bytes)",
-               session, received, total_received_packets, total_received_bytes);
+        LOG_D (
+            "%p session: UDP received %zd bytes from server (total=%zu packets, %zu bytes)",
+            session, received, total_received_packets, total_received_bytes);
 
         struct pbuf *p = pbuf_alloc (PBUF_TRANSPORT, received, PBUF_RAM);
         if (p) {
             memcpy (p->payload, buffer, received);
-            
+
             hev_task_mutex_lock (session->mutex);
             if (session->pcb) {
                 char orig_dst_ip[INET6_ADDRSTRLEN];
-                ipaddr_ntoa_r (&session->orig_dest_ip, orig_dst_ip, sizeof (orig_dst_ip));
+                ipaddr_ntoa_r (&session->orig_dest_ip, orig_dst_ip,
+                               sizeof (orig_dst_ip));
                 LOG_D ("%p session: UDP sending from spoofed source %s:%d",
                        session, orig_dst_ip, session->orig_dest_port);
                 err_t err = udp_sendfrom (session->pcb, p,
-                                         &session->orig_dest_ip,
-                                         session->orig_dest_port);
+                                          &session->orig_dest_ip,
+                                          session->orig_dest_port);
                 if (err != ERR_OK) {
-                    LOG_E ("%p session: UDP udp_sendfrom failed: %d", session, err);
+                    LOG_E ("%p session: UDP udp_sendfrom failed: %d", session,
+                           err);
                 } else {
                     LOG_D ("%p session: UDP forwarded %d bytes to client %s:%d",
                            session, received, src_ip, session->src_port);
                 }
             } else {
-                LOG_W ("%p session: UDP pcb is NULL, cannot forward packet", session);
+                LOG_W ("%p session: UDP pcb is NULL, cannot forward packet",
+                       session);
             }
             hev_task_mutex_unlock (session->mutex);
             pbuf_free (p);
         } else {
-            LOG_E ("%p session: UDP failed to allocate pbuf for %zd bytes", session, received);
+            LOG_E ("%p session: UDP failed to allocate pbuf for %zd bytes",
+                   session, received);
         }
     }
 
     session->alive &= ~UDP_ALIVE_RECV;
     hev_task_del_fd (task, fd);
     close (fd);
-    
+
     LOG_D ("%p session: UDP recv task end (received %zu packets, %zu bytes)",
            session, total_received_packets, total_received_bytes);
 }
@@ -1551,19 +1654,21 @@ run_direct_udp_task (void *data)
     ipaddr_ntoa_r (&session->src_ip, src_ip, sizeof (src_ip));
     ipaddr_ntoa_r (&session->dest_ip, dst_ip, sizeof (dst_ip));
 
-    LOG_D ("%p session: UDP send task start %s:%d -> %s:%d",
-           session, src_ip, session->src_port, dst_ip, session->dest_port);
+    LOG_D ("%p session: UDP send task start %s:%d -> %s:%d", session, src_ip,
+           session->src_port, dst_ip, session->dest_port);
 
     session->last_activity = get_current_time_seconds ();
     session->session_start = get_current_time_seconds ();
 
     /* Log with millisecond precision for debugging */
     time_t current_ms = get_current_time_ms ();
-    LOG_D ("%p session: UDP session created at %ld ms", session, current_ms % 1000);
+    LOG_D ("%p session: UDP session created at %ld ms", session,
+           current_ms % 1000);
 
     session->fd = hev_task_io_socket_socket (AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
     if (session->fd < 0) {
-        LOG_E ("%p session: UDP failed to create socket: %s", session, strerror (errno));
+        LOG_E ("%p session: UDP failed to create socket: %s", session,
+               strerror (errno));
         goto cleanup;
     }
 
@@ -1587,7 +1692,8 @@ run_direct_udp_task (void *data)
 
     if (IP_IS_V6 (&session->dest_ip)) {
         memcpy (&sa6->sin6_addr, ip_2_ip6 (&session->dest_ip), 16);
-        LOG_D ("%p session: UDP target is IPv6: %s:%d", session, dst_ip, session->dest_port);
+        LOG_D ("%p session: UDP target is IPv6: %s:%d", session, dst_ip,
+               session->dest_port);
     } else {
         u8_t *addr_bytes = (u8_t *)&sa6->sin6_addr;
         addr_bytes[10] = 0xff;
@@ -1609,8 +1715,8 @@ run_direct_udp_task (void *data)
 
     session->alive = UDP_ALIVE_SEND | UDP_ALIVE_RECV;
 
-    LOG_I ("%p session: UDP Direct connect established %s:%d -> %s:%d",
-           session, src_ip, session->src_port, dst_ip, session->dest_port);
+    LOG_I ("%p session: UDP Direct connect established %s:%d -> %s:%d", session,
+           src_ip, session->src_port, dst_ip, session->dest_port);
 
     for (;;) {
         HevListNode *node = hev_list_first (&session->packet_queue);
@@ -1619,15 +1725,16 @@ run_direct_udp_task (void *data)
                 LOG_D ("%p session: UDP send direction closed", session);
                 break;
             }
-            
+
             time_t now = get_current_time_seconds ();
             time_t idle_time = now - session->last_activity;
             if (idle_time > UDP_IDLE_TIMEOUT) {
-                LOG_I ("%p session: UDP send task idle timeout (no activity for %ld seconds)", 
-                       session, idle_time);
+                LOG_I (
+                    "%p session: UDP send task idle timeout (no activity for %ld seconds)",
+                    session, idle_time);
                 break;
             }
-            
+
             hev_task_yield (HEV_TASK_WAITIO);
             continue;
         }
@@ -1639,7 +1746,7 @@ run_direct_udp_task (void *data)
             unsigned char *data = (unsigned char *)p->payload;
             uint16_t check_port = (data[2] << 8) | data[3];
             if (check_port == session->dest_port) {
-                if (pbuf_remove_header(p, 8) != 0) {
+                if (pbuf_remove_header (p, 8) != 0) {
                     LOG_E ("%p session: UDP failed to remove header", session);
                     hev_list_del (&session->packet_queue, node);
                     pbuf_free (p);
@@ -1652,21 +1759,23 @@ run_direct_udp_task (void *data)
         }
 
         ssize_t sent = sendto (session->fd, p->payload, p->len, 0,
-                              (struct sockaddr *)&dest_addr, addr_len);
+                               (struct sockaddr *)&dest_addr, addr_len);
 
         if (sent < 0) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 hev_task_yield (HEV_TASK_WAITIO);
                 continue;
             }
-            LOG_W ("%p session: UDP sendto failed: %s", session, strerror (errno));
+            LOG_W ("%p session: UDP sendto failed: %s", session,
+                   strerror (errno));
         } else {
             session->last_activity = get_current_time_seconds ();
             total_sent_bytes += sent;
             total_sent_packets++;
-            
-            LOG_D ("%p session: UDP sent %zd bytes to server (total=%zu packets, %zu bytes)",
-                   session, sent, total_sent_packets, total_sent_bytes);
+
+            LOG_D (
+                "%p session: UDP sent %zd bytes to server (total=%zu packets, %zu bytes)",
+                session, sent, total_sent_packets, total_sent_bytes);
         }
 
         hev_list_del (&session->packet_queue, node);
@@ -1683,16 +1792,17 @@ run_direct_udp_task (void *data)
     hev_task_unref (session->task_recv);
 
 cleanup:
-    LOG_I ("%p session: UDP Direct connect cleanup (sent %zu packets/%zu bytes, alive=0x%02x)",
-           session, total_sent_packets, total_sent_bytes, session->alive);
+    LOG_I (
+        "%p session: UDP Direct connect cleanup (sent %zu packets/%zu bytes, alive=0x%02x)",
+        session, total_sent_packets, total_sent_bytes, session->alive);
     direct_udp_cleanup (session);
 }
 
 void
 hev_session_manager_start_direct_udp (struct udp_pcb *pcb,
-                                     const ip_addr_t *addr, u16_t port,
-                                     const ip_addr_t *orig_addr, u16_t orig_port,
-                                     struct pbuf *p)
+                                      const ip_addr_t *addr, u16_t port,
+                                      const ip_addr_t *orig_addr,
+                                      u16_t orig_port, struct pbuf *p)
 {
     HevDirectUDPSession *session;
     HevUDPPacket *pkt;
@@ -1737,16 +1847,17 @@ hev_session_manager_start_direct_udp (struct udp_pcb *pcb,
         hev_list_add_tail (&session->packet_queue, &pkt->node);
         session->queue_count = 1;
     } else {
-        LOG_W ("%p session: UDP failed to allocate first packet structure", session);
+        LOG_W ("%p session: UDP failed to allocate first packet structure",
+               session);
         pbuf_free (p);
     }
 
     ipaddr_ntoa_r (&session->src_ip, src_ip, sizeof (src_ip));
     ipaddr_ntoa_r (&session->dest_ip, dst_ip, sizeof (dst_ip));
-    
-    LOG_I ("%p session: UDP Direct connect started %s:%d -> %s:%d (first_packet=%d bytes)",
-           session, src_ip, session->src_port, dst_ip, port,
-           p ? p->tot_len : 0);
+
+    LOG_I (
+        "%p session: UDP Direct connect started %s:%d -> %s:%d (first_packet=%d bytes)",
+        session, src_ip, session->src_port, dst_ip, port, p ? p->tot_len : 0);
 
     hev_socks5_tunnel_insert_session (&session->node);
     hev_task_run (task, run_direct_udp_task, session);

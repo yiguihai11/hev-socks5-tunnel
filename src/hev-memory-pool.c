@@ -23,10 +23,10 @@ static HevMemoryPool udp_pool = {
     .current_size = UDP_POOL_SIZE_DEFAULT,
     .min_size = UDP_POOL_SIZE_MIN,
     .max_size = UDP_POOL_SIZE_MAX,
-    .high_watermark = 0.8,    // 80%时考虑扩容
-    .low_watermark = 0.3,     // 30%时考虑缩容
+    .high_watermark = 0.8, // 80%时考虑扩容
+    .low_watermark = 0.3, // 30%时考虑缩容
     .last_adjust_time = 0,
-    .adjust_interval = 30      // 30秒调整一次
+    .adjust_interval = 30 // 30秒调整一次
 };
 
 /* 获取当前时间（秒） */
@@ -53,16 +53,18 @@ should_adjust_pool_size (int current_usage, int total_capacity)
     /* 高水位检查：使用率超过80%且未达到最大值 */
     if (usage_ratio > udp_pool.high_watermark &&
         udp_pool.current_size < udp_pool.max_size) {
-        LOG_D ("memory_pool: High usage detected %.2f%% (%d/%d), considering expansion",
-               usage_ratio * 100, current_usage, total_capacity);
-        return 1;  // 需要扩容
+        LOG_D (
+            "memory_pool: High usage detected %.2f%% (%d/%d), considering expansion",
+            usage_ratio * 100, current_usage, total_capacity);
+        return 1; // 需要扩容
     }
 
     /* 低水位检查：使用率低于30%且大于最小值 */
     if (usage_ratio < udp_pool.low_watermark &&
         udp_pool.current_size > udp_pool.min_size) {
-        LOG_D ("memory_pool: Low usage detected %.2f%% (%d/%d), considering shrinkage",
-               usage_ratio * 100, current_usage, total_capacity);
+        LOG_D (
+            "memory_pool: Low usage detected %.2f%% (%d/%d), considering shrinkage",
+            usage_ratio * 100, current_usage, total_capacity);
         return -1; // 需要缩容
     }
 
@@ -92,8 +94,9 @@ hev_memory_pool_adjust_udp_size (int current_usage, int total_capacity)
             udp_pool.current_size = new_size;
             udp_pool.last_adjust_time = get_current_time_seconds ();
 
-            LOG_I ("memory_pool: UDP pool expanded from %d to %d frames (usage: %d/%d)",
-                   old_size, udp_pool.current_size, current_usage, total_capacity);
+            LOG_I (
+                "memory_pool: UDP pool expanded from %d to %d frames (usage: %d/%d)",
+                old_size, udp_pool.current_size, current_usage, total_capacity);
         }
     } else if (adjustment < 0) {
         /* 缩容：减少25%，但不小于最小值 */
@@ -106,8 +109,9 @@ hev_memory_pool_adjust_udp_size (int current_usage, int total_capacity)
             udp_pool.current_size = new_size;
             udp_pool.last_adjust_time = get_current_time_seconds ();
 
-            LOG_I ("memory_pool: UDP pool shrunk from %d to %d frames (usage: %d/%d)",
-                   old_size, udp_pool.current_size, current_usage, total_capacity);
+            LOG_I (
+                "memory_pool: UDP pool shrunk from %d to %d frames (usage: %d/%d)",
+                old_size, udp_pool.current_size, current_usage, total_capacity);
         }
     }
 
@@ -151,5 +155,6 @@ hev_memory_pool_init (void)
 void
 hev_memory_pool_fini (void)
 {
-    LOG_D ("memory_pool: Finalized with UDP pool size %d", udp_pool.current_size);
+    LOG_D ("memory_pool: Finalized with UDP pool size %d",
+           udp_pool.current_size);
 }

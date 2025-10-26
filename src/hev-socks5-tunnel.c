@@ -39,8 +39,6 @@
 #include "hev-traffic-router.h"
 #include "hev-session-manager.h"
 
-
-
 #include "hev-socks5-tunnel.h"
 
 static int run;
@@ -152,7 +150,7 @@ hev_socks5_tunnel_update_session (HevListNode *node)
     hev_list_add_tail (&session_set, node);
 }
 
-static void __attribute__((unused))
+static void __attribute__ ((unused))
 hev_socks5_session_task_entry (void *data)
 {
     HevSocks5Session *s = data;
@@ -171,7 +169,8 @@ hev_socks5_session_udp_task_entry (void *data)
 
     hev_socks5_session_udp_run (udp);
 
-    hev_socks5_tunnel_delete_session (hev_socks5_session_get_node (HEV_SOCKS5_SESSION (udp)));
+    hev_socks5_tunnel_delete_session (
+        hev_socks5_session_get_node (HEV_SOCKS5_SESSION (udp)));
     hev_object_unref (HEV_OBJECT (udp));
 }
 
@@ -180,24 +179,26 @@ tcp_accept_handler (void *arg, struct tcp_pcb *pcb, err_t err)
 {
     char src_ip[INET6_ADDRSTRLEN];
     char dst_ip[INET6_ADDRSTRLEN];
-    
+
     ipaddr_ntoa_r (&pcb->remote_ip, src_ip, sizeof (src_ip));
     ipaddr_ntoa_r (&pcb->local_ip, dst_ip, sizeof (dst_ip));
-    
+
     if (err != ERR_OK) {
-        LOG_W ("%p socks5 tunnel: TCP accept failed for %s:%d -> %s:%d, error code: %d",
-               pcb, src_ip, pcb->remote_port, dst_ip, pcb->local_port, err);
+        LOG_W (
+            "%p socks5 tunnel: TCP accept failed for %s:%d -> %s:%d, error code: %d",
+            pcb, src_ip, pcb->remote_port, dst_ip, pcb->local_port, err);
         return err;
     }
 
     if (!run) {
-        LOG_W ("%p socks5 tunnel: TCP accept rejected for %s:%d -> %s:%d, tunnel is not running",
-               pcb, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
+        LOG_W (
+            "%p socks5 tunnel: TCP accept rejected for %s:%d -> %s:%d, tunnel is not running",
+            pcb, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
         return ERR_RST;
     }
 
-    LOG_D ("%p socks5 tunnel: TCP connection accepted from %s:%d to %s:%d",
-           pcb, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
+    LOG_D ("%p socks5 tunnel: TCP connection accepted from %s:%d to %s:%d", pcb,
+           src_ip, pcb->remote_port, dst_ip, pcb->local_port);
 
     hev_traffic_router_handle_tcp (pcb);
 
@@ -214,8 +215,8 @@ dns_recv_handler (void *arg, struct udp_pcb *pcb, struct pbuf *p,
     int res;
 
     ipaddr_ntoa_r (addr, src_ip, sizeof (src_ip));
-    LOG_D ("%p mapped dns: Received DNS query from %s:%d (size=%d bytes)",
-           dns, src_ip, port, p ? p->tot_len : 0);
+    LOG_D ("%p mapped dns: Received DNS query from %s:%d (size=%d bytes)", dns,
+           src_ip, port, p ? p->tot_len : 0);
 
     b = pbuf_alloc (PBUF_TRANSPORT, UDP_BUF_SIZE, PBUF_RAM);
     if (!b) {
@@ -225,17 +226,17 @@ dns_recv_handler (void *arg, struct udp_pcb *pcb, struct pbuf *p,
 
     res = hev_mapped_dns_handle (dns, p->payload, p->len, b->payload, b->len);
     if (res < 0) {
-        LOG_W ("%p mapped dns: Failed to process DNS query from %s:%d",
-               dns, src_ip, port);
+        LOG_W ("%p mapped dns: Failed to process DNS query from %s:%d", dns,
+               src_ip, port);
         goto free;
     }
 
     b->len = res;
     b->tot_len = res;
-    
-    LOG_D ("%p mapped dns: Sending DNS response to %s:%d (size=%d bytes)",
-           dns, src_ip, port, res);
-    
+
+    LOG_D ("%p mapped dns: Sending DNS response to %s:%d (size=%d bytes)", dns,
+           src_ip, port, res);
+
     udp_sendfrom (pcb, b, &pcb->local_ip, pcb->local_port);
 
 free:
@@ -259,19 +260,22 @@ udp_recv_handler (void *arg, struct udp_pcb *pcb, struct pbuf *p,
     char dst_ip[INET6_ADDRSTRLEN];
 
     if (!p) {
-        LOG_D ("%p socks5 tunnel: UDP recv_handler got NULL pbuf, removing pcb", pcb);
+        LOG_D ("%p socks5 tunnel: UDP recv_handler got NULL pbuf, removing pcb",
+               pcb);
         udp_remove (pcb);
         return;
     }
 
     ipaddr_ntoa_r (addr, dst_ip, sizeof (dst_ip));
     ipaddr_ntoa_r (&pcb->remote_ip, src_ip, sizeof (src_ip));
-    
-    LOG_D ("%p socks5 tunnel: UDP packet received from %s:%d to %s:%d (size=%d bytes)",
-           pcb, src_ip, pcb->remote_port, dst_ip, port, p->tot_len);
+
+    LOG_D (
+        "%p socks5 tunnel: UDP packet received from %s:%d to %s:%d (size=%d bytes)",
+        pcb, src_ip, pcb->remote_port, dst_ip, port, p->tot_len);
 
     if (!run) {
-        LOG_W ("%p socks5 tunnel: UDP packet dropped, tunnel is not running", pcb);
+        LOG_W ("%p socks5 tunnel: UDP packet dropped, tunnel is not running",
+               pcb);
         pbuf_free (p);
         udp_remove (pcb);
         return;
@@ -282,7 +286,9 @@ udp_recv_handler (void *arg, struct udp_pcb *pcb, struct pbuf *p,
         /* hev_traffic_router_handle_udp 内部会复制 pbuf
          * 原始 pbuf 会由 lwIP 自动释放，所以这里不要调用 pbuf_free(p)
          * 也不要 remove pcb，因为 direct UDP session 会接管它 */
-        LOG_D ("%p socks5 tunnel: UDP packet handled by traffic router (direct connect or DNS forward)", pcb);
+        LOG_D (
+            "%p socks5 tunnel: UDP packet handled by traffic router (direct connect or DNS forward)",
+            pcb);
         return;
     }
 
@@ -292,16 +298,18 @@ udp_recv_handler (void *arg, struct udp_pcb *pcb, struct pbuf *p,
         int faddr = hev_config_get_mapdns_address ();
         int fport = hev_config_get_mapdns_port ();
         if (fport == port && faddr == ip_2_ip4 (addr)->addr) {
-            LOG_I ("%p socks5 tunnel: UDP packet is mapped DNS query from %s:%d",
-                   pcb, src_ip, pcb->remote_port);
+            LOG_I (
+                "%p socks5 tunnel: UDP packet is mapped DNS query from %s:%d",
+                pcb, src_ip, pcb->remote_port);
             udp_recv (pcb, dns_recv_handler, dns);
             return;
         }
     }
 
     /* 默认：通过 SOCKS5 代理 */
-    LOG_I ("%p socks5 tunnel: UDP packet will use SOCKS5 proxy from %s:%d to %s:%d",
-           pcb, src_ip, pcb->remote_port, dst_ip, port);
+    LOG_I (
+        "%p socks5 tunnel: UDP packet will use SOCKS5 proxy from %s:%d to %s:%d",
+        pcb, src_ip, pcb->remote_port, dst_ip, port);
 
     udp = hev_socks5_session_udp_new (pcb, &mutex);
     if (!udp) {
@@ -314,7 +322,8 @@ udp_recv_handler (void *arg, struct udp_pcb *pcb, struct pbuf *p,
     stack_size = hev_config_get_misc_task_stack_size ();
     task = hev_task_new (stack_size);
     if (!task) {
-        LOG_E ("%p socks5 tunnel: Failed to create task for UDP SOCKS5 session", pcb);
+        LOG_E ("%p socks5 tunnel: Failed to create task for UDP SOCKS5 session",
+               pcb);
         pbuf_free (p);
         hev_object_unref (HEV_OBJECT (udp));
         return;
@@ -343,7 +352,7 @@ event_task_entry (void *data)
     LOG_I ("socks5 tunnel: Received stop signal, shutting down...");
 
     run = 0;
-    
+
     /* 统计并终止所有会话 */
     node = hev_list_first (&session_set);
     for (; node; node = hev_list_node_next (node)) {
@@ -359,7 +368,7 @@ event_task_entry (void *data)
     hev_task_join (task_lwip_io);
     hev_task_join (task_lwip_timer);
     hev_task_del_fd (task_event, event_fds[0]);
-    
+
     LOG_I ("socks5 tunnel: Event task completed");
 }
 
@@ -385,8 +394,9 @@ lwip_io_task_entry (void *data)
         packet_count++;
 
         if (packet_count % 1000 == 0) {
-            LOG_D ("socks5 tunnel: Processed %zu packets (tx_packets=%zu, tx_bytes=%zu)",
-                   packet_count, stat_tx_packets, stat_tx_bytes);
+            LOG_D (
+                "socks5 tunnel: Processed %zu packets (tx_packets=%zu, tx_bytes=%zu)",
+                packet_count, stat_tx_packets, stat_tx_bytes);
         }
 
         hev_task_mutex_lock (&mutex);
@@ -398,8 +408,9 @@ lwip_io_task_entry (void *data)
     }
 
     hev_tunnel_del_task (tun_fd, task_lwip_io);
-    
-    LOG_I ("socks5 tunnel: lwip IO task completed (processed %zu packets)", packet_count);
+
+    LOG_I ("socks5 tunnel: lwip IO task completed (processed %zu packets)",
+           packet_count);
 }
 
 static void
@@ -428,7 +439,7 @@ lwip_timer_task_entry (void *data)
         hev_task_mutex_unlock (&mutex);
 
         timer_count++;
-        
+
         if (timer_count % 1000 == 0) {
             HevListNode *node = hev_list_first (&session_set);
             int active_sessions = 0;
@@ -436,7 +447,7 @@ lwip_timer_task_entry (void *data)
                 active_sessions++;
                 node = hev_list_node_next (node);
             }
-            LOG_D ("socks5 tunnel: Timer tick %u (active_sessions=%d)", 
+            LOG_D ("socks5 tunnel: Timer tick %u (active_sessions=%d)",
                    timer_count, active_sessions);
         }
 
@@ -445,7 +456,7 @@ lwip_timer_task_entry (void *data)
         else
             hev_task_yield (HEV_TASK_WAITIO);
     }
-    
+
     LOG_I ("socks5 tunnel: Timer task completed (%u ticks)", timer_count);
 }
 
@@ -763,8 +774,9 @@ void
 hev_socks5_tunnel_fini (void)
 {
     LOG_I ("socks5 tunnel: Finalizing tunnel");
-    LOG_I ("socks5 tunnel: Statistics - TX: %zu packets/%zu bytes, RX: %zu packets/%zu bytes",
-           stat_tx_packets, stat_tx_bytes, stat_rx_packets, stat_rx_bytes);
+    LOG_I (
+        "socks5 tunnel: Statistics - TX: %zu packets/%zu bytes, RX: %zu packets/%zu bytes",
+        stat_tx_packets, stat_tx_bytes, stat_rx_packets, stat_rx_bytes);
 
     mapped_dns_fini ();
     lwip_timer_task_fini ();
@@ -777,7 +789,7 @@ hev_socks5_tunnel_fini (void)
     stat_rx_packets = 0;
     stat_tx_bytes = 0;
     stat_rx_bytes = 0;
-    
+
     LOG_I ("socks5 tunnel: Finalization completed");
 }
 
@@ -796,9 +808,9 @@ hev_socks5_tunnel_run (void)
     hev_task_run (task_lwip_timer, lwip_timer_task_entry, NULL);
 
     run = 1;
-    
+
     LOG_I ("socks5 tunnel: Tunnel is now running");
-    
+
     hev_task_system_run ();
 
     LOG_I ("socks5 tunnel: Tunnel operation stopped");
@@ -824,7 +836,7 @@ hev_socks5_tunnel_stop (void)
 
     res = write (fd, &res, 1);
     assert (res > 0 && "socks5 tunnel write event");
-    
+
     LOG_D ("socks5 tunnel: Stop signal sent");
 }
 

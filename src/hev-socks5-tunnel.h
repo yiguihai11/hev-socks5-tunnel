@@ -13,12 +13,9 @@
 #include <lwip/tcp.h>
 #include <hev-task-mutex.h>
 
-
 #include "hev-list.h"
 
 extern HevTaskMutex mutex;
-
-
 
 int hev_socks5_tunnel_init (int tun_fd);
 void hev_socks5_tunnel_fini (void);
@@ -35,6 +32,5 @@ void hev_socks5_tunnel_insert_session (HevListNode *node);
 void hev_socks5_tunnel_delete_session (HevListNode *node);
 
 void hev_socks5_tunnel_start_tcp_session (struct tcp_pcb *pcb);
-
 
 #endif /* __HEV_SOCKS5_TUNNEL_H__ */

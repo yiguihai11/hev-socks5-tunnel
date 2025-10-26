@@ -17,7 +17,8 @@ extern "C" {
 #endif
 
 /* 任务监控上下文 */
-typedef struct {
+typedef struct
+{
     HevTask *task;
     unsigned long start_time_us;
     unsigned long end_time_us;
@@ -34,23 +35,22 @@ void hev_task_monitor_end (HevTaskMonitorContext *ctx);
 unsigned long hev_task_monitor_get_runtime_us (HevTaskMonitorContext *ctx);
 
 /* 自动监控宏 - 用于任务函数开始 */
-#define HEV_TASK_MONITOR_START(task) \
+#define HEV_TASK_MONITOR_START(task)     \
     HevTaskMonitorContext __monitor_ctx; \
     hev_task_monitor_start (&__monitor_ctx, task);
 
 /* 自动监控宏 - 用于任务函数结束 */
-#define HEV_TASK_MONITOR_END() \
-    hev_task_monitor_end (&__monitor_ctx);
+#define HEV_TASK_MONITOR_END() hev_task_monitor_end (&__monitor_ctx);
 
 /* 带条件监控的宏 */
-#define HEV_TASK_MONITOR_START_IF(task, condition) \
-    HevTaskMonitorContext __monitor_ctx = {0}; \
-    if (condition) { \
+#define HEV_TASK_MONITOR_START_IF(task, condition)     \
+    HevTaskMonitorContext __monitor_ctx = { 0 };       \
+    if (condition) {                                   \
         hev_task_monitor_start (&__monitor_ctx, task); \
     }
 
-#define HEV_TASK_MONITOR_END_IF(condition) \
-    if (condition) { \
+#define HEV_TASK_MONITOR_END_IF(condition)     \
+    if (condition) {                           \
         hev_task_monitor_end (&__monitor_ctx); \
     }
 

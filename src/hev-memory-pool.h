@@ -13,14 +13,15 @@
 #include <time.h>
 
 /* 内存池管理器结构 */
-typedef struct _HevMemoryPool {
-    int current_size;        // 当前池大小
-    int min_size;           // 最小池大小
-    int max_size;           // 最大池大小
-    double high_watermark;  // 高水位（扩容阈值）
-    double low_watermark;   // 低水位（缩容阈值）
+typedef struct _HevMemoryPool
+{
+    int current_size; // 当前池大小
+    int min_size; // 最小池大小
+    int max_size; // 最大池大小
+    double high_watermark; // 高水位（扩容阈值）
+    double low_watermark; // 低水位（缩容阈值）
     time_t last_adjust_time; // 上次调整时间
-    int adjust_interval;    // 调整间隔（秒）
+    int adjust_interval; // 调整间隔（秒）
 } HevMemoryPool;
 
 /* 动态调整UDP池大小

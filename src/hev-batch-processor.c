@@ -19,11 +19,12 @@
 #include "hev-logger.h"
 
 /* 全局批量处理器状态 */
-static struct {
+static struct
+{
     HevBatchProcessorConfig config;
     HevBatchContext contexts[HEV_BATCH_TYPE_COUNT];
     int initialized;
-} batch_processor = {0};
+} batch_processor = { 0 };
 
 /* 获取当前时间（微秒） */
 static unsigned long
@@ -60,7 +61,8 @@ init_batch_context (HevBatchType type, int max_batch_size)
 
     ctx->items = calloc (max_batch_size, item_size);
     if (!ctx->items) {
-        LOG_E ("batch_processor: failed to allocate batch context for type %d", type);
+        LOG_E ("batch_processor: failed to allocate batch context for type %d",
+               type);
         return -1;
     }
 
@@ -104,35 +106,36 @@ hev_batch_processor_init (HevBatchProcessorConfig *config)
 
     /* 初始化各种批量处理上下文 */
     res = init_batch_context (HEV_BATCH_TYPE_NETWORK_IO,
-                             batch_processor.config.max_network_io_batch);
+                              batch_processor.config.max_network_io_batch);
     if (res < 0) {
         goto error;
     }
 
     res = init_batch_context (HEV_BATCH_TYPE_PACKET_FORWARD,
-                             batch_processor.config.max_packet_batch);
+                              batch_processor.config.max_packet_batch);
     if (res < 0) {
         goto error;
     }
 
     res = init_batch_context (HEV_BATCH_TYPE_SESSION_MGMT,
-                             batch_processor.config.max_session_batch);
+                              batch_processor.config.max_session_batch);
     if (res < 0) {
         goto error;
     }
 
     res = init_batch_context (HEV_BATCH_TYPE_BUFFER_OPS,
-                             batch_processor.config.max_buffer_batch);
+                              batch_processor.config.max_buffer_batch);
     if (res < 0) {
         goto error;
     }
 
     batch_processor.initialized = 1;
 
-    LOG_I ("batch_processor: initialized with network_io=%d, packet_forward=%d, session_mgmt=%d",
-           batch_processor.config.network_io_enabled,
-           batch_processor.config.packet_forward_enabled,
-           batch_processor.config.session_mgmt_enabled);
+    LOG_I (
+        "batch_processor: initialized with network_io=%d, packet_forward=%d, session_mgmt=%d",
+        batch_processor.config.network_io_enabled,
+        batch_processor.config.packet_forward_enabled,
+        batch_processor.config.session_mgmt_enabled);
     return;
 
 error:
@@ -160,8 +163,10 @@ hev_batch_processor_fini (void)
 
         if (ctx->items) {
             /* 输出统计信息 */
-            LOG_I ("batch_processor: type %d stats - processed: %lu, batches: %lu, avg_time: %.2fus",
-                   i, ctx->total_processed, ctx->total_batches, ctx->avg_batch_time_us);
+            LOG_I (
+                "batch_processor: type %d stats - processed: %lu, batches: %lu, avg_time: %.2fus",
+                i, ctx->total_processed, ctx->total_batches,
+                ctx->avg_batch_time_us);
 
             free (ctx->items);
             ctx->items = NULL;
@@ -185,7 +190,8 @@ hev_batch_processor_get_context (HevBatchType type)
 
 /* 网络I/O批量处理 - 添加项 */
 int
-hev_batch_processor_add_network_io (int fd, void *buffer, size_t size, int is_write)
+hev_batch_processor_add_network_io (int fd, void *buffer, size_t size,
+                                    int is_write)
 {
     HevBatchContext *ctx;
     HevBatchNetworkIOItem *items;
@@ -207,8 +213,9 @@ hev_batch_processor_add_network_io (int fd, void *buffer, size_t size, int is_wr
     items[ctx->count].result = 0;
     ctx->count++;
 
-    LOG_D ("batch_processor: added network I/O item (fd=%d, size=%zu, write=%d)",
-           fd, size, is_write);
+    LOG_D (
+        "batch_processor: added network I/O item (fd=%d, size=%zu, write=%d)",
+        fd, size, is_write);
 
     return 0;
 }
@@ -235,9 +242,11 @@ hev_batch_processor_process_network_io (void)
     /* 批量处理网络I/O操作 */
     for (i = 0; i < ctx->count; i++) {
         if (items[i].is_write) {
-            items[i].result = write (items[i].fd, items[i].buffer, items[i].size);
+            items[i].result =
+                write (items[i].fd, items[i].buffer, items[i].size);
         } else {
-            items[i].result = read (items[i].fd, items[i].buffer, items[i].size);
+            items[i].result =
+                read (items[i].fd, items[i].buffer, items[i].size);
         }
 
         if (items[i].result > 0) {
@@ -254,7 +263,7 @@ hev_batch_processor_process_network_io (void)
         ctx->avg_batch_time_us = (double)(end_time - start_time);
     } else {
         ctx->avg_batch_time_us = 0.9 * ctx->avg_batch_time_us +
-                                0.1 * (double)(end_time - start_time);
+                                 0.1 * (double)(end_time - start_time);
     }
 
     /* 清空批量处理上下文 */
@@ -269,7 +278,7 @@ hev_batch_processor_process_network_io (void)
 /* 数据包批量转发 - 添加项 */
 int
 hev_batch_processor_add_packet (struct pbuf *pbuf, struct udp_pcb *pcb,
-                               ip_addr_t *addr, u16_t port, int priority)
+                                ip_addr_t *addr, u16_t port, int priority)
 {
     HevBatchContext *ctx;
     HevBatchPacketItem *items;
@@ -322,7 +331,8 @@ hev_batch_processor_process_packets (void)
     /* 批量处理数据包转发 */
     for (i = 0; i < ctx->count; i++) {
         if (items[i].pbuf && items[i].pcb) {
-            err = udp_sendto (items[i].pcb, items[i].pbuf, items[i].addr, items[i].port);
+            err = udp_sendto (items[i].pcb, items[i].pbuf, items[i].addr,
+                              items[i].port);
             if (err == ERR_OK) {
                 processed++;
             }
@@ -343,22 +353,22 @@ hev_batch_processor_process_packets (void)
         ctx->avg_batch_time_us = (double)(end_time - start_time);
     } else {
         ctx->avg_batch_time_us = 0.9 * ctx->avg_batch_time_us +
-                                0.1 * (double)(end_time - start_time);
+                                 0.1 * (double)(end_time - start_time);
     }
 
     /* 清空批量处理上下文 */
     ctx->count = 0;
 
-    LOG_D ("batch_processor: processed %d/%d packet items in %.2fus",
-           processed, ctx->count, (double)(end_time - start_time));
+    LOG_D ("batch_processor: processed %d/%d packet items in %.2fus", processed,
+           ctx->count, (double)(end_time - start_time));
 
     return processed;
 }
 
 /* 会话批量管理 - 添加项 */
 int
-hev_batch_processor_add_session_op (void *session, int operation,
-                                   void *data, size_t data_size)
+hev_batch_processor_add_session_op (void *session, int operation, void *data,
+                                    size_t data_size)
 {
     HevBatchContext *ctx;
     HevBatchSessionItem *items;
@@ -430,7 +440,7 @@ hev_batch_processor_process_sessions (void)
         ctx->avg_batch_time_us = (double)(end_time - start_time);
     } else {
         ctx->avg_batch_time_us = 0.9 * ctx->avg_batch_time_us +
-                                0.1 * (double)(end_time - start_time);
+                                 0.1 * (double)(end_time - start_time);
     }
 
     /* 清空批量处理上下文 */
@@ -444,7 +454,8 @@ hev_batch_processor_process_sessions (void)
 
 /* 缓冲区批量操作 - 添加项 */
 int
-hev_batch_processor_add_buffer_op (void *src, void *dst, size_t size, int operation)
+hev_batch_processor_add_buffer_op (void *src, void *dst, size_t size,
+                                   int operation)
 {
     HevBatchContext *ctx;
     HevBatchBufferItem *items;
@@ -465,7 +476,8 @@ hev_batch_processor_add_buffer_op (void *src, void *dst, size_t size, int operat
     items[ctx->count].operation = operation;
     ctx->count++;
 
-    LOG_D ("batch_processor: added buffer operation (op=%d, size=%zu)", operation, size);
+    LOG_D ("batch_processor: added buffer operation (op=%d, size=%zu)",
+           operation, size);
 
     return 0;
 }
@@ -525,7 +537,7 @@ hev_batch_processor_process_buffers (void)
         ctx->avg_batch_time_us = (double)(end_time - start_time);
     } else {
         ctx->avg_batch_time_us = 0.9 * ctx->avg_batch_time_us +
-                                0.1 * (double)(end_time - start_time);
+                                 0.1 * (double)(end_time - start_time);
     }
 
     /* 清空批量处理上下文 */
@@ -561,23 +573,29 @@ hev_batch_processor_flush_all (void)
 /* 获取批量处理统计信息 */
 void
 hev_batch_processor_get_stats (HevBatchType type,
-                              unsigned long *total_processed,
-                              unsigned long *total_batches,
-                              double *avg_batch_time_us)
+                               unsigned long *total_processed,
+                               unsigned long *total_batches,
+                               double *avg_batch_time_us)
 {
     HevBatchContext *ctx;
 
     ctx = hev_batch_processor_get_context (type);
     if (!ctx) {
-        if (total_processed) *total_processed = 0;
-        if (total_batches) *total_batches = 0;
-        if (avg_batch_time_us) *avg_batch_time_us = 0.0;
+        if (total_processed)
+            *total_processed = 0;
+        if (total_batches)
+            *total_batches = 0;
+        if (avg_batch_time_us)
+            *avg_batch_time_us = 0.0;
         return;
     }
 
-    if (total_processed) *total_processed = ctx->total_processed;
-    if (total_batches) *total_batches = ctx->total_batches;
-    if (avg_batch_time_us) *avg_batch_time_us = ctx->avg_batch_time_us;
+    if (total_processed)
+        *total_processed = ctx->total_processed;
+    if (total_batches)
+        *total_batches = ctx->total_batches;
+    if (avg_batch_time_us)
+        *avg_batch_time_us = ctx->avg_batch_time_us;
 }
 
 /* 性能监控 */
@@ -595,6 +613,7 @@ hev_batch_processor_update_performance (HevBatchType type, double batch_time_us)
     if (ctx->avg_batch_time_us == 0) {
         ctx->avg_batch_time_us = batch_time_us;
     } else {
-        ctx->avg_batch_time_us = 0.9 * ctx->avg_batch_time_us + 0.1 * batch_time_us;
+        ctx->avg_batch_time_us =
+            0.9 * ctx->avg_batch_time_us + 0.1 * batch_time_us;
     }
 }

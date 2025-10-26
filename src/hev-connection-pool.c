@@ -20,18 +20,19 @@
 #include "hev-logger.h"
 
 /* 连接池结构 */
-static struct {
+static struct
+{
     HevConnectionPoolEntry *entries;
-    int max_size;                    // 最大连接数
-    int current_size;                 // 当前连接数
-    int min_idle_time;                // 最小空闲时间（秒）
-    int max_idle_time;                // 最大空闲时间（秒）
-    time_t last_cleanup;              // 上次清理时间
-    int cleanup_interval;             // 清理间隔（秒）
-    unsigned long total_connections;   // 总连接数
-    unsigned long pool_hits;          // 连接池命中数
-    unsigned long pool_misses;        // 连接池未命中数
-} conn_pool = {0};
+    int max_size; // 最大连接数
+    int current_size; // 当前连接数
+    int min_idle_time; // 最小空闲时间（秒）
+    int max_idle_time; // 最大空闲时间（秒）
+    time_t last_cleanup; // 上次清理时间
+    int cleanup_interval; // 清理间隔（秒）
+    unsigned long total_connections; // 总连接数
+    unsigned long pool_hits; // 连接池命中数
+    unsigned long pool_misses; // 连接池未命中数
+} conn_pool = { 0 };
 
 /* 获取当前时间（秒） */
 static time_t
@@ -57,7 +58,8 @@ is_connection_valid (HevConnectionPoolEntry *entry)
     }
 
     if (error != 0) {
-        LOG_D ("connection_pool: connection error for fd=%d, error=%d", fd, error);
+        LOG_D ("connection_pool: connection error for fd=%d, error=%d", fd,
+               error);
         return 0;
     }
 
@@ -184,8 +186,9 @@ hev_connection_pool_init (int max_size, int min_idle_time, int max_idle_time)
     conn_pool.pool_hits = 0;
     conn_pool.pool_misses = 0;
 
-    LOG_I ("connection_pool: initialized with max_size=%d, idle_time=%d-%d seconds",
-           max_size, min_idle_time, max_idle_time);
+    LOG_I (
+        "connection_pool: initialized with max_size=%d, idle_time=%d-%d seconds",
+        max_size, min_idle_time, max_idle_time);
 }
 
 /* 清理连接池 */
@@ -197,7 +200,8 @@ hev_connection_pool_fini (void)
     if (!conn_pool.entries)
         return;
 
-    LOG_D ("connection_pool: cleaning up %d active connections", conn_pool.current_size);
+    LOG_D ("connection_pool: cleaning up %d active connections",
+           conn_pool.current_size);
 
     for (i = 0; i < conn_pool.max_size; i++) {
         HevConnectionPoolEntry *entry = &conn_pool.entries[i];
@@ -212,8 +216,10 @@ hev_connection_pool_fini (void)
     conn_pool.entries = NULL;
     conn_pool.current_size = 0;
 
-    LOG_I ("connection_pool: finalized. Total connections: %lu, Hits: %lu, Misses: %lu",
-           conn_pool.total_connections, conn_pool.pool_hits, conn_pool.pool_misses);
+    LOG_I (
+        "connection_pool: finalized. Total connections: %lu, Hits: %lu, Misses: %lu",
+        conn_pool.total_connections, conn_pool.pool_hits,
+        conn_pool.pool_misses);
 }
 
 /* 从连接池获取连接 */
@@ -232,7 +238,8 @@ hev_connection_pool_get (const char *addr, int port, HevSocks5Type type)
 
     /* 如果池已满，无法创建新连接 */
     if (conn_pool.current_size >= conn_pool.max_size) {
-        LOG_W ("connection_pool: pool is full (max_size=%d)", conn_pool.max_size);
+        LOG_W ("connection_pool: pool is full (max_size=%d)",
+               conn_pool.max_size);
         /* 尝试清理一些空闲连接 */
         cleanup_idle_connections ();
 
@@ -320,7 +327,8 @@ hev_connection_pool_get_stats (HevConnectionPoolStats *stats)
 
     if (conn_pool.pool_hits + conn_pool.pool_misses > 0) {
         stats->hit_ratio = (double)conn_pool.pool_hits /
-                          (conn_pool.pool_hits + conn_pool.pool_misses) * 100.0;
+                           (conn_pool.pool_hits + conn_pool.pool_misses) *
+                           100.0;
     } else {
         stats->hit_ratio = 0.0;
     }

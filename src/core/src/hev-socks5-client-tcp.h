@@ -32,8 +32,8 @@ struct _HevSocks5ClientTCP
     HevSocks5Client base;
 
     HevSocks5Addr *addr;
-    HevConnectionPoolEntry *pool_entry;  /* 连接池条目 */
-    int from_pool;                        /* 是否来自连接池 */
+    HevConnectionPoolEntry *pool_entry; /* 连接池条目 */
+    int from_pool; /* 是否来自连接池 */
 };
 
 struct _HevSocks5ClientTCPClass
@@ -53,7 +53,8 @@ HevSocks5ClientTCP *hev_socks5_client_tcp_new_ipv4 (const void *ipv4, int port);
 HevSocks5ClientTCP *hev_socks5_client_tcp_new_ipv6 (const void *ipv6, int port);
 
 /* 连接池相关函数 */
-HevSocks5ClientTCP *hev_socks5_client_tcp_new_pooled (const char *name, int port);
+HevSocks5ClientTCP *hev_socks5_client_tcp_new_pooled (const char *name,
+                                                      int port);
 void hev_socks5_client_tcp_return_to_pool (HevSocks5ClientTCP *self);
 
 #ifdef __cplusplus

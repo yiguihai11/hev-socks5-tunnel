@@ -42,25 +42,26 @@ static int
 hev_config_parse_socks5_tcp (yaml_document_t *doc, yaml_node_t *base)
 {
     yaml_node_pair_t *pair;
-    
+
     if (!base || base->type != YAML_MAPPING_NODE)
         return -1;
-    
+
     for (pair = base->data.mapping.pairs.start;
          pair < base->data.mapping.pairs.top; pair++) {
         yaml_node_t *node_key = yaml_document_get_node (doc, pair->key);
         yaml_node_t *node_val = yaml_document_get_node (doc, pair->value);
-        
+
         if (!node_key || !node_val)
             continue;
-        
+
         const char *key = (const char *)node_key->data.scalar.value;
         const char *val = (const char *)node_val->data.scalar.value;
-        
+
         if (strcmp (key, "port") == 0) {
             socks5_config.tcp.port = strtoul (val, NULL, 10);
         } else if (strcmp (key, "address") == 0) {
-            strncpy (socks5_config.tcp.addr, val, sizeof (socks5_config.tcp.addr) - 1);
+            strncpy (socks5_config.tcp.addr, val,
+                     sizeof (socks5_config.tcp.addr) - 1);
         } else if (strcmp (key, "username") == 0) {
             socks5_config.tcp.user = strdup (val);
         } else if (strcmp (key, "password") == 0) {
@@ -71,7 +72,7 @@ hev_config_parse_socks5_tcp (yaml_document_t *doc, yaml_node_t *base)
             socks5_config.tcp.pipeline = yaml_parse_bool (val);
         }
     }
-    
+
     return 0;
 }
 
@@ -79,25 +80,26 @@ static int
 hev_config_parse_socks5_udp (yaml_document_t *doc, yaml_node_t *base)
 {
     yaml_node_pair_t *pair;
-    
+
     if (!base || base->type != YAML_MAPPING_NODE)
         return -1;
-    
+
     for (pair = base->data.mapping.pairs.start;
          pair < base->data.mapping.pairs.top; pair++) {
         yaml_node_t *node_key = yaml_document_get_node (doc, pair->key);
         yaml_node_t *node_val = yaml_document_get_node (doc, pair->value);
-        
+
         if (!node_key || !node_val)
             continue;
-        
+
         const char *key = (const char *)node_key->data.scalar.value;
         const char *val = (const char *)node_val->data.scalar.value;
-        
+
         if (strcmp (key, "port") == 0) {
             socks5_config.udp.port = strtoul (val, NULL, 10);
         } else if (strcmp (key, "address") == 0) {
-            strncpy (socks5_config.udp.addr, val, sizeof (socks5_config.udp.addr) - 1);
+            strncpy (socks5_config.udp.addr, val,
+                     sizeof (socks5_config.udp.addr) - 1);
         } else if (strcmp (key, "username") == 0) {
             socks5_config.udp.user = strdup (val);
         } else if (strcmp (key, "password") == 0) {
@@ -108,7 +110,7 @@ hev_config_parse_socks5_udp (yaml_document_t *doc, yaml_node_t *base)
             socks5_config.udp.udp_relay = (strcmp (val, "udp") == 0) ? 1 : 0;
         }
     }
-    
+
     return 0;
 }
 
@@ -116,20 +118,20 @@ static int
 hev_config_parse_socks5 (yaml_document_t *doc, yaml_node_t *base)
 {
     yaml_node_pair_t *pair;
-    
+
     if (!base || base->type != YAML_MAPPING_NODE)
         return -1;
-    
+
     for (pair = base->data.mapping.pairs.start;
          pair < base->data.mapping.pairs.top; pair++) {
         yaml_node_t *node_key = yaml_document_get_node (doc, pair->key);
         yaml_node_t *node_val = yaml_document_get_node (doc, pair->value);
-        
+
         if (!node_key || !node_val)
             continue;
-        
+
         const char *key = (const char *)node_key->data.scalar.value;
-        
+
         if (strcmp (key, "tcp") == 0) {
             if (hev_config_parse_socks5_tcp (doc, node_val) < 0)
                 return -1;
@@ -138,7 +140,7 @@ hev_config_parse_socks5 (yaml_document_t *doc, yaml_node_t *base)
                 return -1;
         }
     }
-    
+
     return 0;
 }
 
@@ -311,8 +313,6 @@ hev_config_parse_tunnel (yaml_document_t *doc, yaml_node_t *base)
     return 0;
 }
 
-
-
 static int
 hev_config_parse_mapdns (yaml_document_t *doc, yaml_node_t *base)
 {
@@ -397,13 +397,17 @@ hev_config_parse_dns_forwarder (yaml_document_t *doc, yaml_node_t *base)
         value = (const char *)node->data.scalar.value;
 
         if (0 == strcmp (key, "virtual-ip4"))
-            strncpy (dns_fwd_virtual_ip4, value, sizeof (dns_fwd_virtual_ip4) - 1);
+            strncpy (dns_fwd_virtual_ip4, value,
+                     sizeof (dns_fwd_virtual_ip4) - 1);
         else if (0 == strcmp (key, "virtual-ip6"))
-            strncpy (dns_fwd_virtual_ip6, value, sizeof (dns_fwd_virtual_ip6) - 1);
+            strncpy (dns_fwd_virtual_ip6, value,
+                     sizeof (dns_fwd_virtual_ip6) - 1);
         else if (0 == strcmp (key, "target-ip4"))
-            strncpy (dns_fwd_target_ip4, value, sizeof (dns_fwd_target_ip4) - 1);
+            strncpy (dns_fwd_target_ip4, value,
+                     sizeof (dns_fwd_target_ip4) - 1);
         else if (0 == strcmp (key, "target-ip6"))
-            strncpy (dns_fwd_target_ip6, value, sizeof (dns_fwd_target_ip6) - 1);
+            strncpy (dns_fwd_target_ip6, value,
+                     sizeof (dns_fwd_target_ip6) - 1);
     }
 
     return 0;
@@ -436,7 +440,8 @@ hev_config_parse_chnroutes (yaml_document_t *doc, yaml_node_t *base)
         value = (const char *)node->data.scalar.value;
 
         if (0 == strcmp (key, "file-path"))
-            strncpy (chnroutes_file_path, value, sizeof (chnroutes_file_path) - 1);
+            strncpy (chnroutes_file_path, value,
+                     sizeof (chnroutes_file_path) - 1);
     }
 
     return 0;
@@ -735,8 +740,6 @@ hev_config_get_tunnel_pre_down_script (void)
 
     return tun_pre_down_script;
 }
-
-
 
 int
 hev_config_get_mapdns_address (void)

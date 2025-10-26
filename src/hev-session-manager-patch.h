@@ -37,19 +37,19 @@ struct pbuf;
  *
  * @return int 成功返回0，失败返回-1
  */
-int hev_session_manager_enable_protocol_zerocopy(void);
+int hev_session_manager_enable_protocol_zerocopy (void);
 
 /**
  * @brief 禁用协议解析零拷贝优化
  */
-void hev_session_manager_disable_protocol_zerocopy(void);
+void hev_session_manager_disable_protocol_zerocopy (void);
 
 /**
  * @brief 检查协议解析零拷贝优化是否启用
  *
  * @return int 启用返回1，未启用返回0
  */
-int hev_session_manager_is_protocol_zerocopy_enabled(void);
+int hev_session_manager_is_protocol_zerocopy_enabled (void);
 
 #ifdef __cplusplus
 }

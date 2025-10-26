@@ -16,14 +16,14 @@
 #include <lwip/tcp.h>
 
 /* TLS Content Type */
-#define TLS_CONTENT_TYPE_HANDSHAKE  0x16
+#define TLS_CONTENT_TYPE_HANDSHAKE 0x16
 
 /* TLS Handshake Type */
-#define TLS_HANDSHAKE_TYPE_CLIENT_HELLO  0x01
+#define TLS_HANDSHAKE_TYPE_CLIENT_HELLO 0x01
 
 /* TLS Extension Types */
-#define TLS_EXT_SERVER_NAME     0x0000
-#define TLS_EXT_ALPN            0x0010
+#define TLS_EXT_SERVER_NAME 0x0000
+#define TLS_EXT_ALPN 0x0010
 
 /* Maximum SNI/Host length */
 #define MAX_SNI_LENGTH 255
@@ -32,23 +32,25 @@
 /**
  * TLS ClientHello Information
  */
-typedef struct _HevTLSClientHello {
-    uint8_t  detected;                    /* TLS detected */
-    uint16_t tls_version;                 /* TLS version */
-    char     sni[MAX_SNI_LENGTH + 1];     /* Server Name Indication */
-    char     alpn[64];                    /* ALPN protocol */
+typedef struct _HevTLSClientHello
+{
+    uint8_t detected; /* TLS detected */
+    uint16_t tls_version; /* TLS version */
+    char sni[MAX_SNI_LENGTH + 1]; /* Server Name Indication */
+    char alpn[64]; /* ALPN protocol */
 } HevTLSClientHello;
 
 /**
  * Filter Statistics
  */
-typedef struct _HevFilterStats {
-    size_t ip_blocked;                    /* IP blocked count */
-    size_t hostname_blocked;              /* Hostname blocked count */
-    size_t tls_parsed;                    /* TLS ClientHello parsed */
-    size_t http_parsed;                   /* HTTP Host parsed */
-    size_t domestic_hits;                 /* Domestic IP hits */
-    size_t foreign_hits;                  /* Foreign IP hits */
+typedef struct _HevFilterStats
+{
+    size_t ip_blocked; /* IP blocked count */
+    size_t hostname_blocked; /* Hostname blocked count */
+    size_t tls_parsed; /* TLS ClientHello parsed */
+    size_t http_parsed; /* HTTP Host parsed */
+    size_t domestic_hits; /* Domestic IP hits */
+    size_t foreign_hits; /* Foreign IP hits */
 } HevFilterStats;
 
 /**
@@ -128,8 +130,8 @@ int hev_filter_is_domestic (const ip_addr_t *ip);
  *
  * Returns: 0 on success, -1 if not TLS or parse error.
  */
-int hev_filter_parse_tls (void *log_data, const unsigned char *data, 
-                          size_t len, HevTLSClientHello *hello);
+int hev_filter_parse_tls (void *log_data, const unsigned char *data, size_t len,
+                          HevTLSClientHello *hello);
 
 /**
  * hev_filter_parse_http_host:
@@ -144,7 +146,8 @@ int hev_filter_parse_tls (void *log_data, const unsigned char *data,
  * Returns: 0 on success, -1 if not found.
  */
 int hev_filter_parse_http_host (void *log_data, const unsigned char *data,
-                                size_t len, char *hostname, size_t hostname_len);
+                                size_t len, char *hostname,
+                                size_t hostname_len);
 
 /**
  * hev_filter_sniff_pcb_hostname:
@@ -179,11 +182,12 @@ void hev_filter_reset_stats (void);
 /**
  * Blacklisted IP Entry
  */
-typedef struct _HevBlacklistedIP {
-    struct _HevBlacklistedIP *next;     /* Hash table chaining */
-    ip_addr_t addr;                     /* IP address */
-    time_t expiry;                      /* Expiration time */
-    time_t added_time;                  /* When added to blacklist */
+typedef struct _HevBlacklistedIP
+{
+    struct _HevBlacklistedIP *next; /* Hash table chaining */
+    ip_addr_t addr; /* IP address */
+    time_t expiry; /* Expiration time */
+    time_t added_time; /* When added to blacklist */
 } HevBlacklistedIP;
 
 /**

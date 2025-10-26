@@ -19,7 +19,7 @@ struct _HevConfigSocks5Server
     unsigned int mark;
     unsigned short port;
     unsigned char pipeline;
-    unsigned char udp_relay;  /* 0=tcp, 1=udp */
+    unsigned char udp_relay; /* 0=tcp, 1=udp */
     char addr[256];
 };
 
@@ -27,8 +27,8 @@ typedef struct _HevConfigSocks5 HevConfigSocks5;
 
 struct _HevConfigSocks5
 {
-    HevConfigSocks5Server tcp;  /* TCP 专用 SOCKS5 服务器 */
-    HevConfigSocks5Server udp;  /* UDP 专用 SOCKS5 服务器 */
+    HevConfigSocks5Server tcp; /* TCP 专用 SOCKS5 服务器 */
+    HevConfigSocks5Server udp; /* UDP 专用 SOCKS5 服务器 */
 };
 
 int hev_config_init_from_file (const char *config_path);

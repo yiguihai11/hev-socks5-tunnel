@@ -50,15 +50,16 @@ static int protocol_zerocopy_enabled = 0;
  * @return const struct pbuf* 找到返回对应的pbuf指针，未找到返回NULL
  */
 static const struct pbuf *
-pbuf_chain_search_zerocopy(const struct pbuf *p, const char *pattern,
-                          size_t pattern_len, size_t max_search_len, size_t *found_offset)
+pbuf_chain_search_zerocopy (const struct pbuf *p, const char *pattern,
+                            size_t pattern_len, size_t max_search_len,
+                            size_t *found_offset)
 {
     size_t search_offset = 0;
     const struct pbuf *current = p;
     size_t current_offset = 0;
-    char window_buffer[256];  /* 滑动窗口缓冲区 */
+    char window_buffer[256]; /* 滑动窗口缓冲区 */
 
-    if (pattern_len == 0 || pattern_len > sizeof(window_buffer))
+    if (pattern_len == 0 || pattern_len > sizeof (window_buffer))
         return NULL;
 
     while (current && search_offset < max_search_len) {
@@ -68,12 +69,16 @@ pbuf_chain_search_zerocopy(const struct pbuf *p, const char *pattern,
         size_t temp_offset = current_offset;
 
         /* 收集足够的数据用于搜索 */
-        while (temp && window_size < pattern_len && window_size < sizeof(window_buffer)) {
+        while (temp && window_size < pattern_len &&
+               window_size < sizeof (window_buffer)) {
             size_t available = temp->len - temp_offset;
-            size_t to_copy = (available < (sizeof(window_buffer) - window_size)) ?
-                            available : (sizeof(window_buffer) - window_size);
+            size_t to_copy =
+                (available < (sizeof (window_buffer) - window_size)) ?
+                    available :
+                    (sizeof (window_buffer) - window_size);
 
-            memcpy(window_buffer + window_size, (char *)temp->payload + temp_offset, to_copy);
+            memcpy (window_buffer + window_size,
+                    (char *)temp->payload + temp_offset, to_copy);
             window_size += to_copy;
 
             if (window_size >= pattern_len) {
@@ -86,15 +91,17 @@ pbuf_chain_search_zerocopy(const struct pbuf *p, const char *pattern,
 
         /* 在当前窗口中搜索 */
         if (window_size >= pattern_len) {
-            char *found = memmem(window_buffer, window_size, pattern, pattern_len);
+            char *found =
+                memmem (window_buffer, window_size, pattern, pattern_len);
             if (found) {
                 *found_offset = search_offset + (found - window_buffer);
-                return current;  /* 返回当前pbuf指针 */
+                return current; /* 返回当前pbuf指针 */
             }
         }
 
         /* 移动搜索窗口 */
-        search_offset += (window_size > 0) ? (window_size - pattern_len + 1) : 1;
+        search_offset += (window_size > 0) ? (window_size - pattern_len + 1) :
+                                             1;
         if (search_offset >= max_search_len) {
             break;
         }
@@ -128,8 +135,9 @@ pbuf_chain_search_zerocopy(const struct pbuf *p, const char *pattern,
  * @return int 成功返回提取的长度，失败返回-1
  */
 static int
-extract_string_from_offset(const struct pbuf *p, size_t start_offset,
-                          const char *end_marker, char *buffer, size_t buffer_len)
+extract_string_from_offset (const struct pbuf *p, size_t start_offset,
+                            const char *end_marker, char *buffer,
+                            size_t buffer_len)
 {
     size_t current_offset = 0;
     const struct pbuf *current = p;
@@ -153,11 +161,11 @@ extract_string_from_offset(const struct pbuf *p, size_t start_offset,
         size_t available = current->len - current_offset;
         const char *src = (const char *)current->payload + current_offset;
         size_t copy_len = available;
-        size_t end_marker_len = strlen(end_marker);
+        size_t end_marker_len = strlen (end_marker);
 
         /* 检查是否在当前pbuf中找到结束标记 */
         if (available >= end_marker_len) {
-            char *end_pos = memmem(src, available, end_marker, end_marker_len);
+            char *end_pos = memmem (src, available, end_marker, end_marker_len);
             if (end_pos) {
                 copy_len = end_pos - src;
                 found_end = 1;
@@ -167,8 +175,9 @@ extract_string_from_offset(const struct pbuf *p, size_t start_offset,
         /* 复制数据 */
         if (copy_len > 0) {
             size_t actual_copy = (copy_len < (buffer_len - 1 - extracted_len)) ?
-                                copy_len : (buffer_len - 1 - extracted_len);
-            memcpy(buffer + extracted_len, src, actual_copy);
+                                     copy_len :
+                                     (buffer_len - 1 - extracted_len);
+            memcpy (buffer + extracted_len, src, actual_copy);
             extracted_len += actual_copy;
         }
 
@@ -180,17 +189,16 @@ extract_string_from_offset(const struct pbuf *p, size_t start_offset,
     return found_end ? extracted_len : -1;
 }
 
-
 /**
  * @brief 启用协议解析零拷贝优化
  *
  * @return int 成功返回0，失败返回-1
  */
 int
-hev_session_manager_enable_protocol_zerocopy(void)
+hev_session_manager_enable_protocol_zerocopy (void)
 {
     protocol_zerocopy_enabled = 1;
-    LOG_I("Protocol zero-copy optimization enabled");
+    LOG_I ("Protocol zero-copy optimization enabled");
     return 0;
 }
 
@@ -198,10 +206,10 @@ hev_session_manager_enable_protocol_zerocopy(void)
  * @brief 禁用协议解析零拷贝优化
  */
 void
-hev_session_manager_disable_protocol_zerocopy(void)
+hev_session_manager_disable_protocol_zerocopy (void)
 {
     protocol_zerocopy_enabled = 0;
-    LOG_I("Protocol zero-copy optimization disabled");
+    LOG_I ("Protocol zero-copy optimization disabled");
 }
 
 /**
@@ -210,7 +218,7 @@ hev_session_manager_disable_protocol_zerocopy(void)
  * @return int 启用返回1，未启用返回0
  */
 int
-hev_session_manager_is_protocol_zerocopy_enabled(void)
+hev_session_manager_is_protocol_zerocopy_enabled (void)
 {
     return protocol_zerocopy_enabled;
 }
@@ -226,10 +234,12 @@ hev_session_manager_is_protocol_zerocopy_enabled(void)
  * @return const struct pbuf* 找到返回pbuf指针，未找到返回NULL
  */
 const struct pbuf *
-hev_pbuf_chain_search_zerocopy(const struct pbuf *p, const char *pattern,
-                              size_t pattern_len, size_t max_search_len, size_t *found_offset)
+hev_pbuf_chain_search_zerocopy (const struct pbuf *p, const char *pattern,
+                                size_t pattern_len, size_t max_search_len,
+                                size_t *found_offset)
 {
-    return pbuf_chain_search_zerocopy(p, pattern, pattern_len, max_search_len, found_offset);
+    return pbuf_chain_search_zerocopy (p, pattern, pattern_len, max_search_len,
+                                       found_offset);
 }
 
 /**
@@ -243,8 +253,10 @@ hev_pbuf_chain_search_zerocopy(const struct pbuf *p, const char *pattern,
  * @return int 成功返回长度，失败返回-1
  */
 int
-hev_extract_string_from_offset(const struct pbuf *p, size_t start_offset,
-                              const char *end_marker, char *buffer, size_t buffer_len)
+hev_extract_string_from_offset (const struct pbuf *p, size_t start_offset,
+                                const char *end_marker, char *buffer,
+                                size_t buffer_len)
 {
-    return extract_string_from_offset(p, start_offset, end_marker, buffer, buffer_len);
+    return extract_string_from_offset (p, start_offset, end_marker, buffer,
+                                       buffer_len);
 }

@@ -19,7 +19,8 @@
 #include "hev-logger.h"
 
 /* 全局优化器状态 */
-static struct {
+static struct
+{
     HevTaskOptimizerConfig config;
     HevTaskBatchContext batch_context;
     HevTaskStats *task_stats;
@@ -30,7 +31,7 @@ static struct {
     time_t start_time;
     unsigned long batch_counter;
     int initialized;
-} optimizer = {0};
+} optimizer = { 0 };
 
 /* 任务统计哈希函数 */
 static int
@@ -48,8 +49,8 @@ get_or_create_task_stats (HevTask *task)
 
     if (!optimizer.task_stats) {
         optimizer.task_stats_capacity = 1024;
-        optimizer.task_stats = calloc (optimizer.task_stats_capacity,
-                                       sizeof (HevTaskStats));
+        optimizer.task_stats =
+            calloc (optimizer.task_stats_capacity, sizeof (HevTaskStats));
         if (!optimizer.task_stats) {
             LOG_E ("task_optimizer: failed to allocate task stats");
             return NULL;
@@ -60,7 +61,8 @@ get_or_create_task_stats (HevTask *task)
 
     /* 线性探测查找现有统计 */
     for (i = 0; i < 8; i++) {
-        stats = &optimizer.task_stats[(index + i) % optimizer.task_stats_capacity];
+        stats =
+            &optimizer.task_stats[(index + i) % optimizer.task_stats_capacity];
         if (stats->total_runs > 0 && stats->last_run_time > 0) {
             /* 检查是否是同一个任务（简单的指针匹配） */
             if ((uintptr_t)stats->last_run_time == (uintptr_t)task) {
@@ -103,8 +105,8 @@ hev_task_optimizer_init (HevTaskOptimizerConfig *config)
     /* 初始化批量唤醒上下文 */
     if (optimizer.config.batch_wakeup_enabled) {
         optimizer.batch_context.capacity = optimizer.config.max_batch_size;
-        optimizer.batch_context.tasks = calloc (optimizer.batch_context.capacity,
-                                               sizeof (HevTask *));
+        optimizer.batch_context.tasks =
+            calloc (optimizer.batch_context.capacity, sizeof (HevTask *));
         if (!optimizer.batch_context.tasks) {
             LOG_E ("task_optimizer: failed to allocate batch context");
             return;
@@ -115,7 +117,8 @@ hev_task_optimizer_init (HevTaskOptimizerConfig *config)
     optimizer.initialized = 1;
 
     LOG_I ("task_optimizer: initialized with batch_size=%d, priority_boost=%d",
-           optimizer.config.max_batch_size, optimizer.config.priority_boost_enabled);
+           optimizer.config.max_batch_size,
+           optimizer.config.priority_boost_enabled);
 }
 
 /* 清理任务调度器优化器 */
@@ -159,7 +162,8 @@ hev_task_optimizer_set_task_type (HevTask *task, HevTaskType type)
 
 /* 设置任务优先级 */
 void
-hev_task_optimizer_set_task_priority (HevTask *task, HevTaskPriorityLevel priority)
+hev_task_optimizer_set_task_priority (HevTask *task,
+                                      HevTaskPriorityLevel priority)
 {
     if (!optimizer.initialized || !task) {
         return;
@@ -176,7 +180,8 @@ hev_task_optimizer_adjust_priority (HevTask *task)
     HevTaskStats *stats;
     HevTaskPriorityLevel new_priority;
 
-    if (!optimizer.initialized || !task || !optimizer.config.priority_boost_enabled) {
+    if (!optimizer.initialized || !task ||
+        !optimizer.config.priority_boost_enabled) {
         return;
     }
 
@@ -194,7 +199,8 @@ hev_task_optimizer_adjust_priority (HevTask *task)
             new_priority = HEV_TASK_OPT_PRIORITY_HIGH;
             stats->priority_boost = 1;
         }
-    } else if (stats->avg_runtime_us > optimizer.config.boost_threshold_us * 10) {
+    } else if (stats->avg_runtime_us >
+               optimizer.config.boost_threshold_us * 10) {
         /* 运行时间长，可能是计算密集型，降低优先级 */
         new_priority = HEV_TASK_OPT_PRIORITY_LOW;
         stats->priority_boost = -1;
@@ -204,13 +210,13 @@ hev_task_optimizer_adjust_priority (HevTask *task)
     int system_priority;
     switch (new_priority) {
     case HEV_TASK_OPT_PRIORITY_CRITICAL:
-        system_priority = 0;  /* 最高系统优先级 */
+        system_priority = 0; /* 最高系统优先级 */
         break;
     case HEV_TASK_OPT_PRIORITY_HIGH:
-        system_priority = 3;  /* 高系统优先级 */
+        system_priority = 3; /* 高系统优先级 */
         break;
     case HEV_TASK_OPT_PRIORITY_NORMAL:
-        system_priority = 7;  /* 普通系统优先级 */
+        system_priority = 7; /* 普通系统优先级 */
         break;
     case HEV_TASK_OPT_PRIORITY_LOW:
         system_priority = 12; /* 低系统优先级 */
@@ -222,8 +228,9 @@ hev_task_optimizer_adjust_priority (HevTask *task)
 
     if (system_priority != hev_task_get_priority (task)) {
         hev_task_set_priority (task, system_priority);
-        LOG_D ("task_optimizer: adjusted task %p priority to %d (runtime=%.2fus)",
-               task, system_priority, stats->avg_runtime_us);
+        LOG_D (
+            "task_optimizer: adjusted task %p priority to %d (runtime=%.2fus)",
+            task, system_priority, stats->avg_runtime_us);
     }
 }
 
@@ -254,7 +261,8 @@ hev_task_optimizer_batch_wakeup_begin (void)
 void
 hev_task_optimizer_batch_wakeup_add (HevTask *task)
 {
-    if (!optimizer.initialized || !optimizer.config.batch_wakeup_enabled || !task) {
+    if (!optimizer.initialized || !optimizer.config.batch_wakeup_enabled ||
+        !task) {
         return;
     }
 
@@ -266,8 +274,8 @@ hev_task_optimizer_batch_wakeup_add (HevTask *task)
     optimizer.batch_context.tasks[optimizer.batch_context.count] = task;
     optimizer.batch_context.count++;
 
-    LOG_D ("task_optimizer: added task %p to batch %lu (count=%d)",
-           task, optimizer.batch_context.batch_id, optimizer.batch_context.count);
+    LOG_D ("task_optimizer: added task %p to batch %lu (count=%d)", task,
+           optimizer.batch_context.batch_id, optimizer.batch_context.count);
 }
 
 /* 结束批量唤醒并执行 */
@@ -348,21 +356,26 @@ hev_task_optimizer_report_stats (void)
     double cpu_utilization = 0.0;
     time_t uptime = time (NULL) - optimizer.start_time;
 
-    if (!optimizer.initialized || !optimizer.config.stats_enabled || uptime <= 0) {
+    if (!optimizer.initialized || !optimizer.config.stats_enabled ||
+        uptime <= 0) {
         return;
     }
 
     /* 计算CPU利用率 */
     if (uptime > 0) {
-        cpu_utilization = (double)optimizer.total_runtime_us / (uptime * 1000000.0) * 100.0;
+        cpu_utilization =
+            (double)optimizer.total_runtime_us / (uptime * 1000000.0) * 100.0;
     }
 
     LOG_I ("task_optimizer: Performance Report:");
     LOG_I ("  - Uptime: %ld seconds", uptime);
     LOG_I ("  - Total task runs: %lu", optimizer.total_runs);
-    LOG_I ("  - Total runtime: %.2f seconds", optimizer.total_runtime_us / 1000000.0);
+    LOG_I ("  - Total runtime: %.2f seconds",
+           optimizer.total_runtime_us / 1000000.0);
     LOG_I ("  - Average runtime per run: %.2f us",
-           optimizer.total_runs > 0 ? (double)optimizer.total_runtime_us / optimizer.total_runs : 0.0);
+           optimizer.total_runs > 0 ?
+               (double)optimizer.total_runtime_us / optimizer.total_runs :
+               0.0);
     LOG_I ("  - CPU utilization: %.2f%%", cpu_utilization);
     LOG_I ("  - Tasks with stats: %d", optimizer.task_stats_count);
     LOG_I ("  - Batches processed: %lu", optimizer.batch_counter);
@@ -381,11 +394,14 @@ hev_task_optimizer_get_global_stats (unsigned long *total_tasks,
     }
 
     if (avg_runtime_us) {
-        *avg_runtime_us = optimizer.total_runs > 0 ?
-                          optimizer.total_runtime_us / optimizer.total_runs : 0;
+        *avg_runtime_us =
+            optimizer.total_runs > 0 ?
+                optimizer.total_runtime_us / optimizer.total_runs :
+                0;
     }
 
     if (cpu_utilization && uptime > 0) {
-        *cpu_utilization = (double)optimizer.total_runtime_us / (uptime * 1000000.0) * 100.0;
+        *cpu_utilization =
+            (double)optimizer.total_runtime_us / (uptime * 1000000.0) * 100.0;
     }
 }

@@ -200,7 +200,8 @@ hev_socks5_client_tcp_new_pooled (const char *name, int port)
         /* 使用池中的连接 */
         self = hev_malloc0 (sizeof (HevSocks5ClientTCP));
         if (!self) {
-            LOG_E ("socks5 client tcp: failed to allocate client for pooled connection");
+            LOG_E (
+                "socks5 client tcp: failed to allocate client for pooled connection");
             return NULL;
         }
 
@@ -245,7 +246,8 @@ hev_socks5_client_tcp_return_to_pool (HevSocks5ClientTCP *self)
     /* 将连接返回池中 */
     if (self->pool_entry) {
         hev_connection_pool_put (self->pool_entry);
-        LOG_D ("%p socks5 client tcp: returned to pool (fd=%d)", self, self->pool_entry->fd);
+        LOG_D ("%p socks5 client tcp: returned to pool (fd=%d)", self,
+               self->pool_entry->fd);
     }
 
     /* 清理客户端结构，但保留连接池条目 */
