@@ -13,7 +13,7 @@
 
 #include "hev-socks5-misc-priv.h"
 #include "hev-socks5-logger-priv.h"
-#include "hev-connection-pool.h"
+#include "hev-performance-optimizer.h"
 
 #include "hev-socks5-client-tcp.h"
 

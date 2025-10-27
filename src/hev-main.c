@@ -25,12 +25,9 @@
 #include "hev-traffic-router.h"
 #include "hev-session-manager.h"
 #include "hev-filter.h"
-#include "hev-memory-pool.h"
-#include "hev-connection-pool.h"
+#include "hev-performance-optimizer.h"
 #include "hev-test.h"
 #include "hev-socks5-misc.h"
-#include "hev-task-optimizer.h"
-#include "hev-batch-processor.h"
 
 #include "hev-main.h"
 

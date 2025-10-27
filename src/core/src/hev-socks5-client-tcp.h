@@ -14,7 +14,7 @@
 #include "hev-socks5-proto.h"
 
 #include "hev-socks5-client.h"
-#include "hev-connection-pool.h"
+#include "hev-performance-optimizer.h"
 
 #ifdef __cplusplus
 extern "C" {
