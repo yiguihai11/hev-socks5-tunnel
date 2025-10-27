@@ -48,9 +48,11 @@ typedef struct _HevConnectionPoolStats
 } HevConnectionPoolStats;
 
 /* 连接池接口函数 */
-void hev_connection_pool_init (int max_size, int min_idle_time, int max_idle_time);
+void hev_connection_pool_init (int max_size, int min_idle_time,
+                               int max_idle_time);
 void hev_connection_pool_fini (void);
-HevConnectionPoolEntry *hev_connection_pool_get (const char *addr, int port, int type);
+HevConnectionPoolEntry *hev_connection_pool_get (const char *addr, int port,
+                                                 int type);
 void hev_connection_pool_put (HevConnectionPoolEntry *entry);
 void hev_connection_pool_remove (HevConnectionPoolEntry *entry);
 void hev_connection_pool_get_stats (HevConnectionPoolStats *stats);
@@ -139,12 +141,17 @@ typedef struct
 void hev_batch_processor_init (HevBatchProcessorConfig *config);
 void hev_batch_processor_fini (void);
 HevBatchContext *hev_batch_processor_get_context (HevBatchType type);
-int hev_batch_processor_add_network_io (int fd, void *buffer, size_t size, int is_write);
+int hev_batch_processor_add_network_io (int fd, void *buffer, size_t size,
+                                        int is_write);
 int hev_batch_processor_process_network_io (void);
-int hev_batch_processor_add_packet (struct pbuf *pbuf, struct udp_pcb *pcb, ip_addr_t *addr, u16_t port, int priority);
+int hev_batch_processor_add_packet (struct pbuf *pbuf, struct udp_pcb *pcb,
+                                    ip_addr_t *addr, u16_t port, int priority);
 int hev_batch_processor_process_packets (void);
 void hev_batch_processor_flush_all (void);
-void hev_batch_processor_get_stats (HevBatchType type, unsigned long *total_processed, unsigned long *total_batches, double *avg_batch_time_us);
+void hev_batch_processor_get_stats (HevBatchType type,
+                                    unsigned long *total_processed,
+                                    unsigned long *total_batches,
+                                    double *avg_batch_time_us);
 
 /* ============================================================================
    Memory Pool Module
@@ -255,7 +262,8 @@ typedef struct
 void hev_task_optimizer_init (HevTaskOptimizerConfig *config);
 void hev_task_optimizer_fini (void);
 void hev_task_optimizer_set_task_type (HevTask *task, HevTaskType type);
-void hev_task_optimizer_set_task_priority (HevTask *task, HevTaskPriorityLevel priority);
+void hev_task_optimizer_set_task_priority (HevTask *task,
+                                           HevTaskPriorityLevel priority);
 void hev_task_optimizer_adjust_priority (HevTask *task);
 HevTaskStats *hev_task_optimizer_get_task_stats (HevTask *task);
 void hev_task_optimizer_batch_wakeup_begin (void);
@@ -264,7 +272,9 @@ void hev_task_optimizer_batch_wakeup_end (void);
 HevTask *hev_task_optimizer_select_next_task (void);
 void hev_task_optimizer_update_runtime (HevTask *task, double runtime_us);
 void hev_task_optimizer_report_stats (void);
-void hev_task_optimizer_get_global_stats (unsigned long *total_tasks, unsigned long *avg_runtime_us, double *cpu_utilization);
+void hev_task_optimizer_get_global_stats (unsigned long *total_tasks,
+                                          unsigned long *avg_runtime_us,
+                                          double *cpu_utilization);
 
 /* ============================================================================
    Unified Performance Optimizer Interface
@@ -296,7 +306,8 @@ typedef struct
 } HevPerformanceOptimizerConfig;
 
 /* 统一配置接口 */
-void hev_performance_optimizer_configure (HevPerformanceOptimizerConfig *config);
+void
+hev_performance_optimizer_configure (HevPerformanceOptimizerConfig *config);
 void hev_performance_optimizer_get_status (void);
 
 #ifdef __cplusplus

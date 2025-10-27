@@ -22,8 +22,8 @@
 /* memmem compatibility for systems without _GNU_SOURCE */
 #ifndef _GNU_SOURCE
 static void *
-memmem_compat (const void *haystack, size_t haystacklen,
-               const void *needle, size_t needlelen)
+memmem_compat (const void *haystack, size_t haystacklen, const void *needle,
+               size_t needlelen)
 {
     const char *h = haystack;
     const char *n = needle;
@@ -152,7 +152,8 @@ static const struct pbuf *pbuf_chain_search_zerocopy (const struct pbuf *p,
                                                       size_t pattern_len,
                                                       size_t max_search_len,
                                                       size_t *found_offset);
-static int extract_string_from_offset (const struct pbuf *p, size_t start_offset,
+static int extract_string_from_offset (const struct pbuf *p,
+                                       size_t start_offset,
                                        const char *end_marker, char *buffer,
                                        size_t buffer_len);
 
@@ -640,24 +641,29 @@ sniff_http_host (HevSocks5SessionTCP *self, char *hostname_buffer,
         LOG_D ("%p session: using zero-copy HTTP host parsing", self);
 
         /* Search for Host: header using zero-copy method */
-        found_pbuf = pbuf_chain_search_zerocopy (p, "\r\nHost: ", 8, 2048, &host_offset);
+        found_pbuf =
+            pbuf_chain_search_zerocopy (p, "\r\nHost: ", 8, 2048, &host_offset);
         if (found_pbuf) {
             /* Extract hostname from found offset */
             size_t hostname_start = host_offset + 8; /* Skip "\r\nHost: " */
             if (hev_extract_string_from_offset (p, hostname_start, "\r\n",
-                                               hostname_buffer, buffer_len) == 0) {
-                LOG_D ("%p session: zero-copy HTTP Host found: %s", self, hostname_buffer);
+                                                hostname_buffer,
+                                                buffer_len) == 0) {
+                LOG_D ("%p session: zero-copy HTTP Host found: %s", self,
+                       hostname_buffer);
                 return 0;
             }
         }
 
         /* Fallback: try to find full URL in GET request line */
-        found_pbuf = pbuf_chain_search_zerocopy (p, "GET http://", 11, 2048, &host_offset);
+        found_pbuf = pbuf_chain_search_zerocopy (p, "GET http://", 11, 2048,
+                                                 &host_offset);
         if (found_pbuf) {
             size_t hostname_start = host_offset + 11; /* Skip "GET http://" */
-            if (hev_extract_string_from_offset (p, hostname_start, "/",
-                                               hostname_buffer, buffer_len) == 0) {
-                LOG_D ("%p session: zero-copy HTTP URL hostname found: %s", self, hostname_buffer);
+            if (hev_extract_string_from_offset (
+                    p, hostname_start, "/", hostname_buffer, buffer_len) == 0) {
+                LOG_D ("%p session: zero-copy HTTP URL hostname found: %s",
+                       self, hostname_buffer);
                 return 0;
             }
         }
@@ -666,7 +672,8 @@ sniff_http_host (HevSocks5SessionTCP *self, char *hostname_buffer,
     /* Fallback to traditional method with memory copy */
     LOG_D ("%p session: using traditional HTTP host parsing", self);
     {
-        unsigned char buffer[1024]; // Max size for initial HTTP request part + null terminator
+        unsigned char buffer
+            [1024]; // Max size for initial HTTP request part + null terminator
         size_t total_len = 0;
         char *request_start = NULL;
         char *host_header_start = NULL;
@@ -675,7 +682,8 @@ sniff_http_host (HevSocks5SessionTCP *self, char *hostname_buffer,
         char *get_url_end = NULL;
 
         // Copy data from queue (non-consuming)
-        for (p = self->queue; p && total_len < (sizeof (buffer) - 1); p = p->next) {
+        for (p = self->queue; p && total_len < (sizeof (buffer) - 1);
+             p = p->next) {
             size_t copy_len = p->len;
             if (total_len + copy_len >= sizeof (buffer))
                 copy_len = sizeof (buffer) - 1 - total_len;
@@ -701,7 +709,8 @@ sniff_http_host (HevSocks5SessionTCP *self, char *hostname_buffer,
                 if (len > 0 && len < buffer_len) {
                     strncpy (hostname_buffer, host_header_start, len);
                     hostname_buffer[len] = '\0';
-                    LOG_D ("%p session: traditional HTTP Host found: %s", self, hostname_buffer);
+                    LOG_D ("%p session: traditional HTTP Host found: %s", self,
+                           hostname_buffer);
                     return 0;
                 }
             }
@@ -713,8 +722,9 @@ sniff_http_host (HevSocks5SessionTCP *self, char *hostname_buffer,
             get_url_start += strlen ("GET http://");
             get_url_end = strchr (get_url_start, '/'); // Find end of hostname
             if (!get_url_end) { // If no path, then it's just hostname
-                get_url_end = strchr (
-                    get_url_start, ' '); // Find end of hostname before HTTP version
+                get_url_end =
+                    strchr (get_url_start,
+                            ' '); // Find end of hostname before HTTP version
             }
 
             if (get_url_end) {
@@ -722,7 +732,9 @@ sniff_http_host (HevSocks5SessionTCP *self, char *hostname_buffer,
                 if (len > 0 && len < buffer_len) {
                     strncpy (hostname_buffer, get_url_start, len);
                     hostname_buffer[len] = '\0';
-                    LOG_D ("%p session: traditional HTTP URL hostname found: %s", self, hostname_buffer);
+                    LOG_D (
+                        "%p session: traditional HTTP URL hostname found: %s",
+                        self, hostname_buffer);
                     return 0;
                 }
             }
@@ -753,7 +765,9 @@ sniff_client_hello (HevSocks5SessionTCP *self, HevTLSClientHello *hello)
             size_t total_len = 0;
 
             /* Copy only necessary data */
-            for (p = self->queue; p && total_len < sizeof (buffer) && total_len < 1024; p = p->next) {
+            for (p = self->queue;
+                 p && total_len < sizeof (buffer) && total_len < 1024;
+                 p = p->next) {
                 size_t copy_len = p->len;
                 if (total_len + copy_len > sizeof (buffer))
                     copy_len = sizeof (buffer) - total_len;
@@ -763,9 +777,11 @@ sniff_client_hello (HevSocks5SessionTCP *self, HevTLSClientHello *hello)
             }
 
             if (total_len >= 5) { /* 至少需要 TLS Record Header */
-                int result = hev_filter_parse_tls (self, buffer, total_len, hello);
+                int result =
+                    hev_filter_parse_tls (self, buffer, total_len, hello);
                 if (result == 0 && hello->detected && hello->sni[0]) {
-                    LOG_D ("%p session: zero-copy TLS SNI found: %s", self, hello->sni);
+                    LOG_D ("%p session: zero-copy TLS SNI found: %s", self,
+                           hello->sni);
                 }
                 return result;
             }
@@ -2117,7 +2133,8 @@ extract_string_from_offset (const struct pbuf *p, size_t start_offset,
 
         /* 检查是否包含结束标记 */
         if (available >= end_marker_len) {
-            char *found_end_pos = memmem (src, available, end_marker, end_marker_len);
+            char *found_end_pos =
+                memmem (src, available, end_marker, end_marker_len);
             if (found_end_pos) {
                 copy_len = found_end_pos - src;
                 found_end = 1;

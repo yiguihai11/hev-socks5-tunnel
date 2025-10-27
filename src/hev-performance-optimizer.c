@@ -513,7 +513,8 @@ hev_task_monitor_end (HevTaskMonitorContext *ctx)
     runtime_us = ctx->end_time_us - ctx->start_time_us;
     ctx->is_monitoring = 0;
 
-    LOG_D ("task_monitor: task %p ran for %lu microseconds", ctx->task, runtime_us);
+    LOG_D ("task_monitor: task %p ran for %lu microseconds", ctx->task,
+           runtime_us);
 }
 
 unsigned long
@@ -584,7 +585,8 @@ hev_batch_processor_get_context (HevBatchType type)
 
 /* Simplified implementation for other batch functions */
 int
-hev_batch_processor_add_network_io (int fd, void *buffer, size_t size, int is_write)
+hev_batch_processor_add_network_io (int fd, void *buffer, size_t size,
+                                    int is_write)
 {
     LOG_D ("batch_processor: added network IO fd=%d size=%zu", fd, size);
     return 0;
@@ -619,12 +621,17 @@ hev_batch_processor_flush_all (void)
 }
 
 void
-hev_batch_processor_get_stats (HevBatchType type, unsigned long *total_processed,
-                                unsigned long *total_batches, double *avg_batch_time_us)
+hev_batch_processor_get_stats (HevBatchType type,
+                               unsigned long *total_processed,
+                               unsigned long *total_batches,
+                               double *avg_batch_time_us)
 {
-    if (total_processed) *total_processed = 0;
-    if (total_batches) *total_batches = 0;
-    if (avg_batch_time_us) *avg_batch_time_us = 0.0;
+    if (total_processed)
+        *total_processed = 0;
+    if (total_batches)
+        *total_batches = 0;
+    if (avg_batch_time_us)
+        *avg_batch_time_us = 0.0;
 }
 
 /* ============================================================================
@@ -690,7 +697,8 @@ hev_task_optimizer_set_task_type (HevTask *task, HevTaskType type)
 }
 
 void
-hev_task_optimizer_set_task_priority (HevTask *task, HevTaskPriorityLevel priority)
+hev_task_optimizer_set_task_priority (HevTask *task,
+                                      HevTaskPriorityLevel priority)
 {
     LOG_D ("task_optimizer: set task %p priority=%d", task, priority);
 }
@@ -748,7 +756,8 @@ hev_task_optimizer_report_stats (void)
     LOG_I ("task_optimizer: total runs=%lu, avg runtime=%.2f us",
            optimizer.total_runs,
            optimizer.total_runs > 0 ?
-               (double)optimizer.total_runtime_us / optimizer.total_runs : 0.0);
+               (double)optimizer.total_runtime_us / optimizer.total_runs :
+               0.0);
 }
 
 void
@@ -756,10 +765,15 @@ hev_task_optimizer_get_global_stats (unsigned long *total_tasks,
                                      unsigned long *avg_runtime_us,
                                      double *cpu_utilization)
 {
-    if (total_tasks) *total_tasks = optimizer.total_runs;
-    if (avg_runtime_us) *avg_runtime_us =
-        optimizer.total_runs > 0 ? optimizer.total_runtime_us / optimizer.total_runs : 0;
-    if (cpu_utilization) *cpu_utilization = 0.0; /* Simplified */
+    if (total_tasks)
+        *total_tasks = optimizer.total_runs;
+    if (avg_runtime_us)
+        *avg_runtime_us =
+            optimizer.total_runs > 0 ?
+                optimizer.total_runtime_us / optimizer.total_runs :
+                0;
+    if (cpu_utilization)
+        *cpu_utilization = 0.0; /* Simplified */
 }
 
 /* ============================================================================
@@ -802,8 +816,8 @@ hev_performance_optimizer_configure (HevPerformanceOptimizerConfig *config)
     /* 配置连接池 */
     if (config->conn_pool_max_size > 0) {
         hev_connection_pool_init (config->conn_pool_max_size,
-                                 config->conn_pool_min_idle_time,
-                                 config->conn_pool_max_idle_time);
+                                  config->conn_pool_min_idle_time,
+                                  config->conn_pool_max_idle_time);
     }
 
     /* 配置批量处理器 */
@@ -825,7 +839,8 @@ hev_performance_optimizer_get_status (void)
     /* 获取连接池统计 */
     hev_connection_pool_get_stats (&conn_stats);
     LOG_I ("performance_optimizer: connection pool stats:");
-    LOG_I ("  - current size: %d/%d", conn_stats.current_size, conn_stats.max_size);
+    LOG_I ("  - current size: %d/%d", conn_stats.current_size,
+           conn_stats.max_size);
     LOG_I ("  - hit ratio: %.2f%%", conn_stats.hit_ratio);
 
     /* 获取任务优化器统计 */
