@@ -179,36 +179,164 @@ void hev_filter_get_stats (HevFilterStats *stats);
  */
 void hev_filter_reset_stats (void);
 
+/* 黑名单条目类型 */
+typedef enum {
+    HEV_BLACKLIST_ENTRY_IP = 1,     /* IP地址黑名单 */
+    HEV_BLACKLIST_ENTRY_PORT = 2,   /* 端口黑名单 */
+    HEV_BLACKLIST_ENTRY_SNI = 3,    /* SNI/主机名黑名单 */
+    HEV_BLACKLIST_ENTRY_DOMAIN = 4  /* 域名黑名单 */
+} HevBlacklistEntryType;
+
+/* 黑名单条目来源 */
+typedef enum {
+    HEV_BLACKLIST_SOURCE_MANUAL = 1,    /* 手动添加 */
+    HEV_BLACKLIST_SOURCE_ACL = 2,       /* ACL规则 */
+    HEV_BLACKLIST_SOURCE_CHNROUTES = 3, /* 中国路由规则 */
+    HEV_BLACKLIST_SOURCE_AUTO = 4,      /* 自动检测（如异常行为） */
+    HEV_BLACKLIST_SOURCE_API = 5        /* API接口添加 */
+} HevBlacklistSource;
+
 /**
- * Blacklisted IP Entry
+ * Enhanced Blacklist Entry
  */
-typedef struct _HevBlacklistedIP
+typedef struct _HevBlacklistEntry
 {
-    struct _HevBlacklistedIP *next; /* Hash table chaining */
-    ip_addr_t addr; /* IP address */
-    time_t expiry; /* Expiration time */
-    time_t added_time; /* When added to blacklist */
-} HevBlacklistedIP;
+    struct _HevBlacklistEntry *next;
+
+    /* 基本信息 */
+    HevBlacklistEntryType type;
+    HevBlacklistSource source;
+    char id[64]; /* 唯一标识符 */
+
+    /* 网络信息 */
+    ip_addr_t ip_addr;
+    int port;
+    char hostname[256]; /* SNI/主机名/域名 */
+
+    /* 时间信息 */
+    time_t added_time;        /* 添加时间 */
+    time_t expiry_time;       /* 过期时间 */
+    time_t last_seen;         /* 最后访问时间 */
+    time_t first_seen;        /* 首次发现时间 */
+
+    /* 统计信息 */
+    uint64_t hit_count;       /* 命中次数 */
+    uint64_t bytes_blocked;   /* 阻止的字节数 */
+    uint32_t session_count;   /* 关联的会话数量 */
+
+    /* 元数据 */
+    char reason[128];         /* 添加原因 */
+    char source_info[64];     /* 来源详细信息 */
+    int severity;             /* 严重级别 1-10 */
+    int is_active;            /* 是否激活 */
+
+    /* TTL 管理 */
+    int ttl_seconds;          /* 生存时间（秒） */
+    int auto_refresh;         /* 是否自动刷新 */
+} HevBlacklistEntry;
+
+/* 兼容性定义 */
+typedef HevBlacklistEntry HevBlacklistedIP;
 
 /**
- * hev_filter_blacklist_add:
+ * hev_filter_blacklist_add_ip:
  * @addr: IP address to blacklist
+ * @reason: 添加原因（可选）
+ * @source: 来源类型
+ * @ttl_seconds: 生存时间（秒，0表示使用默认值）
  *
- * Add an IP address to the blacklist with configured expiry time.
+ * Add an IP address to the blacklist with detailed information.
  * This will automatically expire old entries.
+ *
+ * Returns: 新增条目的唯一标识符，失败返回NULL
  */
-void hev_filter_blacklist_add (const ip_addr_t *addr);
+const char *hev_filter_blacklist_add_ip (const ip_addr_t *addr,
+                                        const char *reason,
+                                        HevBlacklistSource source,
+                                        int ttl_seconds);
 
 /**
- * hev_filter_blacklist_check:
+ * hev_filter_blacklist_add_entry:
+ * @type: 条目类型
+ * @ip_addr: IP地址（可选，对于IP类型必须提供）
+ * @port: 端口（可选，对于端口类型必须提供）
+ * @hostname: 主机名/SNI（可选，对于SNI/域名类型必须提供）
+ * @reason: 添加原因
+ * @source: 来源类型
+ * @severity: 严重级别 (1-10)
+ * @ttl_seconds: 生存时间（秒，0表示使用默认值）
+ *
+ * Add a detailed entry to the blacklist.
+ *
+ * Returns: 新增条目的唯一标识符，失败返回NULL
+ */
+const char *hev_filter_blacklist_add_entry (HevBlacklistEntryType type,
+                                           const ip_addr_t *ip_addr,
+                                           int port,
+                                           const char *hostname,
+                                           const char *reason,
+                                           HevBlacklistSource source,
+                                           int severity,
+                                           int ttl_seconds);
+
+/**
+ * hev_filter_blacklist_check_ip:
  * @addr: IP address to check
  *
  * Check if an IP address is currently blacklisted.
- * This will automatically remove expired entries.
+ * This will automatically remove expired entries and update statistics.
  *
  * Returns: 1 if blacklisted, 0 if not.
  */
-int hev_filter_blacklist_check (const ip_addr_t *addr);
+int hev_filter_blacklist_check_ip (const ip_addr_t *addr);
+
+/**
+ * hev_filter_blacklist_check_entry:
+ * @type: 条目类型
+ * @ip_addr: IP地址（可选）
+ * @port: 端口（可选）
+ * @hostname: 主机名（可选）
+ *
+ * Check if any matching entry exists in blacklist.
+ * This will automatically remove expired entries and update statistics.
+ *
+ * Returns: 1 if blacklisted, 0 if not.
+ */
+int hev_filter_blacklist_check_entry (HevBlacklistEntryType type,
+                                     const ip_addr_t *ip_addr,
+                                     int port,
+                                     const char *hostname);
+
+/**
+ * hev_filter_blacklist_get_entry:
+ * @id: 条目唯一标识符
+ *
+ * 根据ID获取黑名单条目详细信息。
+ *
+ * Returns: 条目指针，未找到返回NULL
+ */
+HevBlacklistEntry *hev_filter_blacklist_get_entry (const char *id);
+
+/**
+ * hev_filter_blacklist_remove_entry:
+ * @id: 条目唯一标识符
+ *
+ * 根据ID移除黑名单条目。
+ *
+ * Returns: 0成功，-1失败
+ */
+int hev_filter_blacklist_remove_entry (const char *id);
+
+/**
+ * hev_filter_blacklist_update_hit:
+ * @id: 条目唯一标识符
+ * @bytes: 阻止的字节数
+ *
+ * 更新黑名单条目的命中统计信息。
+ *
+ * Returns: 0成功，-1失败
+ */
+int hev_filter_blacklist_update_hit (const char *id, uint64_t bytes);
 
 /**
  * hev_filter_blacklist_clear:
@@ -222,8 +350,37 @@ void hev_filter_blacklist_clear (void);
  *
  * Get the current number of blacklist entries.
  *
- * Returns: Number of blacklisted IP entries.
+ * Returns: Number of blacklisted entries.
  */
 size_t hev_filter_blacklist_get_count (void);
+
+/**
+ * hev_filter_blacklist_get_stats:
+ * @total_entries: 总条目数输出
+ * @active_entries: 激活条目数输出
+ * @total_hits: 总命中次数输出
+ * @total_blocked: 总阻止字节数输出
+ *
+ * 获取黑名单的详细统计信息。
+ */
+void hev_filter_blacklist_get_stats (size_t *total_entries,
+                                    size_t *active_entries,
+                                    uint64_t *total_hits,
+                                    uint64_t *total_blocked);
+
+/**
+ * hev_filter_blacklist_export:
+ * @buffer: 输出缓冲区
+ * @buffer_size: 缓冲区大小
+ *
+ * 导出黑名单条目为JSON格式字符串。
+ *
+ * Returns: 实际写入的字节数，缓冲区不足返回-1
+ */
+int hev_filter_blacklist_export (char *buffer, size_t buffer_size);
+
+/* 兼容性函数 - 保持向后兼容 */
+void hev_filter_blacklist_add (const ip_addr_t *addr);
+int hev_filter_blacklist_check (const ip_addr_t *addr);
 
 #endif /* __HEV_FILTER_H__ */

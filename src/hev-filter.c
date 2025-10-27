@@ -114,35 +114,14 @@ static HevFilterStats stats;
 
 #define BLACKLIST_HASH_SIZE 65536
 
-static HevBlacklistedIP *blacklist_table[BLACKLIST_HASH_SIZE];
+static HevBlacklistEntry *blacklist_table[BLACKLIST_HASH_SIZE];
 static size_t blacklist_count = 0;
 static HevTaskMutex blacklist_mutex;
 
-/* High-performance hash function optimized for 65536 buckets */
-static unsigned int
-blacklist_hash_func (const ip_addr_t *addr)
-{
-    unsigned int hash = 0;
+/* 黑名单统计 */
+static uint64_t total_hits = 0;
+static uint64_t total_blocked_bytes = 0;
 
-    if (IP_IS_V4 (addr)) {
-        /* Optimized for IPv4 - use full 32-bit address */
-        uint32_t ip = ip4_addr_get_u32 (ip_2_ip4 (addr));
-        /* Mix bits for better distribution in larger table */
-        hash = (ip ^ (ip >> 16)) * 0x85ebca6b;
-        hash ^= (hash >> 13);
-        hash = hash * 0xc2b2ae35;
-    } else if (IP_IS_V6 (addr)) {
-        /* Optimized for IPv6 - use all 128 bits efficiently */
-        const u32_t *ip = ip_2_ip6 (addr)->addr;
-        for (int i = 0; i < 4; i++) {
-            hash ^= ip[i] * 0x9e3779b9;
-            hash = (hash << 13) | (hash >> 19);
-        }
-    }
-
-    return hash &
-           (BLACKLIST_HASH_SIZE - 1); /* Faster than modulo for power of 2 */
-}
 
 static void
 radix_tree_insert_ipv4 (uint32_t ip, uint8_t prefix)
@@ -245,7 +224,6 @@ radix_tree_lookup_ipv6 (const uint8_t *ip)
 /* Helper Functions - must be declared before use */
 static void safe_str_copy (char *dest, const char *src, size_t max_len);
 static void debug_free_and_clear (void *ptr, size_t size, const char *name);
-static time_t get_current_time_ms (void);
 static time_t get_current_time_seconds (void);
 
 /* Safe string copy with null termination */
@@ -273,21 +251,116 @@ debug_free_and_clear (void *ptr, size_t size, const char *name)
     }
 }
 
-/* High-precision time functions */
-static time_t
-get_current_time_ms (void)
-{
-    struct timeval tv;
-    gettimeofday (&tv, NULL);
-    return (time_t)tv.tv_sec * 1000 + tv.tv_usec / 1000;
-}
-
+/* 时间函数 */
 static time_t
 get_current_time_seconds (void)
 {
     struct timeval tv;
     gettimeofday (&tv, NULL);
     return tv.tv_sec;
+}
+
+/* ============================================================================
+   Enhanced Blacklist Helper Functions
+   ============================================================================ */
+
+/* 前向声明 */
+static uint32_t hostname_hash (const char *hostname);
+
+/* 生成唯一ID */
+static void
+generate_entry_id (char *id, size_t id_size, HevBlacklistEntryType type,
+                  const ip_addr_t *ip_addr, int port, const char *hostname)
+{
+    struct timespec ts;
+    clock_gettime (CLOCK_REALTIME, &ts);
+
+    switch (type) {
+    case HEV_BLACKLIST_ENTRY_IP:
+        if (ip_addr) {
+            char ip_str[INET6_ADDRSTRLEN];
+            ipaddr_ntoa_r (ip_addr, ip_str, sizeof (ip_str));
+            snprintf (id, id_size, "ip_%s_%ld", ip_str, ts.tv_nsec);
+        }
+        break;
+    case HEV_BLACKLIST_ENTRY_PORT:
+        snprintf (id, id_size, "port_%d_%ld", port, ts.tv_nsec);
+        break;
+    case HEV_BLACKLIST_ENTRY_SNI:
+    case HEV_BLACKLIST_ENTRY_DOMAIN:
+        if (hostname) {
+            snprintf (id, id_size, "%s_%s_%ld",
+                     (type == HEV_BLACKLIST_ENTRY_SNI) ? "sni" : "domain",
+                     hostname, ts.tv_nsec);
+        }
+        break;
+    }
+}
+
+/* 多类型哈希函数 */
+static unsigned int
+blacklist_hash_multi (HevBlacklistEntryType type, const ip_addr_t *ip_addr,
+                     int port, const char *hostname)
+{
+    unsigned int hash = 0;
+
+    hash = (hash << 5) + type; /* 包含类型 */
+
+    if (type == HEV_BLACKLIST_ENTRY_IP && ip_addr) {
+        /* 使用原有的IP哈希逻辑 */
+        if (IP_IS_V4 (ip_addr)) {
+            uint32_t ip = ip4_addr_get_u32 (ip_2_ip4 (ip_addr));
+            hash = (hash ^ (ip >> 16)) * 0x85ebca6b;
+            hash ^= (hash >> 13);
+            hash = hash * 0xc2b2ae35;
+        } else if (IP_IS_V6 (ip_addr)) {
+            const u32_t *ip = ip_2_ip6 (ip_addr)->addr;
+            for (int i = 0; i < 4; i++) {
+                hash ^= ip[i] * 0x9e3779b9;
+                hash = (hash << 13) | (hash >> 19);
+            }
+        }
+    }
+
+    if (type == HEV_BLACKLIST_ENTRY_PORT) {
+        hash ^= port * 0x9e3779b9;
+        hash = (hash << 7) | (hash >> 25);
+    }
+
+    if ((type == HEV_BLACKLIST_ENTRY_SNI || type == HEV_BLACKLIST_ENTRY_DOMAIN)
+        && hostname) {
+        uint32_t h_hash = hostname_hash (hostname);
+        hash ^= h_hash * 0x85ebca6b;
+    }
+
+    return hash & (BLACKLIST_HASH_SIZE - 1);
+}
+
+/* 获取来源字符串 */
+static const char *
+source_to_string (HevBlacklistSource source)
+{
+    switch (source) {
+    case HEV_BLACKLIST_SOURCE_MANUAL: return "Manual";
+    case HEV_BLACKLIST_SOURCE_ACL: return "ACL";
+    case HEV_BLACKLIST_SOURCE_CHNROUTES: return "Chnroutes";
+    case HEV_BLACKLIST_SOURCE_AUTO: return "Auto";
+    case HEV_BLACKLIST_SOURCE_API: return "API";
+    default: return "Unknown";
+    }
+}
+
+/* 获取类型字符串 */
+static const char *
+type_to_string (HevBlacklistEntryType type)
+{
+    switch (type) {
+    case HEV_BLACKLIST_ENTRY_IP: return "IP";
+    case HEV_BLACKLIST_ENTRY_PORT: return "Port";
+    case HEV_BLACKLIST_ENTRY_SNI: return "SNI";
+    case HEV_BLACKLIST_ENTRY_DOMAIN: return "Domain";
+    default: return "Unknown";
+    }
 }
 
 /* High-performance hostname hash function optimized for 65536 buckets */
@@ -743,10 +816,12 @@ hev_filter_init (void)
     memset (hostname_table, 0, sizeof (hostname_table));
     memset (blacklist_table, 0, sizeof (blacklist_table));
     blacklist_count = 0;
+    total_hits = 0;
+    total_blocked_bytes = 0;
 
     hev_task_mutex_init (&blacklist_mutex);
 
-    LOG_I ("filter: Initialized");
+    LOG_I ("filter: Initialized with enhanced blacklist support");
     return 0;
 }
 
@@ -1059,71 +1134,197 @@ hev_filter_reset_stats (void)
 }
 
 /* ============================================================================
-   Blacklist Implementation
+   Enhanced Blacklist Implementation
    ============================================================================ */
 
 #include "hev-config.h"
 
-void
-hev_filter_blacklist_add (const ip_addr_t *addr)
+/* 新的增强黑名单添加IP函数 */
+const char *
+hev_filter_blacklist_add_ip (const ip_addr_t *addr, const char *reason,
+                           HevBlacklistSource source, int ttl_seconds)
 {
-    HevBlacklistedIP *bip;
+    return hev_filter_blacklist_add_entry (HEV_BLACKLIST_ENTRY_IP, addr, 0,
+                                         NULL, reason, source, 5, ttl_seconds);
+}
+
+/* 新的增强黑名单添加通用条目函数 */
+const char *
+hev_filter_blacklist_add_entry (HevBlacklistEntryType type,
+                               const ip_addr_t *ip_addr, int port,
+                               const char *hostname, const char *reason,
+                               HevBlacklistSource source, int severity,
+                               int ttl_seconds)
+{
+    HevBlacklistEntry *entry;
     unsigned int hash;
-    int expiry_minutes;
-    char ip_str[INET6_ADDRSTRLEN];
+    time_t now;
+    char ip_str[INET6_ADDRSTRLEN] = {0};
+    const char *type_str = type_to_string (type);
+    const char *source_str = source_to_string (source);
 
-    if (!addr) {
-        LOG_E ("filter: blacklist_add called with NULL address");
-        return;
+    if (!reason) {
+        reason = "Unknown";
     }
 
-    expiry_minutes = hev_config_get_smart_proxy_blocked_ip_expiry_minutes ();
-    if (expiry_minutes <= 0)
-        return;
-
-    bip = hev_malloc (sizeof (HevBlacklistedIP));
-    if (!bip) {
-        LOG_E ("filter: Failed to allocate blacklist entry");
-        return;
+    /* 参数验证 */
+    if (type == HEV_BLACKLIST_ENTRY_IP && !ip_addr) {
+        LOG_E ("filter: IP type requires valid IP address");
+        return NULL;
+    }
+    if ((type == HEV_BLACKLIST_ENTRY_SNI || type == HEV_BLACKLIST_ENTRY_DOMAIN)
+        && (!hostname || strlen (hostname) == 0)) {
+        LOG_E ("filter: SNI/Domain type requires valid hostname");
+        return NULL;
+    }
+    if (type == HEV_BLACKLIST_ENTRY_PORT && port <= 0) {
+        LOG_E ("filter: Port type requires valid port number");
+        return NULL;
     }
 
-    ip_addr_copy (bip->addr, *addr);
-    bip->added_time = get_current_time_seconds ();
-    bip->expiry = bip->added_time + expiry_minutes * 60;
+    /* 设置默认TTL */
+    if (ttl_seconds <= 0) {
+        ttl_seconds = hev_config_get_smart_proxy_blocked_ip_expiry_minutes () * 60;
+        if (ttl_seconds <= 0) {
+            ttl_seconds = 3600; /* 默认1小时 */
+        }
+    }
 
-    /* Log with millisecond precision for debugging */
-    time_t current_ms = get_current_time_ms ();
-    LOG_D ("filter: Adding blacklist entry at %ld ms", current_ms % 1000);
+    entry = hev_malloc0 (sizeof (HevBlacklistEntry));
+    if (!entry) {
+        LOG_E ("filter: Failed to allocate enhanced blacklist entry");
+        return NULL;
+    }
 
-    hash = blacklist_hash_func (addr);
-    ipaddr_ntoa_r (addr, ip_str, sizeof (ip_str));
+    now = get_current_time_seconds ();
+
+    /* 初始化基本字段 */
+    entry->type = type;
+    entry->source = source;
+    entry->added_time = now;
+    entry->expiry_time = now + ttl_seconds;
+    entry->first_seen = now;
+    entry->last_seen = now;
+    entry->severity = (severity > 0 && severity <= 10) ? severity : 5;
+    entry->is_active = 1;
+    entry->ttl_seconds = ttl_seconds;
+    entry->auto_refresh = 0;
+
+    /* 初始化网络信息 */
+    if (type == HEV_BLACKLIST_ENTRY_IP && ip_addr) {
+        ip_addr_copy (entry->ip_addr, *ip_addr);
+        ipaddr_ntoa_r (ip_addr, ip_str, sizeof (ip_str));
+    }
+    if (type == HEV_BLACKLIST_ENTRY_PORT) {
+        entry->port = port;
+    }
+    if ((type == HEV_BLACKLIST_ENTRY_SNI || type == HEV_BLACKLIST_ENTRY_DOMAIN)
+        && hostname) {
+        safe_str_copy (entry->hostname, hostname, sizeof (entry->hostname));
+    }
+
+    /* 初始化统计字段 */
+    entry->hit_count = 0;
+    entry->bytes_blocked = 0;
+    entry->session_count = 0;
+
+    /* 初始化元数据 */
+    safe_str_copy (entry->reason, reason, sizeof (entry->reason));
+    snprintf (entry->source_info, sizeof (entry->source_info), "%s", source_str);
+
+    /* 生成唯一ID */
+    generate_entry_id (entry->id, sizeof (entry->id), type, ip_addr, port,
+                      hostname);
+
+    /* 计算哈希值并插入 */
+    hash = blacklist_hash_multi (type, ip_addr, port, hostname);
 
     hev_task_mutex_lock (&blacklist_mutex);
-    bip->next = blacklist_table[hash];
-    blacklist_table[hash] = bip;
+    entry->next = blacklist_table[hash];
+    blacklist_table[hash] = entry;
     blacklist_count++;
     hev_task_mutex_unlock (&blacklist_mutex);
 
-    LOG_I ("filter: Added %s to blacklist (expires in %d minutes)", ip_str,
-           expiry_minutes);
+    /* 记录详细日志 */
+    switch (type) {
+    case HEV_BLACKLIST_ENTRY_IP:
+        LOG_I ("filter: Added IP %s to blacklist (id=%s, reason=%s, source=%s, "
+               "ttl=%ds, severity=%d)",
+               ip_str, entry->id, reason, source_str, ttl_seconds,
+               entry->severity);
+        break;
+    case HEV_BLACKLIST_ENTRY_PORT:
+        LOG_I ("filter: Added Port %d to blacklist (id=%s, reason=%s, source=%s, "
+               "ttl=%ds, severity=%d)",
+               port, entry->id, reason, source_str, ttl_seconds,
+               entry->severity);
+        break;
+    case HEV_BLACKLIST_ENTRY_SNI:
+    case HEV_BLACKLIST_ENTRY_DOMAIN:
+        LOG_I ("filter: Added %s '%s' to blacklist (id=%s, reason=%s, source=%s, "
+               "ttl=%ds, severity=%d)",
+               type_str, hostname, entry->id, reason, source_str, ttl_seconds,
+               entry->severity);
+        break;
+    }
+
+    return entry->id;
 }
 
+/* 新的IP检查函数 */
 int
-hev_filter_blacklist_check (const ip_addr_t *addr)
+hev_filter_blacklist_check_ip (const ip_addr_t *addr)
 {
-    HevBlacklistedIP **current, *prev, *to_delete = NULL;
+    return hev_filter_blacklist_check_entry (HEV_BLACKLIST_ENTRY_IP, addr, 0,
+                                            NULL);
+}
+
+/* 新的通用条目检查函数 */
+int
+hev_filter_blacklist_check_entry (HevBlacklistEntryType type,
+                                 const ip_addr_t *ip_addr, int port,
+                                 const char *hostname)
+{
+    HevBlacklistEntry **current, *prev;
     unsigned int hash;
     time_t now;
     int found = 0;
     int expired_count = 0;
-    char ip_str[INET6_ADDRSTRLEN];
+    HevBlacklistEntry *to_delete = NULL;
+    HevBlacklistEntry *found_entry = NULL;
+    char desc[256] = {0};
 
-    if (!addr) {
-        LOG_E ("filter: blacklist_check called with NULL address");
+    /* 参数验证 */
+    if (type == HEV_BLACKLIST_ENTRY_IP && !ip_addr) {
+        return 0;
+    }
+    if ((type == HEV_BLACKLIST_ENTRY_SNI || type == HEV_BLACKLIST_ENTRY_DOMAIN)
+        && (!hostname || strlen (hostname) == 0)) {
+        return 0;
+    }
+    if (type == HEV_BLACKLIST_ENTRY_PORT && port <= 0) {
         return 0;
     }
 
-    hash = blacklist_hash_func (addr);
+    /* 生成描述字符串用于日志 */
+    switch (type) {
+    case HEV_BLACKLIST_ENTRY_IP:
+        if (ip_addr) {
+            ipaddr_ntoa_r (ip_addr, desc, sizeof (desc));
+        }
+        break;
+    case HEV_BLACKLIST_ENTRY_PORT:
+        snprintf (desc, sizeof (desc), "port %d", port);
+        break;
+    case HEV_BLACKLIST_ENTRY_SNI:
+    case HEV_BLACKLIST_ENTRY_DOMAIN:
+        snprintf (desc, sizeof (desc), "%s '%s'",
+                 (type == HEV_BLACKLIST_ENTRY_SNI) ? "SNI" : "domain",
+                 hostname ? hostname : "");
+        break;
+    }
+
+    hash = blacklist_hash_multi (type, ip_addr, port, hostname);
     now = get_current_time_seconds ();
 
     hev_task_mutex_lock (&blacklist_mutex);
@@ -1131,56 +1332,212 @@ hev_filter_blacklist_check (const ip_addr_t *addr)
     prev = NULL;
 
     while (*current) {
-        HevBlacklistedIP *bip = *current;
+        HevBlacklistEntry *entry = *current;
 
-        /* Remove expired entries */
-        if (now > bip->expiry) {
-            *current = bip->next;
+        /* 检查是否过期 */
+        if (now > entry->expiry_time) {
+            *current = entry->next;
             if (prev)
-                prev->next = bip->next;
+                prev->next = entry->next;
 
-            to_delete = bip;
+            entry->next = to_delete; /* 添加到删除链表 */
+            to_delete = entry;
             blacklist_count--;
             expired_count++;
 
-            /* Continue with next entry */
+            current = prev ? &prev->next : &blacklist_table[hash];
             continue;
         }
 
-        /* Check if this is the address we're looking for */
-        if (ip_addr_cmp (&bip->addr, addr)) {
-            found = 1;
-            ipaddr_ntoa_r (addr, ip_str, sizeof (ip_str));
-            time_t time_remaining = bip->expiry - now;
-            LOG_D ("filter: IP %s found in blacklist (expires in %ld seconds)",
-                   ip_str, time_remaining);
+        /* 检查是否匹配 */
+        int match = 0;
+        switch (type) {
+        case HEV_BLACKLIST_ENTRY_IP:
+            match = ip_addr && ip_addr_cmp (&entry->ip_addr, ip_addr);
+            break;
+        case HEV_BLACKLIST_ENTRY_PORT:
+            match = entry->port == port;
+            break;
+        case HEV_BLACKLIST_ENTRY_SNI:
+        case HEV_BLACKLIST_ENTRY_DOMAIN:
+            match = hostname && strcasecmp (entry->hostname, hostname) == 0;
+            break;
         }
 
-        prev = bip;
-        current = &bip->next;
+        if (match) {
+            found = 1;
+            found_entry = entry;
+            entry->last_seen = now;
+            entry->hit_count++;
+            entry->is_active = 1;
+            total_hits++;
+        }
+
+        prev = entry;
+        current = &entry->next;
     }
 
     hev_task_mutex_unlock (&blacklist_mutex);
 
-    /* Free expired entries outside of mutex lock */
-    if (to_delete) {
-        /* This is simplified - in production, we'd collect all expired entries
-         * and free them in a batch to avoid multiple malloc/free calls */
+    /* 释放过期条目 */
+    while (to_delete) {
+        HevBlacklistEntry *next = to_delete->next;
+        LOG_D ("filter: Removed expired %s entry (id=%s)",
+               type_to_string (to_delete->type), to_delete->id);
         hev_free (to_delete);
+        to_delete = next;
     }
 
     if (expired_count > 0) {
-        LOG_D ("filter: Cleaned up %d expired blacklist entries",
-               expired_count);
+        LOG_D ("filter: Cleaned up %d expired %s entries", expired_count,
+               type_to_string (type));
+    }
+
+    if (found && found_entry) {
+        time_t time_remaining = found_entry->expiry_time - now;
+        LOG_D ("filter: %s found in blacklist (id=%s, hits=%lu, expires in %ld "
+               "seconds)",
+               desc, found_entry->id, found_entry->hit_count, time_remaining);
     }
 
     return found;
 }
 
+/* 根据ID获取条目 */
+HevBlacklistEntry *
+hev_filter_blacklist_get_entry (const char *id)
+{
+    HevBlacklistEntry *entry = NULL;
+
+    if (!id) {
+        return NULL;
+    }
+
+    hev_task_mutex_lock (&blacklist_mutex);
+
+    /* 线性搜索所有哈希桶 */
+    for (int i = 0; i < BLACKLIST_HASH_SIZE; i++) {
+        HevBlacklistEntry *current = blacklist_table[i];
+        while (current) {
+            if (strcmp (current->id, id) == 0) {
+                /* 检查是否过期 */
+                time_t now = get_current_time_seconds ();
+                if (now <= current->expiry_time) {
+                    entry = current;
+                }
+                break;
+            }
+            current = current->next;
+        }
+        if (entry) {
+            break;
+        }
+    }
+
+    hev_task_mutex_unlock (&blacklist_mutex);
+
+    return entry;
+}
+
+/* 根据ID移除条目 */
+int
+hev_filter_blacklist_remove_entry (const char *id)
+{
+    HevBlacklistEntry **current, *prev;
+    int removed = 0;
+
+    if (!id) {
+        return -1;
+    }
+
+    hev_task_mutex_lock (&blacklist_mutex);
+
+    /* 线性搜索所有哈希桶 */
+    for (int i = 0; i < BLACKLIST_HASH_SIZE; i++) {
+        current = &blacklist_table[i];
+        prev = NULL;
+
+        while (*current) {
+            HevBlacklistEntry *entry = *current;
+
+            if (strcmp (entry->id, id) == 0) {
+                *current = entry->next;
+                if (prev)
+                    prev->next = entry->next;
+
+                blacklist_count--;
+                removed = 1;
+
+                LOG_I ("filter: Removed %s entry (id=%s, %s, hits=%lu)",
+                       type_to_string (entry->type), entry->id,
+                       entry->hostname[0] ? entry->hostname :
+                       (entry->port > 0 ? "port" : "IP"),
+                       entry->hit_count);
+
+                hev_free (entry);
+                break;
+            }
+
+            prev = entry;
+            current = &entry->next;
+        }
+
+        if (removed) {
+            break;
+        }
+    }
+
+    hev_task_mutex_unlock (&blacklist_mutex);
+
+    return removed ? 0 : -1;
+}
+
+/* 更新命中统计 */
+int
+hev_filter_blacklist_update_hit (const char *id, uint64_t bytes)
+{
+    int updated = 0;
+
+    if (!id) {
+        return -1;
+    }
+
+    hev_task_mutex_lock (&blacklist_mutex);
+
+    /* 线性搜索条目 */
+    for (int i = 0; i < BLACKLIST_HASH_SIZE; i++) {
+        HevBlacklistEntry *current = blacklist_table[i];
+        while (current) {
+            if (strcmp (current->id, id) == 0) {
+                current->hit_count++;
+                current->bytes_blocked += bytes;
+                current->last_seen = get_current_time_seconds ();
+                total_hits++;
+                total_blocked_bytes += bytes;
+                updated = 1;
+                break;
+            }
+            current = current->next;
+        }
+        if (updated) {
+            break;
+        }
+    }
+
+    hev_task_mutex_unlock (&blacklist_mutex);
+
+    if (updated) {
+        LOG_D ("filter: Updated hit stats for entry %s (bytes=%lu)", id, bytes);
+    }
+
+    return updated ? 0 : -1;
+}
+
+/* 清空黑名单 */
 void
 hev_filter_blacklist_clear (void)
 {
-    HevBlacklistedIP *current, *next;
+    HevBlacklistEntry *current, *next;
     int cleared_count = 0;
 
     hev_task_mutex_lock (&blacklist_mutex);
@@ -1197,13 +1554,139 @@ hev_filter_blacklist_clear (void)
     }
 
     blacklist_count = 0;
+    total_hits = 0;
+    total_blocked_bytes = 0;
+
     hev_task_mutex_unlock (&blacklist_mutex);
 
-    LOG_I ("filter: Cleared %d blacklist entries", cleared_count);
+    LOG_I ("filter: Cleared %d enhanced blacklist entries", cleared_count);
 }
 
+/* 获取黑名单条目数量 */
 size_t
 hev_filter_blacklist_get_count (void)
 {
     return blacklist_count;
+}
+
+/* 获取详细统计信息 */
+void
+hev_filter_blacklist_get_stats (size_t *total_entries, size_t *active_entries,
+                               uint64_t *total_hits_out,
+                               uint64_t *total_blocked_out)
+{
+    time_t now = get_current_time_seconds ();
+    size_t active = 0;
+
+    hev_task_mutex_lock (&blacklist_mutex);
+
+    /* 统计活跃条目 */
+    for (int i = 0; i < BLACKLIST_HASH_SIZE; i++) {
+        HevBlacklistEntry *current = blacklist_table[i];
+        while (current) {
+            if (now <= current->expiry_time && current->is_active) {
+                active++;
+            }
+            current = current->next;
+        }
+    }
+
+    hev_task_mutex_unlock (&blacklist_mutex);
+
+    if (total_entries)
+        *total_entries = blacklist_count;
+    if (active_entries)
+        *active_entries = active;
+    if (total_hits_out)
+        *total_hits_out = total_hits;
+    if (total_blocked_out)
+        *total_blocked_out = total_blocked_bytes;
+}
+
+/* 导出黑名单为JSON */
+int
+hev_filter_blacklist_export (char *buffer, size_t buffer_size)
+{
+    size_t written = 0;
+    int entry_count = 0;
+
+    if (!buffer || buffer_size == 0) {
+        return -1;
+    }
+
+    hev_task_mutex_lock (&blacklist_mutex);
+
+    /* JSON开始 */
+    written += snprintf (buffer + written, buffer_size - written,
+                        "{\"blacklist\":{");
+    written += snprintf (buffer + written, buffer_size - written,
+                        "\"count\":%zu,\"stats\":{\"total_hits\":%lu,"
+                        "\"total_blocked\":%lu},\"entries\":[",
+                        blacklist_count, total_hits, total_blocked_bytes);
+
+    /* 导出每个条目 */
+    for (int i = 0; i < BLACKLIST_HASH_SIZE && written < buffer_size - 100; i++) {
+        HevBlacklistEntry *current = blacklist_table[i];
+        while (current && written < buffer_size - 200) {
+            if (entry_count > 0) {
+                written += snprintf (buffer + written, buffer_size - written,
+                                    ",");
+            }
+
+            char ip_str[INET6_ADDRSTRLEN] = {0};
+            if (current->type == HEV_BLACKLIST_ENTRY_IP) {
+                ipaddr_ntoa_r (&current->ip_addr, ip_str, sizeof (ip_str));
+            }
+
+            written += snprintf (buffer + written, buffer_size - written,
+                                "{\"id\":\"%s\",\"type\":%d,\"source\":%d,"
+                                "\"ip\":\"%s\",\"port\":%d,\"hostname\":\"%s\","
+                                "\"added_time\":%ld,\"expiry_time\":%ld,"
+                                "\"last_seen\":%ld,\"first_seen\":%ld,"
+                                "\"hit_count\":%lu,\"bytes_blocked\":%lu,"
+                                "\"session_count\":%u,\"reason\":\"%s\","
+                                "\"source_info\":\"%s\",\"severity\":%d,"
+                                "\"is_active\":%d,\"ttl_seconds\":%d,"
+                                "\"auto_refresh\":%d}",
+                                current->id, current->type, current->source,
+                                ip_str, current->port, current->hostname,
+                                current->added_time, current->expiry_time,
+                                current->last_seen, current->first_seen,
+                                current->hit_count, current->bytes_blocked,
+                                current->session_count, current->reason,
+                                current->source_info, current->severity,
+                                current->is_active, current->ttl_seconds,
+                                current->auto_refresh);
+
+            entry_count++;
+            current = current->next;
+        }
+    }
+
+    /* JSON结束 */
+    written += snprintf (buffer + written, buffer_size - written,
+                        "]}}");
+
+    hev_task_mutex_unlock (&blacklist_mutex);
+
+    return (written >= buffer_size) ? -1 : (int)written;
+}
+
+/* ============================================================================
+   Compatibility Functions - 保持向后兼容
+   ============================================================================ */
+
+void
+hev_filter_blacklist_add (const ip_addr_t *addr)
+{
+    if (addr) {
+        hev_filter_blacklist_add_ip (addr, "Legacy API",
+                                   HEV_BLACKLIST_SOURCE_MANUAL, 0);
+    }
+}
+
+int
+hev_filter_blacklist_check (const ip_addr_t *addr)
+{
+    return hev_filter_blacklist_check_ip (addr);
 }

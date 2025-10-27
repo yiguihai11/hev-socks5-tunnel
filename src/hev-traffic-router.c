@@ -41,15 +41,56 @@ terminate_pcb_task (void *data)
 void
 hev_traffic_router_blacklist_add (const ip_addr_t *addr)
 {
-    LOG_D ("router: Delegating blacklist_add to filter module");
-    hev_filter_blacklist_add (addr);
+    char ip_str[INET6_ADDRSTRLEN];
+
+    if (!addr) {
+        LOG_E ("router: blacklist_add called with NULL address");
+        return;
+    }
+
+    ipaddr_ntoa_r (addr, ip_str, sizeof (ip_str));
+    LOG_D ("router: Adding IP %s to enhanced blacklist", ip_str);
+
+    /* 使用增强的黑名单接口，提供详细的原因和来源信息 */
+    const char *entry_id = hev_filter_blacklist_add_ip (
+        addr,
+        "Traffic Router - Blocked by routing decision",
+        HEV_BLACKLIST_SOURCE_AUTO,
+        0  /* 使用默认TTL */
+    );
+
+    if (entry_id) {
+        LOG_I ("router: Successfully added IP %s to blacklist (entry_id=%s)",
+               ip_str, entry_id);
+    } else {
+        LOG_E ("router: Failed to add IP %s to blacklist", ip_str);
+    }
 }
 
 int
 hev_traffic_router_blacklist_check (const ip_addr_t *addr)
 {
-    LOG_D ("router: Delegating blacklist_check to filter module");
-    return hev_filter_blacklist_check (addr);
+    char ip_str[INET6_ADDRSTRLEN];
+    int is_blacklisted;
+
+    if (!addr) {
+        LOG_E ("router: blacklist_check called with NULL address");
+        return 0;
+    }
+
+    ipaddr_ntoa_r (addr, ip_str, sizeof (ip_str));
+    LOG_D ("router: Checking IP %s against enhanced blacklist", ip_str);
+
+    /* 使用增强的黑名单检查接口 */
+    is_blacklisted = hev_filter_blacklist_check_ip (addr);
+
+    if (is_blacklisted) {
+        LOG_W ("router: IP %s found in enhanced blacklist", ip_str);
+    } else {
+        LOG_D ("router: IP %s not found in blacklist", ip_str);
+    }
+
+    return is_blacklisted;
 }
 
 int
