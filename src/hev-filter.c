@@ -1048,7 +1048,7 @@ hev_filter_is_blocked_ip (const ip_addr_t *ip)
         }
     }
 
-/* 注意：动态黑名单不在这里检查，它用于路由决策，不阻止连接 */
+    /* 注意：动态黑名单不在这里检查，它用于路由决策，不阻止连接 */
     return 0;
 }
 
@@ -1065,7 +1065,7 @@ hev_filter_is_blocked_hostname (const char *hostname)
         return 1;
     }
 
-/* 注意：动态黑名单不在这里检查，它用于路由决策，不阻止连接 */
+    /* 注意：动态黑名单不在这里检查，它用于路由决策，不阻止连接 */
     return 0;
 }
 
@@ -1130,15 +1130,16 @@ hev_filter_is_gfw_blocked (const ip_addr_t *ip, const char *hostname, int port)
     }
 
     /* 检查域名是否被GFW封锁 */
-    if (hostname && hev_filter_blacklist_check_entry (HEV_BLACKLIST_ENTRY_DOMAIN,
-                                                      NULL, 0, hostname)) {
-        LOG_D ("filter: Domain '%s' is GFW blocked (routing decision)", hostname);
+    if (hostname && hev_filter_blacklist_check_entry (
+                        HEV_BLACKLIST_ENTRY_DOMAIN, NULL, 0, hostname)) {
+        LOG_D ("filter: Domain '%s' is GFW blocked (routing decision)",
+               hostname);
         return 1;
     }
 
     /* 检查端口是否被封锁 */
     if (port > 0 && hev_filter_blacklist_check_entry (HEV_BLACKLIST_ENTRY_PORT,
-                                                       NULL, port, NULL)) {
+                                                      NULL, port, NULL)) {
         LOG_D ("filter: Port %d is GFW blocked (routing decision)", port);
         return 1;
     }

@@ -144,7 +144,8 @@ int hev_filter_check_all_filters (const ip_addr_t *ip, const char *hostname,
  *
  * Returns: 1 if GFW blocked (should use proxy), 0 if not blocked.
  */
-int hev_filter_is_gfw_blocked (const ip_addr_t *ip, const char *hostname, int port);
+int hev_filter_is_gfw_blocked (const ip_addr_t *ip, const char *hostname,
+                               int port);
 
 /**
  * hev_filter_is_domestic:
