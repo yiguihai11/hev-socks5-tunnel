@@ -221,8 +221,82 @@ run_blacklist_tests (void)
     int compat_check = hev_filter_blacklist_check (&compat_ip);
     TEST_ASSERT (compat_check == 1);
 
+      // Test: Integration with existing filter functions
+    printf ("\nTesting integration with existing filter functions...\n");
+
+    // Test: IP filtering integration
+    ip_addr_t test_ip_integration;
+    ipaddr_aton ("10.100.50.25", &test_ip_integration);
+
+    // Add to dynamic blacklist
+    const char *integration_entry_id = hev_filter_blacklist_add_ip (
+        &test_ip_integration,
+        "Integration test IP",
+        HEV_BLACKLIST_SOURCE_MANUAL,
+        3600
+    );
+    TEST_ASSERT (integration_entry_id != NULL);
+
+    // Test integrated IP check (should be blocked by blacklist)
+    int integrated_ip_blocked = hev_filter_is_blocked_ip (&test_ip_integration);
+    TEST_ASSERT (integrated_ip_blocked == 1);
+
+    // Test: Hostname filtering integration
+    const char *integration_hostname = "blocked-integration.com";
+    const char *host_entry_id = hev_filter_blacklist_add_entry (
+        HEV_BLACKLIST_ENTRY_DOMAIN,
+        NULL, 0, integration_hostname,
+        "Integration test hostname",
+        HEV_BLACKLIST_SOURCE_MANUAL,
+        5, 3600
+    );
+    TEST_ASSERT (host_entry_id != NULL);
+
+    // Test integrated hostname check (should be blocked by blacklist)
+    int integrated_host_blocked = hev_filter_is_blocked_hostname (integration_hostname);
+    TEST_ASSERT (integrated_host_blocked == 1);
+
+    // Test: Port filtering integration
+    int test_port = 9999;
+    const char *integration_port_entry_id = hev_filter_blacklist_add_entry (
+        HEV_BLACKLIST_ENTRY_PORT,
+        NULL, test_port, NULL,
+        "Integration test port",
+        HEV_BLACKLIST_SOURCE_AUTO,
+        6, 3600
+    );
+    TEST_ASSERT (integration_port_entry_id != NULL);
+
+    // Test port check
+    int integrated_port_blocked = hev_filter_is_blocked_port (test_port);
+    TEST_ASSERT (integrated_port_blocked == 1);
+
+    // Test: Comprehensive filter check
+    int comprehensive_blocked = hev_filter_check_all_filters (
+        &test_ip_integration, integration_hostname, test_port);
+    TEST_ASSERT (comprehensive_blocked == 1);
+
+    // Test: Clean IP (should not be blocked)
+    ip_addr_t clean_ip;
+    ipaddr_aton ("192.168.1.123", &clean_ip);
+    int clean_ip_blocked = hev_filter_check_all_filters (&clean_ip, NULL, 0);
+    TEST_ASSERT (clean_ip_blocked == 0);
+
+    // Test: Clean hostname (should not be blocked)
+    int clean_host_blocked = hev_filter_check_all_filters (NULL, "clean.example.com", 0);
+    TEST_ASSERT (clean_host_blocked == 0);
+
+    // Test: Clean port (should not be blocked - use very high port number unlikely to be in ACL)
+    int clean_port_blocked = hev_filter_check_all_filters (NULL, NULL, 65530);
+    TEST_ASSERT (clean_port_blocked == 0);
+
     // Cleanup
     hev_filter_blacklist_clear ();
+
+    // Verify cleanup worked - test that all checks now return false
+    int after_cleanup_ip_blocked = hev_filter_check_all_filters (&test_ip_integration, integration_hostname, test_port);
+    TEST_ASSERT (after_cleanup_ip_blocked == 0);
+
     hev_filter_fini ();
 }
 

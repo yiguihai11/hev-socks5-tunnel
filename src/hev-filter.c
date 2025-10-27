@@ -1032,18 +1032,32 @@ hev_filter_load_chnroutes (const char *file_path)
 int
 hev_filter_is_blocked_ip (const ip_addr_t *ip)
 {
+    /* 首先检查ACL规则 */
     if (IP_IS_V4 (ip)) {
         uint32_t addr = ntohl (ip_2_ip4 (ip)->addr);
         if (radix_tree_lookup_ipv4 (addr)) {
             stats.ip_blocked++;
+            LOG_D ("filter: IP %s blocked by ACL rule",
+                   ipaddr_ntoa (ip));
             return 1;
         }
     } else if (IP_IS_V6 (ip)) {
         if (radix_tree_lookup_ipv6 ((const uint8_t *)ip_2_ip6 (ip)->addr)) {
             stats.ip_blocked++;
+            LOG_D ("filter: IPv6 %s blocked by ACL rule",
+                   ipaddr_ntoa (ip));
             return 1;
         }
     }
+
+    /* 然后检查动态黑名单 */
+    if (hev_filter_blacklist_check_ip (ip)) {
+        stats.ip_blocked++;
+        LOG_D ("filter: IP %s blocked by dynamic blacklist",
+               ipaddr_ntoa (ip));
+        return 1;
+    }
+
     return 0;
 }
 
@@ -1053,10 +1067,65 @@ hev_filter_is_blocked_hostname (const char *hostname)
     if (!hostname || strlen (hostname) == 0)
         return 0;
 
+    /* 首先检查ACL规则 */
     if (hostname_table_lookup (hostname)) {
         stats.hostname_blocked++;
+        LOG_D ("filter: Hostname '%s' blocked by ACL rule", hostname);
         return 1;
     }
+
+    /* 然后检查动态黑名单（SNI和域名） */
+    if (hev_filter_blacklist_check_entry (HEV_BLACKLIST_ENTRY_SNI, NULL, 0, hostname)) {
+        stats.hostname_blocked++;
+        LOG_D ("filter: Hostname '%s' blocked by SNI blacklist", hostname);
+        return 1;
+    }
+
+    if (hev_filter_blacklist_check_entry (HEV_BLACKLIST_ENTRY_DOMAIN, NULL, 0, hostname)) {
+        stats.hostname_blocked++;
+        LOG_D ("filter: Hostname '%s' blocked by domain blacklist", hostname);
+        return 1;
+    }
+
+    return 0;
+}
+
+int
+hev_filter_is_blocked_port (int port)
+{
+    /* 端口只有动态黑名单检查 */
+    if (hev_filter_blacklist_check_entry (HEV_BLACKLIST_ENTRY_PORT,
+                                          NULL, port, NULL)) {
+        LOG_D ("filter: Port %d blocked by dynamic blacklist", port);
+        return 1;
+    }
+
+    return 0;
+}
+
+int
+hev_filter_check_all_filters (const ip_addr_t *ip, const char *hostname, int port)
+{
+    /* 检查IP过滤规则 */
+    if (ip && hev_filter_is_blocked_ip (ip)) {
+        LOG_D ("filter: IP %s blocked by comprehensive filter check",
+               ipaddr_ntoa (ip));
+        return 1;
+    }
+
+    /* 检查主机名过滤规则 */
+    if (hostname && hev_filter_is_blocked_hostname (hostname)) {
+        LOG_D ("filter: Hostname '%s' blocked by comprehensive filter check",
+               hostname);
+        return 1;
+    }
+
+    /* 检查端口过滤规则 */
+    if (port > 0 && hev_filter_is_blocked_port (port)) {
+        LOG_D ("filter: Port %d blocked by comprehensive filter check", port);
+        return 1;
+    }
+
     return 0;
 }
 

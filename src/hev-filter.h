@@ -103,11 +103,34 @@ int hev_filter_is_blocked_ip (const ip_addr_t *ip);
  * hev_filter_is_blocked_hostname:
  * @hostname: Hostname/SNI to check
  *
- * Check if a hostname is blocked by ACL (case-insensitive).
+ * Check if a hostname is blocked by ACL or dynamic blacklist (case-insensitive).
  *
  * Returns: 1 if blocked, 0 if allowed.
  */
 int hev_filter_is_blocked_hostname (const char *hostname);
+
+/**
+ * hev_filter_is_blocked_port:
+ * @port: Port number to check
+ *
+ * Check if a port is blocked by dynamic blacklist.
+ *
+ * Returns: 1 if blocked, 0 if allowed.
+ */
+int hev_filter_is_blocked_port (int port);
+
+/**
+ * hev_filter_check_all_filters:
+ * @ip: IP address to check
+ * @hostname: Hostname to check
+ * @port: Port number to check
+ *
+ * Comprehensive filter check against ACL rules and dynamic blacklist.
+ * This function checks IP, hostname, and port against all blocking rules.
+ *
+ * Returns: 1 if any filter matches (blocked), 0 if all allowed.
+ */
+int hev_filter_check_all_filters (const ip_addr_t *ip, const char *hostname, int port);
 
 /**
  * hev_filter_is_domestic:
