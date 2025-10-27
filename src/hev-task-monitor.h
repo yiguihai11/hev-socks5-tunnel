@@ -1,48 +1,34 @@
 /*
  ============================================================================
- Name        : hev-task-monitor.h
+ Name        : hev-task-monitor.h (Compatibility Layer)
  Author      : hev <r@hev.cc>
  Copyright   : Copyright (c) 2025 hev
- Description : Task Performance Monitor Helper
+ Description : Task Performance Monitor Helper - Compatibility Header
  ============================================================================
  */
 
 #ifndef __HEV_TASK_MONITOR_H__
 #define __HEV_TASK_MONITOR_H__
 
-#include <hev-task.h>
+/* Include the unified performance optimizer module */
+#include "hev-performance-optimizer.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* 任务监控上下文 */
-typedef struct
-{
-    HevTask *task;
-    unsigned long start_time_us;
-    unsigned long end_time_us;
-    int is_monitoring;
-} HevTaskMonitorContext;
+/* Re-export types and functions for backward compatibility */
+typedef HevTaskMonitorContext HevTaskMonitorContext;
 
-/* 开始监控任务性能 */
-void hev_task_monitor_start (HevTaskMonitorContext *ctx, HevTask *task);
+/* All functions are available through hev-performance-optimizer.h */
 
-/* 结束监控任务性能 */
-void hev_task_monitor_end (HevTaskMonitorContext *ctx);
-
-/* 获取任务运行时间（微秒） */
-unsigned long hev_task_monitor_get_runtime_us (HevTaskMonitorContext *ctx);
-
-/* 自动监控宏 - 用于任务函数开始 */
+/* Re-export macros for backward compatibility */
 #define HEV_TASK_MONITOR_START(task)     \
     HevTaskMonitorContext __monitor_ctx; \
     hev_task_monitor_start (&__monitor_ctx, task);
 
-/* 自动监控宏 - 用于任务函数结束 */
 #define HEV_TASK_MONITOR_END() hev_task_monitor_end (&__monitor_ctx);
 
-/* 带条件监控的宏 */
 #define HEV_TASK_MONITOR_START_IF(task, condition)     \
     HevTaskMonitorContext __monitor_ctx = { 0 };       \
     if (condition) {                                   \

@@ -7,6 +7,7 @@
  ============================================================================
  */
 
+#define _GNU_SOURCE
 #include <unistd.h>
 #include <string.h>
 #include <errno.h>
@@ -17,6 +18,31 @@
 #include <stddef.h>
 #include <time.h>
 #include <strings.h> /* For strcasestr */
+
+/* memmem compatibility for systems without _GNU_SOURCE */
+#ifndef _GNU_SOURCE
+static void *
+memmem_compat (const void *haystack, size_t haystacklen,
+               const void *needle, size_t needlelen)
+{
+    const char *h = haystack;
+    const char *n = needle;
+    size_t i;
+
+    if (needlelen == 0)
+        return (void *)haystack;
+    if (haystacklen < needlelen)
+        return NULL;
+
+    for (i = 0; i <= haystacklen - needlelen; i++) {
+        if (memcmp (h + i, n, needlelen) == 0)
+            return (void *)(h + i);
+    }
+    return NULL;
+}
+
+#define memmem memmem_compat
+#endif
 
 /* ⬇️ TCP Keep-Alive 跨平台兼容性 - 修改顺序,先包含系统头文件 */
 #if defined(__linux__)
@@ -119,6 +145,16 @@ static int sniff_client_hello (HevSocks5SessionTCP *self,
                                HevTLSClientHello *hello);
 static int sniff_http_host (HevSocks5SessionTCP *self, char *hostname_buffer,
                             size_t buffer_len);
+
+/* Zero-copy protocol parsing function declarations */
+static const struct pbuf *pbuf_chain_search_zerocopy (const struct pbuf *p,
+                                                      const char *pattern,
+                                                      size_t pattern_len,
+                                                      size_t max_search_len,
+                                                      size_t *found_offset);
+static int extract_string_from_offset (const struct pbuf *p, size_t start_offset,
+                                       const char *end_marker, char *buffer,
+                                       size_t buffer_len);
 
 // Custom strcasestr implementation for portability
 static char *
@@ -591,65 +627,104 @@ static int
 sniff_http_host (HevSocks5SessionTCP *self, char *hostname_buffer,
                  size_t buffer_len)
 {
-    struct pbuf *p;
-    unsigned char
-        buffer[1024]; // Max size for initial HTTP request part + null terminator
-    size_t total_len = 0;
-    char *request_start = NULL;
-    char *host_header_start = NULL;
-    char *host_header_end = NULL;
-    char *get_url_start = NULL;
-    char *get_url_end = NULL;
+    struct pbuf *p = self->queue;
+    size_t host_offset = 0;
+    const struct pbuf *found_pbuf = NULL;
 
-    // Copy data from queue (non-consuming)
-    for (p = self->queue; p && total_len < (sizeof (buffer) - 1); p = p->next) {
-        size_t copy_len = p->len;
-        if (total_len + copy_len >=
-            sizeof (buffer)) // Ensure space for null terminator
-            copy_len = sizeof (buffer) - 1 - total_len; // Adjust copy_len
-
-        memcpy (buffer + total_len, p->payload, copy_len);
-        total_len += copy_len;
-    }
-    buffer[total_len] = '\0'; // Null-terminate for string operations
-
-    if (total_len == 0) {
+    if (!p) {
         return -1; // No data
     }
 
-    request_start = (char *)buffer;
+    /* Try zero-copy optimization first if enabled */
+    if (hev_session_manager_is_protocol_zerocopy_enabled ()) {
+        LOG_D ("%p session: using zero-copy HTTP host parsing", self);
 
-    // 1. Try to find Host: header
-    host_header_start = strcasestr_custom (request_start, "\r\nHost: ");
-    if (host_header_start) {
-        host_header_start += strlen ("\r\nHost: ");
-        host_header_end = strstr (host_header_start, "\r\n");
-        if (host_header_end) {
-            size_t len = host_header_end - host_header_start;
-            if (len > 0 && len < buffer_len) {
-                strncpy (hostname_buffer, host_header_start, len);
-                hostname_buffer[len] = '\0';
+        /* Search for Host: header using zero-copy method */
+        found_pbuf = pbuf_chain_search_zerocopy (p, "\r\nHost: ", 8, 2048, &host_offset);
+        if (found_pbuf) {
+            /* Extract hostname from found offset */
+            size_t hostname_start = host_offset + 8; /* Skip "\r\nHost: " */
+            if (hev_extract_string_from_offset (p, hostname_start, "\r\n",
+                                               hostname_buffer, buffer_len) == 0) {
+                LOG_D ("%p session: zero-copy HTTP Host found: %s", self, hostname_buffer);
+                return 0;
+            }
+        }
+
+        /* Fallback: try to find full URL in GET request line */
+        found_pbuf = pbuf_chain_search_zerocopy (p, "GET http://", 11, 2048, &host_offset);
+        if (found_pbuf) {
+            size_t hostname_start = host_offset + 11; /* Skip "GET http://" */
+            if (hev_extract_string_from_offset (p, hostname_start, "/",
+                                               hostname_buffer, buffer_len) == 0) {
+                LOG_D ("%p session: zero-copy HTTP URL hostname found: %s", self, hostname_buffer);
                 return 0;
             }
         }
     }
 
-    // 2. If no Host: header, try to find full URL in GET request line
-    get_url_start = strcasestr_custom (request_start, "GET http://");
-    if (get_url_start) {
-        get_url_start += strlen ("GET http://");
-        get_url_end = strchr (get_url_start, '/'); // Find end of hostname
-        if (!get_url_end) { // If no path, then it's just hostname
-            get_url_end = strchr (
-                get_url_start, ' '); // Find end of hostname before HTTP version
+    /* Fallback to traditional method with memory copy */
+    LOG_D ("%p session: using traditional HTTP host parsing", self);
+    {
+        unsigned char buffer[1024]; // Max size for initial HTTP request part + null terminator
+        size_t total_len = 0;
+        char *request_start = NULL;
+        char *host_header_start = NULL;
+        char *host_header_end = NULL;
+        char *get_url_start = NULL;
+        char *get_url_end = NULL;
+
+        // Copy data from queue (non-consuming)
+        for (p = self->queue; p && total_len < (sizeof (buffer) - 1); p = p->next) {
+            size_t copy_len = p->len;
+            if (total_len + copy_len >= sizeof (buffer))
+                copy_len = sizeof (buffer) - 1 - total_len;
+
+            memcpy (buffer + total_len, p->payload, copy_len);
+            total_len += copy_len;
+        }
+        buffer[total_len] = '\0';
+
+        if (total_len == 0) {
+            return -1; // No data
         }
 
-        if (get_url_end) {
-            size_t len = get_url_end - get_url_start;
-            if (len > 0 && len < buffer_len) {
-                strncpy (hostname_buffer, get_url_start, len);
-                hostname_buffer[len] = '\0';
-                return 0;
+        request_start = (char *)buffer;
+
+        // 1. Try to find Host: header
+        host_header_start = strcasestr_custom (request_start, "\r\nHost: ");
+        if (host_header_start) {
+            host_header_start += strlen ("\r\nHost: ");
+            host_header_end = strstr (host_header_start, "\r\n");
+            if (host_header_end) {
+                size_t len = host_header_end - host_header_start;
+                if (len > 0 && len < buffer_len) {
+                    strncpy (hostname_buffer, host_header_start, len);
+                    hostname_buffer[len] = '\0';
+                    LOG_D ("%p session: traditional HTTP Host found: %s", self, hostname_buffer);
+                    return 0;
+                }
+            }
+        }
+
+        // 2. If no Host: header, try to find full URL in GET request line
+        get_url_start = strcasestr_custom (request_start, "GET http://");
+        if (get_url_start) {
+            get_url_start += strlen ("GET http://");
+            get_url_end = strchr (get_url_start, '/'); // Find end of hostname
+            if (!get_url_end) { // If no path, then it's just hostname
+                get_url_end = strchr (
+                    get_url_start, ' '); // Find end of hostname before HTTP version
+            }
+
+            if (get_url_end) {
+                size_t len = get_url_end - get_url_start;
+                if (len > 0 && len < buffer_len) {
+                    strncpy (hostname_buffer, get_url_start, len);
+                    hostname_buffer[len] = '\0';
+                    LOG_D ("%p session: traditional HTTP URL hostname found: %s", self, hostname_buffer);
+                    return 0;
+                }
             }
         }
     }
@@ -661,24 +736,63 @@ sniff_http_host (HevSocks5SessionTCP *self, char *hostname_buffer,
 static int
 sniff_client_hello (HevSocks5SessionTCP *self, HevTLSClientHello *hello)
 {
-    struct pbuf *p;
-    unsigned char buffer[1024]; /* ClientHello 通常在第一个包内 */
-    size_t total_len = 0;
+    struct pbuf *p = self->queue;
 
-    /* 从队列中复制数据(不消费) */
-    for (p = self->queue; p && total_len < sizeof (buffer); p = p->next) {
-        size_t copy_len = p->len;
-        if (total_len + copy_len > sizeof (buffer))
-            copy_len = sizeof (buffer) - total_len;
-
-        memcpy (buffer + total_len, p->payload, copy_len);
-        total_len += copy_len;
+    if (!p) {
+        return -1; // No data
     }
 
-    if (total_len < 5) /* 至少需要 TLS Record Header */
-        return -1;
+    /* Try zero-copy optimization first if enabled */
+    if (hev_session_manager_is_protocol_zerocopy_enabled ()) {
+        LOG_D ("%p session: using zero-copy TLS SNI parsing", self);
 
-    return hev_filter_parse_tls (self, buffer, total_len, hello);
+        /* For TLS ClientHello, we still need to linearize the data for
+         * hev_filter_parse_tls, but we can minimize the copy size */
+        if (p->tot_len >= 5 && p->tot_len <= 1024) {
+            unsigned char buffer[1024]; /* ClientHello 通常在第一个包内 */
+            size_t total_len = 0;
+
+            /* Copy only necessary data */
+            for (p = self->queue; p && total_len < sizeof (buffer) && total_len < 1024; p = p->next) {
+                size_t copy_len = p->len;
+                if (total_len + copy_len > sizeof (buffer))
+                    copy_len = sizeof (buffer) - total_len;
+
+                memcpy (buffer + total_len, p->payload, copy_len);
+                total_len += copy_len;
+            }
+
+            if (total_len >= 5) { /* 至少需要 TLS Record Header */
+                int result = hev_filter_parse_tls (self, buffer, total_len, hello);
+                if (result == 0 && hello->detected && hello->sni[0]) {
+                    LOG_D ("%p session: zero-copy TLS SNI found: %s", self, hello->sni);
+                }
+                return result;
+            }
+        }
+    }
+
+    /* Fallback to traditional method with memory copy */
+    LOG_D ("%p session: using traditional TLS SNI parsing", self);
+    {
+        unsigned char buffer[1024]; /* ClientHello 通常在第一个包内 */
+        size_t total_len = 0;
+
+        /* 从队列中复制数据(不消费) */
+        for (p = self->queue; p && total_len < sizeof (buffer); p = p->next) {
+            size_t copy_len = p->len;
+            if (total_len + copy_len > sizeof (buffer))
+                copy_len = sizeof (buffer) - total_len;
+
+            memcpy (buffer + total_len, p->payload, copy_len);
+            total_len += copy_len;
+        }
+
+        if (total_len < 5) /* 至少需要 TLS Record Header */
+            return -1;
+
+        return hev_filter_parse_tls (self, buffer, total_len, hello);
+    }
 }
 
 static void
@@ -1861,4 +1975,222 @@ hev_session_manager_start_direct_udp (struct udp_pcb *pcb,
 
     hev_socks5_tunnel_insert_session (&session->node);
     hev_task_run (task, run_direct_udp_task, session);
+}
+
+/*
+ * ============================================================================
+ * Zero-Copy Protocol Parsing Optimization Functions
+ * ============================================================================
+ */
+
+/**
+ * @brief 零拷贝优化控制变量
+ */
+static int protocol_zerocopy_enabled = 0;
+
+/**
+ * @brief 跨pbuf链表进行字符串搜索（零拷贝版本）
+ *
+ * 直接在pbuf链表上搜索，避免线性化拷贝
+ *
+ * @param p pbuf链表头
+ * @param pattern 要搜索的字符串
+ * @param pattern_len 字符串长度
+ * @param max_search_len 最大搜索长度
+ * @param found_offset 输出找到的偏移量
+ * @return const struct pbuf* 找到返回对应的pbuf指针，未找到返回NULL
+ */
+static const struct pbuf *
+pbuf_chain_search_zerocopy (const struct pbuf *p, const char *pattern,
+                            size_t pattern_len, size_t max_search_len,
+                            size_t *found_offset)
+{
+    size_t search_offset = 0;
+    const struct pbuf *current = p;
+    size_t current_offset = 0;
+    char window_buffer[256]; /* 滑动窗口缓冲区 */
+
+    if (pattern_len == 0 || pattern_len > sizeof (window_buffer))
+        return NULL;
+
+    while (current && search_offset < max_search_len) {
+        /* 构建搜索窗口 */
+        size_t window_size = 0;
+        const struct pbuf *temp = current;
+        size_t temp_offset = current_offset;
+
+        /* 收集足够的数据用于搜索 */
+        while (temp && window_size < pattern_len &&
+               window_size < sizeof (window_buffer)) {
+            size_t available = temp->len - temp_offset;
+            size_t to_copy =
+                (available < (sizeof (window_buffer) - window_size)) ?
+                    available :
+                    (sizeof (window_buffer) - window_size);
+
+            memcpy (window_buffer + window_size,
+                    (char *)temp->payload + temp_offset, to_copy);
+            window_size += to_copy;
+
+            if (window_size >= pattern_len) {
+                break;
+            }
+
+            temp = temp->next;
+            temp_offset = 0;
+        }
+
+        /* 在当前窗口中搜索 */
+        if (window_size >= pattern_len) {
+            char *found =
+                memmem (window_buffer, window_size, pattern, pattern_len);
+            if (found) {
+                *found_offset = search_offset + (found - window_buffer);
+                return current; /* 返回当前pbuf指针 */
+            }
+        }
+
+        /* 移动搜索窗口 */
+        search_offset += (window_size > 0) ? (window_size - pattern_len + 1) :
+                                             1;
+        if (search_offset >= max_search_len) {
+            break;
+        }
+
+        /* 更新当前位置 */
+        size_t advance = 1;
+        while (current && advance > 0) {
+            size_t remaining = current->len - current_offset;
+            if (remaining <= advance) {
+                advance -= remaining;
+                current = current->next;
+                current_offset = 0;
+            } else {
+                current_offset += advance;
+                advance = 0;
+            }
+        }
+    }
+
+    return NULL;
+}
+
+/**
+ * @brief 从指定偏移量开始提取字符串（零拷贝版本）
+ *
+ * @param p pbuf链表头
+ * @param start_offset 起始偏移量
+ * @param end_marker 结束标记字符串
+ * @param buffer 输出缓冲区
+ * @param buffer_len 缓冲区长度
+ * @return int 成功返回0，失败返回-1
+ */
+static int
+extract_string_from_offset (const struct pbuf *p, size_t start_offset,
+                            const char *end_marker, char *buffer,
+                            size_t buffer_len)
+{
+    const struct pbuf *current = p;
+    size_t current_offset = 0;
+    size_t extracted_len = 0;
+    size_t end_marker_len = strlen (end_marker);
+    int found_end = 0;
+
+    /* 跳转到起始偏移量 */
+    while (current && start_offset > 0) {
+        size_t available = current->len - current_offset;
+        if (available >= start_offset) {
+            current_offset += start_offset;
+            break;
+        } else {
+            start_offset -= available;
+            current = current->next;
+            current_offset = 0;
+        }
+    }
+
+    /* 提取字符串直到遇到结束标记 */
+    while (current && extracted_len < buffer_len - 1 && !found_end) {
+        size_t available = current->len - current_offset;
+        size_t copy_len = available;
+        char *src = (char *)current->payload + current_offset;
+
+        /* 检查是否包含结束标记 */
+        if (available >= end_marker_len) {
+            char *found_end_pos = memmem (src, available, end_marker, end_marker_len);
+            if (found_end_pos) {
+                copy_len = found_end_pos - src;
+                found_end = 1;
+            }
+        }
+
+        /* 限制拷贝长度 */
+        size_t actual_copy = (copy_len < (buffer_len - 1 - extracted_len)) ?
+                                 copy_len :
+                                 (buffer_len - 1 - extracted_len);
+
+        memcpy (buffer + extracted_len, src, actual_copy);
+        extracted_len += actual_copy;
+        current_offset += actual_copy;
+
+        /* 如果当前pbuf已用完，移动到下一个 */
+        if (current_offset >= current->len) {
+            current = current->next;
+            current_offset = 0;
+        }
+
+        /* 如果找到结束标记，跳出循环 */
+        if (found_end) {
+            break;
+        }
+    }
+
+    buffer[extracted_len] = '\0';
+    return found_end ? 0 : -1;
+}
+
+/**
+ * @brief 公共接口：从指定偏移量开始提取字符串
+ */
+int
+hev_extract_string_from_offset (const struct pbuf *p, size_t start_offset,
+                                const char *end_marker, char *buffer,
+                                size_t buffer_len)
+{
+    return extract_string_from_offset (p, start_offset, end_marker, buffer,
+                                       buffer_len);
+}
+
+/**
+ * @brief 启用协议解析零拷贝优化
+ *
+ * @return int 成功返回0，失败返回-1
+ */
+int
+hev_session_manager_enable_protocol_zerocopy (void)
+{
+    protocol_zerocopy_enabled = 1;
+    LOG_I ("Session manager: protocol zero-copy optimization enabled");
+    return 0;
+}
+
+/**
+ * @brief 禁用协议解析零拷贝优化
+ */
+void
+hev_session_manager_disable_protocol_zerocopy (void)
+{
+    protocol_zerocopy_enabled = 0;
+    LOG_I ("Session manager: protocol zero-copy optimization disabled");
+}
+
+/**
+ * @brief 检查协议解析零拷贝优化是否启用
+ *
+ * @return int 启用返回1，未启用返回0
+ */
+int
+hev_session_manager_is_protocol_zerocopy_enabled (void)
+{
+    return protocol_zerocopy_enabled;
 }
