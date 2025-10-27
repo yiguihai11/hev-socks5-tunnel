@@ -125,13 +125,26 @@ int hev_filter_is_blocked_port (int port);
  * @hostname: Hostname to check
  * @port: Port number to check
  *
- * Comprehensive filter check against ACL rules and dynamic blacklist.
- * This function checks IP, hostname, and port against all blocking rules.
+ * Comprehensive filter check against ACL rules only (security blocking).
+ * This function checks IP, hostname, and port against ACL blocking rules.
  *
- * Returns: 1 if any filter matches (blocked), 0 if all allowed.
+ * Returns: 1 if any ACL filter matches (blocked), 0 if all allowed.
  */
 int hev_filter_check_all_filters (const ip_addr_t *ip, const char *hostname,
                                   int port);
+
+/**
+ * hev_filter_is_gfw_blocked:
+ * @ip: IP address to check
+ * @hostname: Hostname to check
+ * @port: Port number to check
+ *
+ * Check if the target is blocked by GFW based on dynamic blacklist.
+ * This is used for routing decisions, not for security blocking.
+ *
+ * Returns: 1 if GFW blocked (should use proxy), 0 if not blocked.
+ */
+int hev_filter_is_gfw_blocked (const ip_addr_t *ip, const char *hostname, int port);
 
 /**
  * hev_filter_is_domestic:

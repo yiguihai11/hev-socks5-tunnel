@@ -234,9 +234,9 @@ run_blacklist_tests (void)
         HEV_BLACKLIST_SOURCE_MANUAL, 3600);
     TEST_ASSERT (integration_entry_id != NULL);
 
-    // Test integrated IP check (should be blocked by blacklist)
+    // Test integrated IP check (should NOT be blocked by ACL rules)
     int integrated_ip_blocked = hev_filter_is_blocked_ip (&test_ip_integration);
-    TEST_ASSERT (integrated_ip_blocked == 1);
+    TEST_ASSERT (integrated_ip_blocked == 0);  // 动态黑名单不影响ACL检查
 
     // Test: Hostname filtering integration
     const char *integration_hostname = "blocked-integration.com";
@@ -245,10 +245,9 @@ run_blacklist_tests (void)
         "Integration test hostname", HEV_BLACKLIST_SOURCE_MANUAL, 5, 3600);
     TEST_ASSERT (host_entry_id != NULL);
 
-    // Test integrated hostname check (should be blocked by blacklist)
-    int integrated_host_blocked =
-        hev_filter_is_blocked_hostname (integration_hostname);
-    TEST_ASSERT (integrated_host_blocked == 1);
+// Test integrated hostname check (should NOT be blocked by ACL rules)
+    int integrated_host_blocked = hev_filter_is_blocked_hostname (integration_hostname);
+    TEST_ASSERT (integrated_host_blocked == 0);  // 动态黑名单不影响ACL检查
 
     // Test: Port filtering integration
     int test_port = 9999;
@@ -257,37 +256,47 @@ run_blacklist_tests (void)
         "Integration test port", HEV_BLACKLIST_SOURCE_AUTO, 6, 3600);
     TEST_ASSERT (integration_port_entry_id != NULL);
 
-    // Test port check
+    // Test port check (dynamic blacklist should work for ports)
     int integrated_port_blocked = hev_filter_is_blocked_port (test_port);
     TEST_ASSERT (integrated_port_blocked == 1);
 
-    // Test: Comprehensive filter check
+    // Test: Comprehensive filter check (IP/hostname: ACL only, port: dynamic blacklist)
     int comprehensive_blocked = hev_filter_check_all_filters (
         &test_ip_integration, integration_hostname, test_port);
-    TEST_ASSERT (comprehensive_blocked == 1);
+    TEST_ASSERT (comprehensive_blocked == 1);  // 端口会被动态黑名单阻止
 
-    // Test: Clean IP (should not be blocked)
+    // Test: GFW blocking check (routing decision)
+    int gfw_blocked = hev_filter_is_gfw_blocked (
+        &test_ip_integration, integration_hostname, test_port);
+    TEST_ASSERT (gfw_blocked == 1);  // 应该被动态黑名单检测为GFW封锁
+
+    // Test: Clean IP (should not be blocked by ACL)
     ip_addr_t clean_ip;
     ipaddr_aton ("192.168.1.123", &clean_ip);
     int clean_ip_blocked = hev_filter_check_all_filters (&clean_ip, NULL, 0);
     TEST_ASSERT (clean_ip_blocked == 0);
 
-    // Test: Clean hostname (should not be blocked)
-    int clean_host_blocked =
-        hev_filter_check_all_filters (NULL, "clean.example.com", 0);
+// Test: Clean hostname (should not be blocked by ACL)
+    int clean_host_blocked = hev_filter_check_all_filters (NULL, "clean.example.com", 0);
     TEST_ASSERT (clean_host_blocked == 0);
 
-    // Test: Clean port (should not be blocked - use very high port number unlikely to be in ACL)
+    // Test: Clean port (should not be blocked by ACL)
     int clean_port_blocked = hev_filter_check_all_filters (NULL, NULL, 65530);
     TEST_ASSERT (clean_port_blocked == 0);
+
+    // Test: Clean targets should not be GFW blocked
+    int clean_gfw_blocked = hev_filter_is_gfw_blocked (&clean_ip, "clean.example.com", 65530);
+    TEST_ASSERT (clean_gfw_blocked == 0);
 
     // Cleanup
     hev_filter_blacklist_clear ();
 
     // Verify cleanup worked - test that all checks now return false
-    int after_cleanup_ip_blocked = hev_filter_check_all_filters (
-        &test_ip_integration, integration_hostname, test_port);
-    TEST_ASSERT (after_cleanup_ip_blocked == 0);
+    int after_cleanup_acl_blocked = hev_filter_check_all_filters (&test_ip_integration, integration_hostname, test_port);
+    TEST_ASSERT (after_cleanup_acl_blocked == 0);  // ACL检查应该为false
+
+    int after_cleanup_gfw_blocked = hev_filter_is_gfw_blocked (&test_ip_integration, integration_hostname, test_port);
+    TEST_ASSERT (after_cleanup_gfw_blocked == 0);  // GFW检查应该也为false
 
     hev_filter_fini ();
 }

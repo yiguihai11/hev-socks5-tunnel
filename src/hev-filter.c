@@ -1032,7 +1032,7 @@ hev_filter_load_chnroutes (const char *file_path)
 int
 hev_filter_is_blocked_ip (const ip_addr_t *ip)
 {
-    /* 首先检查ACL规则 */
+    /* 只检查ACL规则（真正的安全黑名单） */
     if (IP_IS_V4 (ip)) {
         uint32_t addr = ntohl (ip_2_ip4 (ip)->addr);
         if (radix_tree_lookup_ipv4 (addr)) {
@@ -1048,13 +1048,7 @@ hev_filter_is_blocked_ip (const ip_addr_t *ip)
         }
     }
 
-    /* 然后检查动态黑名单 */
-    if (hev_filter_blacklist_check_ip (ip)) {
-        stats.ip_blocked++;
-        LOG_D ("filter: IP %s blocked by dynamic blacklist", ipaddr_ntoa (ip));
-        return 1;
-    }
-
+/* 注意：动态黑名单不在这里检查，它用于路由决策，不阻止连接 */
     return 0;
 }
 
@@ -1064,28 +1058,14 @@ hev_filter_is_blocked_hostname (const char *hostname)
     if (!hostname || strlen (hostname) == 0)
         return 0;
 
-    /* 首先检查ACL规则 */
+    /* 只检查ACL规则（真正的安全黑名单） */
     if (hostname_table_lookup (hostname)) {
         stats.hostname_blocked++;
         LOG_D ("filter: Hostname '%s' blocked by ACL rule", hostname);
         return 1;
     }
 
-    /* 然后检查动态黑名单（SNI和域名） */
-    if (hev_filter_blacklist_check_entry (HEV_BLACKLIST_ENTRY_SNI, NULL, 0,
-                                          hostname)) {
-        stats.hostname_blocked++;
-        LOG_D ("filter: Hostname '%s' blocked by SNI blacklist", hostname);
-        return 1;
-    }
-
-    if (hev_filter_blacklist_check_entry (HEV_BLACKLIST_ENTRY_DOMAIN, NULL, 0,
-                                          hostname)) {
-        stats.hostname_blocked++;
-        LOG_D ("filter: Hostname '%s' blocked by domain blacklist", hostname);
-        return 1;
-    }
-
+/* 注意：动态黑名单不在这里检查，它用于路由决策，不阻止连接 */
     return 0;
 }
 
@@ -1106,23 +1086,60 @@ int
 hev_filter_check_all_filters (const ip_addr_t *ip, const char *hostname,
                               int port)
 {
+    /* 只检查ACL规则（真正的安全黑名单） */
+
     /* 检查IP过滤规则 */
     if (ip && hev_filter_is_blocked_ip (ip)) {
-        LOG_D ("filter: IP %s blocked by comprehensive filter check",
-               ipaddr_ntoa (ip));
+        LOG_D ("filter: IP %s blocked by ACL rule", ipaddr_ntoa (ip));
         return 1;
     }
 
     /* 检查主机名过滤规则 */
     if (hostname && hev_filter_is_blocked_hostname (hostname)) {
-        LOG_D ("filter: Hostname '%s' blocked by comprehensive filter check",
-               hostname);
+        LOG_D ("filter: Hostname '%s' blocked by ACL rule", hostname);
         return 1;
     }
 
     /* 检查端口过滤规则 */
     if (port > 0 && hev_filter_is_blocked_port (port)) {
         LOG_D ("filter: Port %d blocked by comprehensive filter check", port);
+        return 1;
+    }
+
+    /* 注意：这里不检查动态黑名单，动态黑名单用于路由决策，不阻止连接 */
+    return 0;
+}
+
+int
+hev_filter_is_gfw_blocked (const ip_addr_t *ip, const char *hostname, int port)
+{
+    /* 检查动态黑名单（GFW封锁检测），用于路由决策 */
+
+    /* 检查IP是否被GFW封锁 */
+    if (ip && hev_filter_blacklist_check_ip (ip)) {
+        LOG_D ("filter: IP %s is GFW blocked (routing decision)",
+               ipaddr_ntoa (ip));
+        return 1;
+    }
+
+    /* 检查SNI是否被GFW封锁 */
+    if (hostname && hev_filter_blacklist_check_entry (HEV_BLACKLIST_ENTRY_SNI,
+                                                      NULL, 0, hostname)) {
+        LOG_D ("filter: SNI '%s' is GFW blocked (routing decision)", hostname);
+        return 1;
+    }
+
+    /* 检查域名是否被GFW封锁 */
+    if (hostname && hev_filter_blacklist_check_entry (HEV_BLACKLIST_ENTRY_DOMAIN,
+                                                      NULL, 0, hostname)) {
+        LOG_D ("filter: Domain '%s' is GFW blocked (routing decision)", hostname);
+        return 1;
+    }
+
+    /* 检查端口是否被封锁 */
+    if (port > 0 && hev_filter_blacklist_check_entry (HEV_BLACKLIST_ENTRY_PORT,
+                                                       NULL, port, NULL)) {
+        LOG_D ("filter: Port %d is GFW blocked (routing decision)", port);
         return 1;
     }
 
