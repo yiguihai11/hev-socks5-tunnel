@@ -117,11 +117,7 @@ run_blacklist_tests (void)
     ipaddr_aton ("192.168.100.1", &test_ip);
 
     const char *entry_id = hev_filter_blacklist_add_ip (
-        &test_ip,
-        "Test malicious activity",
-        HEV_BLACKLIST_SOURCE_MANUAL,
-        3600
-    );
+        &test_ip, "Test malicious activity", HEV_BLACKLIST_SOURCE_MANUAL, 3600);
 
     TEST_ASSERT (entry_id != NULL);
     TEST_ASSERT (strlen (entry_id) > 0);
@@ -150,52 +146,34 @@ run_blacklist_tests (void)
     // Test: Port blacklist
     printf ("\nTesting port blacklist...\n");
     const char *port_entry_id = hev_filter_blacklist_add_entry (
-        HEV_BLACKLIST_ENTRY_PORT,
-        NULL, 8080, NULL,
-        "Blocked proxy port",
-        HEV_BLACKLIST_SOURCE_AUTO,
-        7, 1800
-    );
+        HEV_BLACKLIST_ENTRY_PORT, NULL, 8080, NULL, "Blocked proxy port",
+        HEV_BLACKLIST_SOURCE_AUTO, 7, 1800);
 
     TEST_ASSERT (port_entry_id != NULL);
     int port_blocked = hev_filter_blacklist_check_entry (
-        HEV_BLACKLIST_ENTRY_PORT,
-        NULL, 8080, NULL
-    );
+        HEV_BLACKLIST_ENTRY_PORT, NULL, 8080, NULL);
     TEST_ASSERT (port_blocked == 1);
 
     // Test: SNI blacklist
     printf ("\nTesting SNI blacklist...\n");
     const char *sni_entry_id = hev_filter_blacklist_add_entry (
-        HEV_BLACKLIST_ENTRY_SNI,
-        NULL, 0, "malicious.example.com",
-        "Malware domain",
-        HEV_BLACKLIST_SOURCE_AUTO,
-        9, 7200
-    );
+        HEV_BLACKLIST_ENTRY_SNI, NULL, 0, "malicious.example.com",
+        "Malware domain", HEV_BLACKLIST_SOURCE_AUTO, 9, 7200);
 
     TEST_ASSERT (sni_entry_id != NULL);
     int sni_blocked = hev_filter_blacklist_check_entry (
-        HEV_BLACKLIST_ENTRY_SNI,
-        NULL, 0, "malicious.example.com"
-    );
+        HEV_BLACKLIST_ENTRY_SNI, NULL, 0, "malicious.example.com");
     TEST_ASSERT (sni_blocked == 1);
 
     // Test: Domain blacklist
     printf ("\nTesting domain blacklist...\n");
     const char *domain_entry_id = hev_filter_blacklist_add_entry (
-        HEV_BLACKLIST_ENTRY_DOMAIN,
-        NULL, 0, "bad-site.org",
-        "Phishing domain",
-        HEV_BLACKLIST_SOURCE_ACL,
-        8, 3600
-    );
+        HEV_BLACKLIST_ENTRY_DOMAIN, NULL, 0, "bad-site.org", "Phishing domain",
+        HEV_BLACKLIST_SOURCE_ACL, 8, 3600);
 
     TEST_ASSERT (domain_entry_id != NULL);
     int domain_blocked = hev_filter_blacklist_check_entry (
-        HEV_BLACKLIST_ENTRY_DOMAIN,
-        NULL, 0, "bad-site.org"
-    );
+        HEV_BLACKLIST_ENTRY_DOMAIN, NULL, 0, "bad-site.org");
     TEST_ASSERT (domain_blocked == 1);
 
     // Test: Statistics
@@ -204,7 +182,7 @@ run_blacklist_tests (void)
     uint64_t total_hits, total_blocked;
 
     hev_filter_blacklist_get_stats (&total_entries, &active_entries,
-                                   &total_hits, &total_blocked);
+                                    &total_hits, &total_blocked);
 
     TEST_ASSERT (total_entries >= 4);
     TEST_ASSERT (active_entries >= 4);
@@ -214,7 +192,8 @@ run_blacklist_tests (void)
     // Test: JSON export
     printf ("\nTesting JSON export...\n");
     char json_buffer[2048];
-    int export_result = hev_filter_blacklist_export (json_buffer, sizeof (json_buffer));
+    int export_result =
+        hev_filter_blacklist_export (json_buffer, sizeof (json_buffer));
     TEST_ASSERT (export_result > 0);
     TEST_ASSERT (strstr (json_buffer, "\"blacklist\"") != NULL);
     TEST_ASSERT (strstr (json_buffer, "\"entries\"") != NULL);
@@ -225,7 +204,8 @@ run_blacklist_tests (void)
     TEST_ASSERT (remove_result == 0);
 
     // Verify entry removed
-    HevBlacklistEntry *removed_entry = hev_filter_blacklist_get_entry (entry_id);
+    HevBlacklistEntry *removed_entry =
+        hev_filter_blacklist_get_entry (entry_id);
     TEST_ASSERT (removed_entry == NULL);
 
     // Test: Check removed IP is no longer blacklisted

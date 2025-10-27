@@ -180,20 +180,22 @@ void hev_filter_get_stats (HevFilterStats *stats);
 void hev_filter_reset_stats (void);
 
 /* 黑名单条目类型 */
-typedef enum {
-    HEV_BLACKLIST_ENTRY_IP = 1,     /* IP地址黑名单 */
-    HEV_BLACKLIST_ENTRY_PORT = 2,   /* 端口黑名单 */
-    HEV_BLACKLIST_ENTRY_SNI = 3,    /* SNI/主机名黑名单 */
-    HEV_BLACKLIST_ENTRY_DOMAIN = 4  /* 域名黑名单 */
+typedef enum
+{
+    HEV_BLACKLIST_ENTRY_IP = 1, /* IP地址黑名单 */
+    HEV_BLACKLIST_ENTRY_PORT = 2, /* 端口黑名单 */
+    HEV_BLACKLIST_ENTRY_SNI = 3, /* SNI/主机名黑名单 */
+    HEV_BLACKLIST_ENTRY_DOMAIN = 4 /* 域名黑名单 */
 } HevBlacklistEntryType;
 
 /* 黑名单条目来源 */
-typedef enum {
-    HEV_BLACKLIST_SOURCE_MANUAL = 1,    /* 手动添加 */
-    HEV_BLACKLIST_SOURCE_ACL = 2,       /* ACL规则 */
+typedef enum
+{
+    HEV_BLACKLIST_SOURCE_MANUAL = 1, /* 手动添加 */
+    HEV_BLACKLIST_SOURCE_ACL = 2, /* ACL规则 */
     HEV_BLACKLIST_SOURCE_CHNROUTES = 3, /* 中国路由规则 */
-    HEV_BLACKLIST_SOURCE_AUTO = 4,      /* 自动检测（如异常行为） */
-    HEV_BLACKLIST_SOURCE_API = 5        /* API接口添加 */
+    HEV_BLACKLIST_SOURCE_AUTO = 4, /* 自动检测（如异常行为） */
+    HEV_BLACKLIST_SOURCE_API = 5 /* API接口添加 */
 } HevBlacklistSource;
 
 /**
@@ -214,25 +216,25 @@ typedef struct _HevBlacklistEntry
     char hostname[256]; /* SNI/主机名/域名 */
 
     /* 时间信息 */
-    time_t added_time;        /* 添加时间 */
-    time_t expiry_time;       /* 过期时间 */
-    time_t last_seen;         /* 最后访问时间 */
-    time_t first_seen;        /* 首次发现时间 */
+    time_t added_time; /* 添加时间 */
+    time_t expiry_time; /* 过期时间 */
+    time_t last_seen; /* 最后访问时间 */
+    time_t first_seen; /* 首次发现时间 */
 
     /* 统计信息 */
-    uint64_t hit_count;       /* 命中次数 */
-    uint64_t bytes_blocked;   /* 阻止的字节数 */
-    uint32_t session_count;   /* 关联的会话数量 */
+    uint64_t hit_count; /* 命中次数 */
+    uint64_t bytes_blocked; /* 阻止的字节数 */
+    uint32_t session_count; /* 关联的会话数量 */
 
     /* 元数据 */
-    char reason[128];         /* 添加原因 */
-    char source_info[64];     /* 来源详细信息 */
-    int severity;             /* 严重级别 1-10 */
-    int is_active;            /* 是否激活 */
+    char reason[128]; /* 添加原因 */
+    char source_info[64]; /* 来源详细信息 */
+    int severity; /* 严重级别 1-10 */
+    int is_active; /* 是否激活 */
 
     /* TTL 管理 */
-    int ttl_seconds;          /* 生存时间（秒） */
-    int auto_refresh;         /* 是否自动刷新 */
+    int ttl_seconds; /* 生存时间（秒） */
+    int auto_refresh; /* 是否自动刷新 */
 } HevBlacklistEntry;
 
 /* 兼容性定义 */
@@ -251,9 +253,9 @@ typedef HevBlacklistEntry HevBlacklistedIP;
  * Returns: 新增条目的唯一标识符，失败返回NULL
  */
 const char *hev_filter_blacklist_add_ip (const ip_addr_t *addr,
-                                        const char *reason,
-                                        HevBlacklistSource source,
-                                        int ttl_seconds);
+                                         const char *reason,
+                                         HevBlacklistSource source,
+                                         int ttl_seconds);
 
 /**
  * hev_filter_blacklist_add_entry:
@@ -271,13 +273,11 @@ const char *hev_filter_blacklist_add_ip (const ip_addr_t *addr,
  * Returns: 新增条目的唯一标识符，失败返回NULL
  */
 const char *hev_filter_blacklist_add_entry (HevBlacklistEntryType type,
-                                           const ip_addr_t *ip_addr,
-                                           int port,
-                                           const char *hostname,
-                                           const char *reason,
-                                           HevBlacklistSource source,
-                                           int severity,
-                                           int ttl_seconds);
+                                            const ip_addr_t *ip_addr, int port,
+                                            const char *hostname,
+                                            const char *reason,
+                                            HevBlacklistSource source,
+                                            int severity, int ttl_seconds);
 
 /**
  * hev_filter_blacklist_check_ip:
@@ -303,9 +303,8 @@ int hev_filter_blacklist_check_ip (const ip_addr_t *addr);
  * Returns: 1 if blacklisted, 0 if not.
  */
 int hev_filter_blacklist_check_entry (HevBlacklistEntryType type,
-                                     const ip_addr_t *ip_addr,
-                                     int port,
-                                     const char *hostname);
+                                      const ip_addr_t *ip_addr, int port,
+                                      const char *hostname);
 
 /**
  * hev_filter_blacklist_get_entry:
@@ -364,9 +363,9 @@ size_t hev_filter_blacklist_get_count (void);
  * 获取黑名单的详细统计信息。
  */
 void hev_filter_blacklist_get_stats (size_t *total_entries,
-                                    size_t *active_entries,
-                                    uint64_t *total_hits,
-                                    uint64_t *total_blocked);
+                                     size_t *active_entries,
+                                     uint64_t *total_hits,
+                                     uint64_t *total_blocked);
 
 /**
  * hev_filter_blacklist_export:

@@ -53,10 +53,8 @@ hev_traffic_router_blacklist_add (const ip_addr_t *addr)
 
     /* 使用增强的黑名单接口，提供详细的原因和来源信息 */
     const char *entry_id = hev_filter_blacklist_add_ip (
-        addr,
-        "Traffic Router - Blocked by routing decision",
-        HEV_BLACKLIST_SOURCE_AUTO,
-        0  /* 使用默认TTL */
+        addr, "Traffic Router - Blocked by routing decision",
+        HEV_BLACKLIST_SOURCE_AUTO, 0 /* 使用默认TTL */
     );
 
     if (entry_id) {
