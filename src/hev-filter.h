@@ -130,7 +130,8 @@ int hev_filter_is_blocked_port (int port);
  *
  * Returns: 1 if any filter matches (blocked), 0 if all allowed.
  */
-int hev_filter_check_all_filters (const ip_addr_t *ip, const char *hostname, int port);
+int hev_filter_check_all_filters (const ip_addr_t *ip, const char *hostname,
+                                  int port);
 
 /**
  * hev_filter_is_domestic:
