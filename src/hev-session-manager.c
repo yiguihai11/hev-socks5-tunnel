@@ -139,6 +139,7 @@ typedef struct _HevSpliceTaskData
 /* Forward declarations */
 static void run_direct_connect_task (void *data);
 static void run_smart_proxy_task (void *data);
+static void tcp_splice_task_b (void *data, const char *task_name);
 static void tcp_direct_splice_task_b (void *data);
 static void smart_proxy_splice_task_b (void *data);
 static int sniff_client_hello (HevSocks5SessionTCP *self,
@@ -567,7 +568,7 @@ tcp_direct_splice_b (HevSocks5SessionTCP *self, HevIdleTimer *timer)
 }
 
 static void
-tcp_direct_splice_task_b (void *data)
+tcp_splice_task_b (void *data, const char *task_name)
 {
     HevSpliceTaskData *task_data = data;
     HevSocks5SessionTCP *self = task_data->session;
@@ -575,11 +576,11 @@ tcp_direct_splice_task_b (void *data)
     HevTask *task = hev_task_self ();
     int fd;
 
-    LOG_D ("%p session: backward splice task start", self);
+    LOG_D ("%p session: %s backward splice task start", self, task_name);
 
     fd = hev_task_io_dup (HEV_SOCKS5 (self)->fd);
     if (fd < 0) {
-        LOG_E ("%p session: failed to dup fd for backward splice", self);
+        LOG_E ("%p session: failed to dup fd for %s backward splice", self, task_name);
         hev_free (task_data);
         return;
     }
@@ -597,7 +598,20 @@ tcp_direct_splice_task_b (void *data)
     close (fd);
     hev_free (task_data);
 
-    LOG_D ("%p session: backward splice task end", self);
+    LOG_D ("%p session: %s backward splice task end", self, task_name);
+}
+
+/* Wrapper functions for compatibility */
+static void
+tcp_direct_splice_task_b (void *data)
+{
+    tcp_splice_task_b (data, "direct connect");
+}
+
+static void
+smart_proxy_splice_task_b (void *data)
+{
+    tcp_splice_task_b (data, "smart proxy");
 }
 
 /* Extract HTTP Host from pbuf queue using filter module */
@@ -925,40 +939,6 @@ exit_cleanup:
    Smart Proxy Splice Implementation
    ============================================================================ */
 
-static void
-smart_proxy_splice_task_b (void *data)
-{
-    HevSpliceTaskData *task_data = data;
-    HevSocks5SessionTCP *self = task_data->session;
-    HevIdleTimer *timer = task_data->timer;
-    HevTask *task = hev_task_self ();
-    int fd;
-
-    LOG_D ("%p session: smart proxy backward splice task start", self);
-
-    fd = hev_task_io_dup (HEV_SOCKS5 (self)->fd);
-    if (fd < 0) {
-        LOG_E ("%p session: failed to dup fd for smart proxy backward splice",
-               self);
-        hev_free (task_data);
-        return;
-    }
-
-    if (hev_task_add_fd (task, fd, POLLIN) < 0)
-        hev_task_mod_fd (task, fd, POLLIN);
-
-    for (;;) {
-        if (tcp_direct_splice_b (self, timer) < 0)
-            break;
-        hev_task_yield (HEV_TASK_WAITIO);
-    }
-
-    hev_task_del_fd (task, fd);
-    close (fd);
-    hev_free (task_data);
-
-    LOG_D ("%p session: smart proxy backward splice task end", self);
-}
 
 static void
 run_smart_proxy_task (void *data)

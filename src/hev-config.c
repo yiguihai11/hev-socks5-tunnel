@@ -619,33 +619,45 @@ hev_config_parse_doc (yaml_document_t *doc)
     return 0;
 }
 
+/* Common initialization logic */
+static int
+hev_config_init_with_parser (yaml_parser_t *parser, const char *error_msg)
+{
+    yaml_document_t doc;
+    int res = -1;
+
+    if (!yaml_parser_load (parser, &doc)) {
+        fprintf (stderr, "%s", error_msg);
+        goto exit;
+    }
+
+    res = hev_config_parse_doc (&doc);
+    yaml_document_delete (&doc);
+
+exit:
+    return res;
+}
+
 int
 hev_config_init_from_file (const char *config_path)
 {
     yaml_parser_t parser;
-    yaml_document_t doc;
     FILE *fp;
     int res = -1;
+    char error_msg[256];
 
     if (!yaml_parser_initialize (&parser))
         goto exit;
 
     fp = fopen (config_path, "r");
     if (!fp) {
-        fprintf (stderr, "Open %s failed!\n", config_path);
+        snprintf (error_msg, sizeof (error_msg), "Open %s failed!\n", config_path);
         goto exit_free_parser;
     }
 
     yaml_parser_set_input_file (&parser, fp);
-    if (!yaml_parser_load (&parser, &doc)) {
-        fprintf (stderr, "Parse %s failed!\n", config_path);
-        goto exit_close_fp;
-    }
+    res = hev_config_init_with_parser (&parser, error_msg);
 
-    res = hev_config_parse_doc (&doc);
-    yaml_document_delete (&doc);
-
-exit_close_fp:
     fclose (fp);
 exit_free_parser:
     yaml_parser_delete (&parser);
@@ -658,22 +670,14 @@ hev_config_init_from_str (const unsigned char *config_str,
                           unsigned int config_len)
 {
     yaml_parser_t parser;
-    yaml_document_t doc;
     int res = -1;
 
     if (!yaml_parser_initialize (&parser))
         goto exit;
 
     yaml_parser_set_input_string (&parser, config_str, config_len);
-    if (!yaml_parser_load (&parser, &doc)) {
-        fprintf (stderr, "Failed to parse config.");
-        goto exit_free_parser;
-    }
+    res = hev_config_init_with_parser (&parser, "Failed to parse config.\n");
 
-    res = hev_config_parse_doc (&doc);
-    yaml_document_delete (&doc);
-
-exit_free_parser:
     yaml_parser_delete (&parser);
 exit:
     return res;

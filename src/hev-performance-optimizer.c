@@ -26,6 +26,9 @@
    Common Utility Functions
    ============================================================================ */
 
+/* Forward declarations for utility functions */
+static time_t get_current_time_seconds (void);
+
 /* 获取当前时间（秒） */
 static time_t
 get_current_time_seconds (void)
