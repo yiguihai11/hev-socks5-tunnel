@@ -146,6 +146,9 @@ static int sniff_client_hello (HevSocks5SessionTCP *self,
                                HevTLSClientHello *hello);
 static int extract_http_host_from_queue (HevSocks5SessionTCP *self, char *hostname_buffer,
                                           size_t buffer_len);
+static int process_protocol_parsing (HevSocks5SessionTCP *self, struct tcp_pcb *pcb,
+                                    char *http_hostname, size_t hostname_len,
+                                    const char *connection_type);
 
 
 
@@ -332,16 +335,11 @@ hev_socks5_session_task_entry (void *data)
                     tcp);
             }
         }
-        if (tcp->queue &&
-            extract_http_host_from_queue (tcp, http_hostname, sizeof (http_hostname)) == 0) {
-            ipaddr_ntoa_r (&pcb->local_ip, dst_ip, sizeof (dst_ip));
-            LOG_I (
-                "%p session: SOCKS5 proxy detected HTTP Host: %s (target: %s:%d)",
-                tcp, http_hostname, dst_ip, pcb->local_port);
-            if (hev_filter_is_blocked_hostname (http_hostname)) {
-                LOG_W (
-                    "%p session: SOCKS5 proxy blocked connection to HTTP Host: %s (target: %s:%d)",
-                    tcp, http_hostname, dst_ip, pcb->local_port);
+        if (tcp->queue && pcb->local_port == 80) {
+            if (process_protocol_parsing (tcp, pcb, http_hostname, sizeof (http_hostname),
+                                         "SOCKS5 proxy") < 0) {
+                LOG_W ("%p session: SOCKS5 proxy blocked connection to HTTP Host: %s (target: %s:%d)",
+                       tcp, http_hostname, dst_ip, pcb->local_port);
                 goto exit_cleanup; // Terminate session
             }
         }
@@ -601,6 +599,50 @@ tcp_splice_task_b (void *data, const char *task_name)
     LOG_D ("%p session: %s backward splice task end", self, task_name);
 }
 
+/* Unified protocol parsing function */
+static int
+process_protocol_parsing (HevSocks5SessionTCP *self, struct tcp_pcb *pcb,
+                         char *http_hostname, size_t hostname_len,
+                         const char *connection_type)
+{
+    char dst_ip[INET6_ADDRSTRLEN];
+    int result = 0;
+
+    ipaddr_ntoa_r (&pcb->local_ip, dst_ip, sizeof (dst_ip));
+
+    /* TLS/HTTPS parsing for port 443 */
+    if (pcb->local_port == 443) {
+        HevTLSClientHello client_hello;
+        if (sniff_client_hello (self, &client_hello) == 0 && client_hello.detected) {
+            if (client_hello.sni[0]) {
+                LOG_I ("%p session: %s detected TLS SNI: %s (target: %s:%d)",
+                       self, connection_type, client_hello.sni, dst_ip, pcb->local_port);
+                if (hev_filter_is_blocked_hostname (client_hello.sni)) {
+                    LOG_W ("%p session: SNI %s blocked by hostname ACL", self,
+                           client_hello.sni);
+                    return -1;
+                }
+            }
+            result = 1; /* TLS parsing successful */
+        }
+    }
+
+    /* HTTP parsing for ports 80 and 8080 */
+    if ((pcb->local_port == 80 || pcb->local_port == 8080)) {
+        if (extract_http_host_from_queue (self, http_hostname, hostname_len) == 0) {
+            LOG_I ("%p session: %s detected HTTP Host: %s (target: %s:%d)",
+                   self, connection_type, http_hostname, dst_ip, pcb->local_port);
+            if (hev_filter_is_blocked_hostname (http_hostname)) {
+                LOG_W ("%p session: Host %s blocked by hostname ACL", self, http_hostname);
+                return -1;
+            }
+            result = 1; /* HTTP parsing successful */
+        }
+    }
+
+    return result;
+}
+
 /* Wrapper functions for compatibility */
 static void
 tcp_direct_splice_task_b (void *data)
@@ -730,48 +772,21 @@ run_direct_connect_task (void *data)
         }
     }
 
-    /* 尝试嗅探 TLS ClientHello (端口443) */
-    if (self->queue && pcb->local_port == 443) {
-        LOG_D (
-            "%p session: Attempting to sniff TLS ClientHello (%d bytes in queue)",
-            self, self->queue ? self->queue->tot_len : 0);
-
-        if (sniff_client_hello (self, &client_hello) == 0 &&
-            client_hello.detected) {
-            if (client_hello.sni[0]) {
-                LOG_I (
-                    "%p session: Direct connect detected TLS SNI: %s (target: %s:%d)",
-                    self, client_hello.sni, dst_ip, pcb->local_port);
-                // --- SNI-based ACL check ---
-                if (hev_filter_is_blocked_hostname (client_hello.sni)) {
-                    LOG_W (
-                        "%p session: Direct connect blocked connection to SNI: %s (target: %s:%d)",
-                        self, client_hello.sni, dst_ip, pcb->local_port);
-                    goto exit_cleanup; // Terminate session
-                }
-            }
-            if (client_hello.alpn[0]) {
-                LOG_I ("%p session: Direct connect detected ALPN: %s", self,
-                       client_hello.alpn);
-            }
-        } else {
-            LOG_D ("%p session: TLS ClientHello not detected or parsing failed",
-                   self);
+    /* Unified protocol parsing */
+    if (self->queue) {
+        int parse_result = process_protocol_parsing (self, pcb, http_hostname,
+                                                   sizeof (http_hostname), "Direct connect");
+        if (parse_result < 0) {
+            goto exit_cleanup; // Terminated due to blocked hostname
         }
-    }
-    // --- HTTP Hostname-based ACL check for ports 80/8080 ---
-    else if (self->queue &&
-             (pcb->local_port == 80 || pcb->local_port == 8080)) {
-        if (extract_http_host_from_queue (self, http_hostname, sizeof (http_hostname)) ==
-            0) {
-            LOG_I (
-                "%p session: Direct connect detected HTTP Host: %s (target: %s:%d)",
-                self, http_hostname, dst_ip, pcb->local_port);
-            if (hev_filter_is_blocked_hostname (http_hostname)) {
-                LOG_W (
-                    "%p session: Direct connect blocked connection to HTTP Host: %s (target: %s:%d)",
-                    self, http_hostname, dst_ip, pcb->local_port);
-                goto exit_cleanup; // Terminate session
+
+        /* Handle ALPN for HTTPS connections */
+        if (parse_result > 0 && pcb->local_port == 443) {
+            if (sniff_client_hello (self, &client_hello) == 0 && client_hello.detected) {
+                if (client_hello.alpn[0]) {
+                    LOG_I ("%p session: Direct connect detected ALPN: %s", self,
+                           client_hello.alpn);
+                }
             }
         }
     }
@@ -991,45 +1006,21 @@ run_smart_proxy_task (void *data)
         }
     }
 
-    /* 尝试嗅探 TLS ClientHello */
-    if (self->queue && pcb->local_port == 443) {
-        LOG_D (
-            "%p session: Attempting to sniff TLS ClientHello (%d bytes in queue)",
-            self, self->queue ? self->queue->tot_len : 0);
-
-        if (sniff_client_hello (self, &client_hello) == 0 &&
-            client_hello.detected) {
-            if (client_hello.sni[0]) {
-                LOG_I (
-                    "%p session: Smart proxy detected TLS SNI: %s (target: %s:%d)",
-                    self, client_hello.sni, dst_ip, pcb->local_port);
-                // --- SNI-based ACL check ---
-                if (hev_filter_is_blocked_hostname (client_hello.sni)) {
-                    LOG_W (
-                        "%p session: Smart proxy blocked connection to SNI: %s (target: %s:%d)",
-                        self, client_hello.sni, dst_ip, pcb->local_port);
-                    goto exit_cleanup; // Terminate session
-                }
-            }
-            if (client_hello.alpn[0]) {
-                LOG_I ("%p session: Smart proxy detected ALPN: %s", self,
-                       client_hello.alpn);
-            }
+    /* Unified protocol parsing */
+    if (self->queue) {
+        int parse_result = process_protocol_parsing (self, pcb, http_hostname,
+                                                   sizeof (http_hostname), "Smart proxy");
+        if (parse_result < 0) {
+            goto exit_cleanup; // Terminated due to blocked hostname
         }
-    }
-    // --- HTTP Hostname-based ACL check for ports 80/8080 ---
-    else if (self->queue &&
-             (pcb->local_port == 80 || pcb->local_port == 8080)) {
-        if (extract_http_host_from_queue (self, http_hostname, sizeof (http_hostname)) ==
-            0) {
-            LOG_I (
-                "%p session: Smart proxy detected HTTP Host: %s (target: %s:%d)",
-                self, http_hostname, dst_ip, pcb->local_port);
-            if (hev_filter_is_blocked_hostname (http_hostname)) {
-                LOG_W (
-                    "%p session: Smart proxy blocked connection to HTTP Host: %s (target: %s:%d)",
-                    self, http_hostname, dst_ip, pcb->local_port);
-                goto exit_cleanup; // Terminate session
+
+        /* Handle ALPN for HTTPS connections */
+        if (parse_result > 0 && pcb->local_port == 443) {
+            if (sniff_client_hello (self, &client_hello) == 0 && client_hello.detected) {
+                if (client_hello.alpn[0]) {
+                    LOG_I ("%p session: Smart proxy detected ALPN: %s", self,
+                           client_hello.alpn);
+                }
             }
         }
     }
