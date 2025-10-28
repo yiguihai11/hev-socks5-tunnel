@@ -335,7 +335,7 @@ hev_socks5_session_task_entry (void *data)
                     tcp);
             }
         }
-        if (tcp->queue && pcb->local_port == 80) {
+        if (tcp->queue && (pcb->local_port == 80 || pcb->local_port == 8080)) {
             if (process_protocol_parsing (tcp, pcb, http_hostname,
                                           sizeof (http_hostname),
                                           "SOCKS5 proxy") < 0) {
