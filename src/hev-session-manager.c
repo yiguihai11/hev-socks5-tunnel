@@ -641,66 +641,32 @@ static int
 sniff_client_hello (HevSocks5SessionTCP *self, HevTLSClientHello *hello)
 {
     struct pbuf *p = self->queue;
+    unsigned char buffer[1024]; /* ClientHello 通常在第一个包内 */
+    size_t total_len = 0;
 
     if (!p) {
         return -1; // No data
     }
 
-    /* Try zero-copy optimization first if enabled */
-    if (hev_session_manager_is_protocol_zerocopy_enabled ()) {
-        LOG_D ("%p session: using zero-copy TLS SNI parsing", self);
+    LOG_D ("%p session: extracting TLS ClientHello from pbuf queue", self);
 
-        /* For TLS ClientHello, we still need to linearize the data for
-         * hev_filter_parse_tls, but we can minimize the copy size */
-        if (p->tot_len >= 5 && p->tot_len <= 1024) {
-            unsigned char buffer[1024]; /* ClientHello 通常在第一个包内 */
-            size_t total_len = 0;
+    /* 从队列中复制数据(不消费) */
+    for (p = self->queue; p && total_len < sizeof (buffer); p = p->next) {
+        size_t copy_len = p->len;
+        if (total_len + copy_len > sizeof (buffer))
+            copy_len = sizeof (buffer) - total_len;
 
-            /* Copy only necessary data */
-            for (p = self->queue;
-                 p && total_len < sizeof (buffer) && total_len < 1024;
-                 p = p->next) {
-                size_t copy_len = p->len;
-                if (total_len + copy_len > sizeof (buffer))
-                    copy_len = sizeof (buffer) - total_len;
-
-                memcpy (buffer + total_len, p->payload, copy_len);
-                total_len += copy_len;
-            }
-
-            if (total_len >= 5) { /* 至少需要 TLS Record Header */
-                int result =
-                    hev_filter_parse_tls (self, buffer, total_len, hello);
-                if (result == 0 && hello->detected && hello->sni[0]) {
-                    LOG_D ("%p session: zero-copy TLS SNI found: %s", self,
-                           hello->sni);
-                }
-                return result;
-            }
-        }
+        memcpy (buffer + total_len, p->payload, copy_len);
+        total_len += copy_len;
     }
 
-    /* Fallback to traditional method with memory copy */
-    LOG_D ("%p session: using traditional TLS SNI parsing", self);
-    {
-        unsigned char buffer[1024]; /* ClientHello 通常在第一个包内 */
-        size_t total_len = 0;
-
-        /* 从队列中复制数据(不消费) */
-        for (p = self->queue; p && total_len < sizeof (buffer); p = p->next) {
-            size_t copy_len = p->len;
-            if (total_len + copy_len > sizeof (buffer))
-                copy_len = sizeof (buffer) - total_len;
-
-            memcpy (buffer + total_len, p->payload, copy_len);
-            total_len += copy_len;
-        }
-
-        if (total_len < 5) /* 至少需要 TLS Record Header */
-            return -1;
-
-        return hev_filter_parse_tls (self, buffer, total_len, hello);
+    if (total_len < 5) { /* 至少需要 TLS Record Header */
+        LOG_D ("%p session: insufficient TLS data (%zu bytes)", self, total_len);
+        return -1;
     }
+
+    LOG_D ("%p session: extracted %zu bytes for TLS parsing", self, total_len);
+    return hev_filter_parse_tls (self, buffer, total_len, hello);
 }
 
 static void
@@ -1885,48 +1851,4 @@ hev_session_manager_start_direct_udp (struct udp_pcb *pcb,
     hev_task_run (task, run_direct_udp_task, session);
 }
 
-/*
- * ============================================================================
- * Zero-Copy Protocol Parsing Optimization Functions
- * ============================================================================
- */
 
-/**
- * @brief 零拷贝优化控制变量
- */
-static int protocol_zerocopy_enabled = 0;
-
-
-/**
- * @brief 启用协议解析零拷贝优化
- *
- * @return int 成功返回0，失败返回-1
- */
-int
-hev_session_manager_enable_protocol_zerocopy (void)
-{
-    protocol_zerocopy_enabled = 1;
-    LOG_I ("Session manager: protocol zero-copy optimization enabled");
-    return 0;
-}
-
-/**
- * @brief 禁用协议解析零拷贝优化
- */
-void
-hev_session_manager_disable_protocol_zerocopy (void)
-{
-    protocol_zerocopy_enabled = 0;
-    LOG_I ("Session manager: protocol zero-copy optimization disabled");
-}
-
-/**
- * @brief 检查协议解析零拷贝优化是否启用
- *
- * @return int 启用返回1，未启用返回0
- */
-int
-hev_session_manager_is_protocol_zerocopy_enabled (void)
-{
-    return protocol_zerocopy_enabled;
-}
