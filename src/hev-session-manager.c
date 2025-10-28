@@ -134,14 +134,13 @@ typedef struct _HevSpliceTaskData
 {
     HevSocks5SessionTCP *session;
     HevIdleTimer *timer;
+    const char *task_name;
 } HevSpliceTaskData;
 
 /* Forward declarations */
 static void run_direct_connect_task (void *data);
 static void run_smart_proxy_task (void *data);
-static void tcp_splice_task_b (void *data, const char *task_name);
-static void tcp_direct_splice_task_b (void *data);
-static void smart_proxy_splice_task_b (void *data);
+static void tcp_splice_task_b (void *data);
 static int sniff_client_hello (HevSocks5SessionTCP *self,
                                HevTLSClientHello *hello);
 static int extract_http_host_from_queue (HevSocks5SessionTCP *self,
@@ -568,11 +567,12 @@ tcp_direct_splice_b (HevSocks5SessionTCP *self, HevIdleTimer *timer)
 }
 
 static void
-tcp_splice_task_b (void *data, const char *task_name)
+tcp_splice_task_b (void *data)
 {
     HevSpliceTaskData *task_data = data;
     HevSocks5SessionTCP *self = task_data->session;
     HevIdleTimer *timer = task_data->timer;
+    const char *task_name = task_data->task_name;
     HevTask *task = hev_task_self ();
     int fd;
 
@@ -651,18 +651,6 @@ process_protocol_parsing (HevSocks5SessionTCP *self, struct tcp_pcb *pcb,
     return result;
 }
 
-/* Wrapper functions for compatibility */
-static void
-tcp_direct_splice_task_b (void *data)
-{
-    tcp_splice_task_b (data, "direct connect");
-}
-
-static void
-smart_proxy_splice_task_b (void *data)
-{
-    tcp_splice_task_b (data, "smart proxy");
-}
 
 /* Extract HTTP Host from pbuf queue using filter module */
 static int
@@ -893,9 +881,10 @@ run_direct_connect_task (void *data)
     }
     task_data->session = self;
     task_data->timer = &idle_timer;
+    task_data->task_name = "direct connect";
 
     hev_task_ref (task_b);
-    hev_task_run (task_b, tcp_direct_splice_task_b, task_data);
+    hev_task_run (task_b, tcp_splice_task_b, task_data);
 
     /* Forward splice:只检查空闲超时 */
     if (hev_task_mod_fd (task, fd, POLLOUT) < 0)
@@ -1133,9 +1122,10 @@ run_smart_proxy_task (void *data)
     }
     task_data->session = self;
     task_data->timer = &idle_timer;
+    task_data->task_name = "smart proxy";
 
     hev_task_ref (task_b);
-    hev_task_run (task_b, smart_proxy_splice_task_b, task_data);
+    hev_task_run (task_b, tcp_splice_task_b, task_data);
 
     /* Forward splice */
     if (hev_task_mod_fd (task, fd, POLLOUT) < 0)
