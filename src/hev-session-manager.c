@@ -651,7 +651,6 @@ process_protocol_parsing (HevSocks5SessionTCP *self, struct tcp_pcb *pcb,
     return result;
 }
 
-
 /* Extract HTTP Host from pbuf queue using filter module */
 static int
 extract_http_host_from_queue (HevSocks5SessionTCP *self, char *hostname_buffer,
