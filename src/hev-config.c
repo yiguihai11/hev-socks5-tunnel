@@ -651,7 +651,8 @@ hev_config_init_from_file (const char *config_path)
 
     fp = fopen (config_path, "r");
     if (!fp) {
-        snprintf (error_msg, sizeof (error_msg), "Open %s failed!\n", config_path);
+        snprintf (error_msg, sizeof (error_msg), "Open %s failed!\n",
+                  config_path);
         goto exit_free_parser;
     }
 

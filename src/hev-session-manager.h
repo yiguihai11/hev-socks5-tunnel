@@ -30,7 +30,6 @@ void hev_session_manager_start_direct_udp (struct udp_pcb *pcb,
                                            const ip_addr_t *orig_addr,
                                            u16_t orig_port, struct pbuf *p);
 
-
 #ifdef __cplusplus
 }
 #endif

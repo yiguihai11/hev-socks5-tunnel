@@ -54,5 +54,4 @@ int hev_traffic_router_handle_udp (struct udp_pcb *pcb, struct pbuf *p,
  */
 int hev_traffic_router_handle_tcp (struct tcp_pcb *pcb);
 
-
 #endif /* __HEV_TRAFFIC_ROUTER_H__ */

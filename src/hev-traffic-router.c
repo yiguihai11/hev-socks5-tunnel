@@ -29,8 +29,10 @@ static int
 handle_dns_forward_hijack (const ip_addr_t *addr, u16_t port,
                            ip_addr_t *target_ip, u16_t *target_port)
 {
-    const char *dns_fwd_virtual_ip4 = hev_config_get_dns_forwarder_virtual_ip4 ();
-    const char *dns_fwd_virtual_ip6 = hev_config_get_dns_forwarder_virtual_ip6 ();
+    const char *dns_fwd_virtual_ip4 =
+        hev_config_get_dns_forwarder_virtual_ip4 ();
+    const char *dns_fwd_virtual_ip6 =
+        hev_config_get_dns_forwarder_virtual_ip6 ();
     const char *dns_fwd_target_ip4 = hev_config_get_dns_forwarder_target_ip4 ();
     const char *dns_fwd_target_ip6 = hev_config_get_dns_forwarder_target_ip6 ();
 
@@ -43,7 +45,8 @@ handle_dns_forward_hijack (const ip_addr_t *addr, u16_t port,
         if (ipaddr_aton (dns_fwd_virtual_ip4, &virtual_ip4)) {
             if (ip_addr_cmp (addr, &virtual_ip4)) {
                 char target_buf[128];
-                strncpy (target_buf, dns_fwd_target_ip4, sizeof (target_buf) - 1);
+                strncpy (target_buf, dns_fwd_target_ip4,
+                         sizeof (target_buf) - 1);
 
                 char *colon = strchr (target_buf, ':');
                 if (colon) {
@@ -67,7 +70,8 @@ handle_dns_forward_hijack (const ip_addr_t *addr, u16_t port,
         if (ipaddr_aton (dns_fwd_virtual_ip6, &virtual_ip6)) {
             if (ip_addr_cmp (addr, &virtual_ip6)) {
                 char target_buf[128];
-                strncpy (target_buf, dns_fwd_target_ip6, sizeof (target_buf) - 1);
+                strncpy (target_buf, dns_fwd_target_ip6,
+                         sizeof (target_buf) - 1);
 
                 char *bracket_end = strrchr (target_buf, ']');
                 if (bracket_end && *(bracket_end + 1) == ':') {
@@ -103,7 +107,6 @@ terminate_pcb_task (void *data)
     tcp_abort (pcb);
     LOG_D ("router: PCB %p terminated.", pcb);
 }
-
 
 int
 hev_traffic_router_init (void)
@@ -213,8 +216,8 @@ hev_traffic_router_handle_udp (struct udp_pcb *pcb, struct pbuf *p,
         if (handle_dns_forward_hijack (addr, port, &target_ip, &target_port)) {
             char tip_str[INET6_ADDRSTRLEN];
             ipaddr_ntoa_r (&target_ip, tip_str, sizeof (tip_str));
-            LOG_I ("%p router: UDP DNS Forwarder hijack: %s:%d -> %s:%d",
-                   pcb, dst_ip, port, tip_str, target_port);
+            LOG_I ("%p router: UDP DNS Forwarder hijack: %s:%d -> %s:%d", pcb,
+                   dst_ip, port, tip_str, target_port);
             pbuf_ref (p);
             hev_session_manager_start_direct_udp (pcb, &target_ip, target_port,
                                                   addr, port, p);

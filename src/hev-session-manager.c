@@ -144,13 +144,13 @@ static void tcp_direct_splice_task_b (void *data);
 static void smart_proxy_splice_task_b (void *data);
 static int sniff_client_hello (HevSocks5SessionTCP *self,
                                HevTLSClientHello *hello);
-static int extract_http_host_from_queue (HevSocks5SessionTCP *self, char *hostname_buffer,
-                                          size_t buffer_len);
-static int process_protocol_parsing (HevSocks5SessionTCP *self, struct tcp_pcb *pcb,
-                                    char *http_hostname, size_t hostname_len,
-                                    const char *connection_type);
-
-
+static int extract_http_host_from_queue (HevSocks5SessionTCP *self,
+                                         char *hostname_buffer,
+                                         size_t buffer_len);
+static int process_protocol_parsing (HevSocks5SessionTCP *self,
+                                     struct tcp_pcb *pcb, char *http_hostname,
+                                     size_t hostname_len,
+                                     const char *connection_type);
 
 /* ============================================================================
    High-Precision Time Functions
@@ -336,10 +336,12 @@ hev_socks5_session_task_entry (void *data)
             }
         }
         if (tcp->queue && pcb->local_port == 80) {
-            if (process_protocol_parsing (tcp, pcb, http_hostname, sizeof (http_hostname),
-                                         "SOCKS5 proxy") < 0) {
-                LOG_W ("%p session: SOCKS5 proxy blocked connection to HTTP Host: %s (target: %s:%d)",
-                       tcp, http_hostname, dst_ip, pcb->local_port);
+            if (process_protocol_parsing (tcp, pcb, http_hostname,
+                                          sizeof (http_hostname),
+                                          "SOCKS5 proxy") < 0) {
+                LOG_W (
+                    "%p session: SOCKS5 proxy blocked connection to HTTP Host: %s (target: %s:%d)",
+                    tcp, http_hostname, dst_ip, pcb->local_port);
                 goto exit_cleanup; // Terminate session
             }
         }
@@ -578,7 +580,8 @@ tcp_splice_task_b (void *data, const char *task_name)
 
     fd = hev_task_io_dup (HEV_SOCKS5 (self)->fd);
     if (fd < 0) {
-        LOG_E ("%p session: failed to dup fd for %s backward splice", self, task_name);
+        LOG_E ("%p session: failed to dup fd for %s backward splice", self,
+               task_name);
         hev_free (task_data);
         return;
     }
@@ -602,8 +605,8 @@ tcp_splice_task_b (void *data, const char *task_name)
 /* Unified protocol parsing function */
 static int
 process_protocol_parsing (HevSocks5SessionTCP *self, struct tcp_pcb *pcb,
-                         char *http_hostname, size_t hostname_len,
-                         const char *connection_type)
+                          char *http_hostname, size_t hostname_len,
+                          const char *connection_type)
 {
     char dst_ip[INET6_ADDRSTRLEN];
     int result = 0;
@@ -613,10 +616,12 @@ process_protocol_parsing (HevSocks5SessionTCP *self, struct tcp_pcb *pcb,
     /* TLS/HTTPS parsing for port 443 */
     if (pcb->local_port == 443) {
         HevTLSClientHello client_hello;
-        if (sniff_client_hello (self, &client_hello) == 0 && client_hello.detected) {
+        if (sniff_client_hello (self, &client_hello) == 0 &&
+            client_hello.detected) {
             if (client_hello.sni[0]) {
                 LOG_I ("%p session: %s detected TLS SNI: %s (target: %s:%d)",
-                       self, connection_type, client_hello.sni, dst_ip, pcb->local_port);
+                       self, connection_type, client_hello.sni, dst_ip,
+                       pcb->local_port);
                 if (hev_filter_is_blocked_hostname (client_hello.sni)) {
                     LOG_W ("%p session: SNI %s blocked by hostname ACL", self,
                            client_hello.sni);
@@ -629,11 +634,14 @@ process_protocol_parsing (HevSocks5SessionTCP *self, struct tcp_pcb *pcb,
 
     /* HTTP parsing for ports 80 and 8080 */
     if ((pcb->local_port == 80 || pcb->local_port == 8080)) {
-        if (extract_http_host_from_queue (self, http_hostname, hostname_len) == 0) {
+        if (extract_http_host_from_queue (self, http_hostname, hostname_len) ==
+            0) {
             LOG_I ("%p session: %s detected HTTP Host: %s (target: %s:%d)",
-                   self, connection_type, http_hostname, dst_ip, pcb->local_port);
+                   self, connection_type, http_hostname, dst_ip,
+                   pcb->local_port);
             if (hev_filter_is_blocked_hostname (http_hostname)) {
-                LOG_W ("%p session: Host %s blocked by hostname ACL", self, http_hostname);
+                LOG_W ("%p session: Host %s blocked by hostname ACL", self,
+                       http_hostname);
                 return -1;
             }
             result = 1; /* HTTP parsing successful */
@@ -688,8 +696,8 @@ extract_http_host_from_queue (HevSocks5SessionTCP *self, char *hostname_buffer,
            self, total_len);
 
     /* Use filter module's HTTP parser */
-    return hev_filter_parse_http_host (self, buffer, total_len,
-                                       hostname_buffer, buffer_len);
+    return hev_filter_parse_http_host (self, buffer, total_len, hostname_buffer,
+                                       buffer_len);
 }
 
 /* 嗅探并解析 ClientHello */
@@ -717,7 +725,8 @@ sniff_client_hello (HevSocks5SessionTCP *self, HevTLSClientHello *hello)
     }
 
     if (total_len < 5) { /* 至少需要 TLS Record Header */
-        LOG_D ("%p session: insufficient TLS data (%zu bytes)", self, total_len);
+        LOG_D ("%p session: insufficient TLS data (%zu bytes)", self,
+               total_len);
         return -1;
     }
 
@@ -774,15 +783,16 @@ run_direct_connect_task (void *data)
 
     /* Unified protocol parsing */
     if (self->queue) {
-        int parse_result = process_protocol_parsing (self, pcb, http_hostname,
-                                                   sizeof (http_hostname), "Direct connect");
+        int parse_result = process_protocol_parsing (
+            self, pcb, http_hostname, sizeof (http_hostname), "Direct connect");
         if (parse_result < 0) {
             goto exit_cleanup; // Terminated due to blocked hostname
         }
 
         /* Handle ALPN for HTTPS connections */
         if (parse_result > 0 && pcb->local_port == 443) {
-            if (sniff_client_hello (self, &client_hello) == 0 && client_hello.detected) {
+            if (sniff_client_hello (self, &client_hello) == 0 &&
+                client_hello.detected) {
                 if (client_hello.alpn[0]) {
                     LOG_I ("%p session: Direct connect detected ALPN: %s", self,
                            client_hello.alpn);
@@ -954,7 +964,6 @@ exit_cleanup:
    Smart Proxy Splice Implementation
    ============================================================================ */
 
-
 static void
 run_smart_proxy_task (void *data)
 {
@@ -1008,15 +1017,16 @@ run_smart_proxy_task (void *data)
 
     /* Unified protocol parsing */
     if (self->queue) {
-        int parse_result = process_protocol_parsing (self, pcb, http_hostname,
-                                                   sizeof (http_hostname), "Smart proxy");
+        int parse_result = process_protocol_parsing (
+            self, pcb, http_hostname, sizeof (http_hostname), "Smart proxy");
         if (parse_result < 0) {
             goto exit_cleanup; // Terminated due to blocked hostname
         }
 
         /* Handle ALPN for HTTPS connections */
         if (parse_result > 0 && pcb->local_port == 443) {
-            if (sniff_client_hello (self, &client_hello) == 0 && client_hello.detected) {
+            if (sniff_client_hello (self, &client_hello) == 0 &&
+                client_hello.detected) {
                 if (client_hello.alpn[0]) {
                     LOG_I ("%p session: Smart proxy detected ALPN: %s", self,
                            client_hello.alpn);
@@ -1824,5 +1834,3 @@ hev_session_manager_start_direct_udp (struct udp_pcb *pcb,
     hev_socks5_tunnel_insert_session (&session->node);
     hev_task_run (task, run_direct_udp_task, session);
 }
-
-
