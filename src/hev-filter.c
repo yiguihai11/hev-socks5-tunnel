@@ -1221,8 +1221,11 @@ hev_filter_sniff_pcb_hostname (struct tcp_pcb *pcb, struct pbuf *queue,
 void
 hev_filter_get_stats (HevFilterStats *out_stats)
 {
-    if (out_stats)
+    if (out_stats) {
         memcpy (out_stats, &stats, sizeof (HevFilterStats));
+        /* Add current blacklist count from the filter module */
+        out_stats->blacklist_active = blacklist_count;
+    }
 }
 
 void
@@ -1345,6 +1348,7 @@ hev_filter_blacklist_add_entry (HevBlacklistEntryType type,
     entry->next = blacklist_table[hash];
     blacklist_table[hash] = entry;
     blacklist_count++;
+    stats.blacklist_adds++;
     hev_task_mutex_unlock (&blacklist_mutex);
 
     /* 记录详细日志 */
@@ -1434,6 +1438,7 @@ hev_filter_blacklist_check_entry (HevBlacklistEntryType type,
     hev_task_mutex_lock (&blacklist_mutex);
     current = &blacklist_table[hash];
     prev = NULL;
+    stats.blacklist_hits++;
 
     while (*current) {
         HevBlacklistEntry *entry = *current;

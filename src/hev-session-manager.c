@@ -1341,7 +1341,7 @@ run_smart_proxy_task (void *data)
                             "(expected 'HTTP/', got %d bytes starting with 0x%02x), BLACKLIST",
                             self, pcb->local_port, dst_ip, (int)iov[0].iov_len,
                             first_byte);
-                        hev_traffic_router_blacklist_add (&pcb->local_ip);
+                        hev_filter_blacklist_add (&pcb->local_ip);
                         gfw_detected = 1;
                         break;
                     }
@@ -1367,7 +1367,7 @@ run_smart_proxy_task (void *data)
                             "%p session: ❌ Smart proxy received TLS Alert (0x15) from %s:%d "
                             "(likely SNI mismatch or certificate error), BLACKLIST",
                             self, dst_ip, pcb->local_port);
-                        hev_traffic_router_blacklist_add (&pcb->local_ip);
+                        hev_filter_blacklist_add (&pcb->local_ip);
                         gfw_detected = 1;
                         break;
                     } else {
@@ -1376,7 +1376,7 @@ run_smart_proxy_task (void *data)
                             "%p session: ❌ Smart proxy received INVALID TLS response (0x%02x) from %s:%d "
                             "(expected 0x14/0x16/0x17), BLACKLIST",
                             self, first_byte, dst_ip, pcb->local_port);
-                        hev_traffic_router_blacklist_add (&pcb->local_ip);
+                        hev_filter_blacklist_add (&pcb->local_ip);
                         gfw_detected = 1;
                         break;
                     }
@@ -1407,7 +1407,7 @@ run_smart_proxy_task (void *data)
                        "(handshake OK but NO valid data received in %d ms), "
                        "fallback to SOCKS5 and BLACKLIST",
                        self, dst_ip, pcb->local_port, timeout);
-                hev_traffic_router_blacklist_add (&pcb->local_ip);
+                hev_filter_blacklist_add (&pcb->local_ip);
                 gfw_detected = 1;
                 break;
             }

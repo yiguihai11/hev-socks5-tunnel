@@ -51,6 +51,9 @@ typedef struct _HevFilterStats
     size_t http_parsed; /* HTTP Host parsed */
     size_t domestic_hits; /* Domestic IP hits */
     size_t foreign_hits; /* Foreign IP hits */
+    size_t blacklist_adds; /* Blacklist additions */
+    size_t blacklist_hits; /* Blacklist match attempts */
+    size_t blacklist_active; /* Currently active blacklist entries */
 } HevFilterStats;
 
 /**

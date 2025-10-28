@@ -25,6 +25,72 @@
 
 /* Blacklist functionality moved to hev-filter.c for unified management */
 
+static int
+handle_dns_forward_hijack (const ip_addr_t *addr, u16_t port,
+                           ip_addr_t *target_ip, u16_t *target_port)
+{
+    const char *dns_fwd_virtual_ip4 = hev_config_get_dns_forwarder_virtual_ip4 ();
+    const char *dns_fwd_virtual_ip6 = hev_config_get_dns_forwarder_virtual_ip6 ();
+    const char *dns_fwd_target_ip4 = hev_config_get_dns_forwarder_target_ip4 ();
+    const char *dns_fwd_target_ip6 = hev_config_get_dns_forwarder_target_ip6 ();
+
+    if (port != 53)
+        return 0;
+
+    /* IPv4 hijack check */
+    if (dns_fwd_virtual_ip4 && dns_fwd_target_ip4 && IP_IS_V4 (addr)) {
+        ip_addr_t virtual_ip4;
+        if (ipaddr_aton (dns_fwd_virtual_ip4, &virtual_ip4)) {
+            if (ip_addr_cmp (addr, &virtual_ip4)) {
+                char target_buf[128];
+                strncpy (target_buf, dns_fwd_target_ip4, sizeof (target_buf) - 1);
+
+                char *colon = strchr (target_buf, ':');
+                if (colon) {
+                    *colon = '\0';
+                    *target_port = atoi (colon + 1);
+                } else {
+                    *target_port = 53;
+                }
+
+                if (ipaddr_aton (target_buf, target_ip)) {
+                    LOG_D ("router: DNS forward IPv4 hijack detected");
+                    return 1;
+                }
+            }
+        }
+    }
+
+    /* IPv6 hijack check */
+    if (dns_fwd_virtual_ip6 && dns_fwd_target_ip6 && IP_IS_V6 (addr)) {
+        ip_addr_t virtual_ip6;
+        if (ipaddr_aton (dns_fwd_virtual_ip6, &virtual_ip6)) {
+            if (ip_addr_cmp (addr, &virtual_ip6)) {
+                char target_buf[128];
+                strncpy (target_buf, dns_fwd_target_ip6, sizeof (target_buf) - 1);
+
+                char *bracket_end = strrchr (target_buf, ']');
+                if (bracket_end && *(bracket_end + 1) == ':') {
+                    *target_port = atoi (bracket_end + 2);
+                    *bracket_end = '\0';
+                    if (ipaddr_aton (target_buf + 1, target_ip)) {
+                        LOG_D ("router: DNS forward IPv6 hijack detected");
+                        return 1;
+                    }
+                } else {
+                    *target_port = 53;
+                    if (ipaddr_aton (target_buf, target_ip)) {
+                        LOG_D ("router: DNS forward IPv6 hijack detected");
+                        return 1;
+                    }
+                }
+            }
+        }
+    }
+
+    return 0;
+}
+
 static void
 terminate_pcb_task (void *data)
 {
@@ -38,58 +104,6 @@ terminate_pcb_task (void *data)
     LOG_D ("router: PCB %p terminated.", pcb);
 }
 
-void
-hev_traffic_router_blacklist_add (const ip_addr_t *addr)
-{
-    char ip_str[INET6_ADDRSTRLEN];
-
-    if (!addr) {
-        LOG_E ("router: blacklist_add called with NULL address");
-        return;
-    }
-
-    ipaddr_ntoa_r (addr, ip_str, sizeof (ip_str));
-    LOG_D ("router: Adding IP %s to enhanced blacklist", ip_str);
-
-    /* 使用增强的黑名单接口，提供详细的原因和来源信息 */
-    const char *entry_id = hev_filter_blacklist_add_ip (
-        addr, "Traffic Router - Blocked by routing decision",
-        HEV_BLACKLIST_SOURCE_AUTO, 0 /* 使用默认TTL */
-    );
-
-    if (entry_id) {
-        LOG_I ("router: Successfully added IP %s to blacklist (entry_id=%s)",
-               ip_str, entry_id);
-    } else {
-        LOG_E ("router: Failed to add IP %s to blacklist", ip_str);
-    }
-}
-
-int
-hev_traffic_router_blacklist_check (const ip_addr_t *addr)
-{
-    char ip_str[INET6_ADDRSTRLEN];
-    int is_blacklisted;
-
-    if (!addr) {
-        LOG_E ("router: blacklist_check called with NULL address");
-        return 0;
-    }
-
-    ipaddr_ntoa_r (addr, ip_str, sizeof (ip_str));
-    LOG_D ("router: Checking IP %s against enhanced blacklist", ip_str);
-
-    /* 使用增强的黑名单检查接口 */
-    is_blacklisted = hev_filter_blacklist_check_ip (addr);
-
-    if (is_blacklisted) {
-        LOG_W ("router: IP %s found in enhanced blacklist", ip_str);
-    } else {
-        LOG_D ("router: IP %s not found in blacklist", ip_str);
-    }
-
-    return is_blacklisted;
-}
 
 int
 hev_traffic_router_init (void)
@@ -147,7 +161,7 @@ hev_traffic_router_handle_tcp (struct tcp_pcb *pcb)
     /* 2. For non-domestic IPs, attempt smart proxy if enabled and not blacklisted. */
     if (hev_config_get_smart_proxy_timeout_ms () > 0 &&
         hev_config_get_smart_proxy_blocked_ip_expiry_minutes () > 0 &&
-        !hev_traffic_router_blacklist_check (local_ip)) {
+        !hev_filter_blacklist_check (local_ip)) {
         LOG_I (
             "%p router: TCP routing %s:%d -> %s:%d via SMART_PROXY (trying direct first)",
             pcb, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
@@ -156,7 +170,7 @@ hev_traffic_router_handle_tcp (struct tcp_pcb *pcb)
     }
 
     /* 3. Fallback to SOCKS5 for all other cases (blacklisted, smart proxy disabled). */
-    if (hev_traffic_router_blacklist_check (local_ip)) {
+    if (hev_filter_blacklist_check (local_ip)) {
         LOG_I (
             "%p router: TCP routing %s:%d -> %s:%d via SOCKS5 (IP is blacklisted)",
             pcb, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
@@ -192,85 +206,15 @@ hev_traffic_router_handle_udp (struct udp_pcb *pcb, struct pbuf *p,
     }
 
     /* DNS Forwarder 劫持检查（优先级最高）*/
-    if (port == 53) {
-        const char *dns_fwd_virtual_ip4 =
-            hev_config_get_dns_forwarder_virtual_ip4 ();
-        const char *dns_fwd_virtual_ip6 =
-            hev_config_get_dns_forwarder_virtual_ip6 ();
-        const char *dns_fwd_target_ip4 =
-            hev_config_get_dns_forwarder_target_ip4 ();
-        const char *dns_fwd_target_ip6 =
-            hev_config_get_dns_forwarder_target_ip6 ();
-        int is_hijacked = 0;
+    {
         ip_addr_t target_ip;
         u16_t target_port = 53;
 
-        /* 检查IPv4劫持 */
-        if (dns_fwd_virtual_ip4 && dns_fwd_target_ip4 && IP_IS_V4 (addr)) {
-            ip_addr_t virtual_ip4;
-            if (ipaddr_aton (dns_fwd_virtual_ip4, &virtual_ip4)) {
-                if (ip_addr_cmp (addr, &virtual_ip4)) {
-                    char target_buf[128];
-                    strncpy (target_buf, dns_fwd_target_ip4,
-                             sizeof (target_buf) - 1);
-                    char *colon = strchr (target_buf, ':');
-                    if (colon) {
-                        *colon = '\0';
-                        target_port = atoi (colon + 1);
-                    }
-                    if (ipaddr_aton (target_buf, &target_ip)) {
-                        is_hijacked = 1;
-                        char vip_str[INET6_ADDRSTRLEN];
-                        char tip_str[INET6_ADDRSTRLEN];
-                        ipaddr_ntoa_r (&virtual_ip4, vip_str, sizeof (vip_str));
-                        ipaddr_ntoa_r (&target_ip, tip_str, sizeof (tip_str));
-                        LOG_I (
-                            "%p router: UDP DNS Forwarder hijack: %s:53 -> %s:%d",
-                            pcb, vip_str, tip_str, target_port);
-                    }
-                }
-            }
-        }
-
-        /* 检查IPv6劫持 */
-        if (!is_hijacked && dns_fwd_virtual_ip6 && dns_fwd_target_ip6 &&
-            IP_IS_V6 (addr)) {
-            ip_addr_t virtual_ip6;
-            if (ipaddr_aton (dns_fwd_virtual_ip6, &virtual_ip6)) {
-                if (ip_addr_cmp (addr, &virtual_ip6)) {
-                    char target_buf[128];
-                    strncpy (target_buf, dns_fwd_target_ip6,
-                             sizeof (target_buf) - 1);
-                    char *bracket_end = strrchr (target_buf, ']');
-                    if (bracket_end && *(bracket_end + 1) == ':') {
-                        target_port = atoi (bracket_end + 2);
-                        *bracket_end = '\0';
-                        if (ipaddr_aton (target_buf + 1, &target_ip)) {
-                            is_hijacked = 1;
-                        }
-                    } else {
-                        if (ipaddr_aton (target_buf, &target_ip)) {
-                            is_hijacked = 1;
-                        }
-                    }
-                    if (is_hijacked) {
-                        char vip_str[INET6_ADDRSTRLEN];
-                        char tip_str[INET6_ADDRSTRLEN];
-                        ipaddr_ntoa_r (&virtual_ip6, vip_str, sizeof (vip_str));
-                        ipaddr_ntoa_r (&target_ip, tip_str, sizeof (tip_str));
-                        LOG_I (
-                            "%p router: UDP DNS Forwarder hijack (IPv6): %s:53 -> %s:%d",
-                            pcb, vip_str, tip_str, target_port);
-                    }
-                }
-            }
-        }
-
-        /* 如果被劫持，使用目标地址进行UDP直连 */
-        if (is_hijacked) {
-            LOG_I (
-                "%p router: UDP routing %s:%d -> %s:%d via DNS_FORWARD (hijacked DNS query)",
-                pcb, src_ip, pcb->remote_port, dst_ip, target_port);
+        if (handle_dns_forward_hijack (addr, port, &target_ip, &target_port)) {
+            char tip_str[INET6_ADDRSTRLEN];
+            ipaddr_ntoa_r (&target_ip, tip_str, sizeof (tip_str));
+            LOG_I ("%p router: UDP DNS Forwarder hijack: %s:%d -> %s:%d",
+                   pcb, dst_ip, port, tip_str, target_port);
             pbuf_ref (p);
             hev_session_manager_start_direct_udp (pcb, &target_ip, target_port,
                                                   addr, port, p);
