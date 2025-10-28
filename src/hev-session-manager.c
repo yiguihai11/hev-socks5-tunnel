@@ -1074,8 +1074,12 @@ run_smart_proxy_task (void *data)
 
         LOG_W (
             "%p session: Smart proxy TCP handshake FAILED to %s:%d after %ld ms, "
-            "fallback to SOCKS5 (NOT blacklisting - may be temporary network issue)",
+            "fallback to SOCKS5 and BLACKLIST (likely GFW blocking)",
             self, dst_ip, pcb->local_port, connect_duration * 1000);
+
+        /* Add IP to blacklist due to TCP connection failure */
+        hev_filter_blacklist_add (&pcb->local_ip);
+        gfw_detected = 1;
 
         hev_task_del_fd (task, fd);
         close (fd);
@@ -1095,7 +1099,6 @@ run_smart_proxy_task (void *data)
     self->buffer = hev_ring_buffer_alloca (tcp_buffer_size);
     if (!self->buffer) {
         LOG_E ("%p session: smart proxy failed to allocate ring buffer", self);
-        gfw_detected = 1;
         hev_task_del_fd (task, fd);
         close (fd);
         goto fallback_socks5;
