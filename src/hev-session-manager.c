@@ -237,7 +237,7 @@ idle_timer_check (HevIdleTimer *timer)
     if (timer->idle_timeout <= 0)
         return 0; /* 空闲超时禁用 */
 
-    time_t now = time (NULL);
+    time_t now = get_current_time_seconds ();
     if (now - timer->last_activity > timer->idle_timeout) {
         return -1; /* 超时 */
     }
@@ -829,7 +829,7 @@ run_direct_connect_task (void *data)
         hev_task_mod_fd (task, fd, POLLIN | POLLOUT);
 
     /* 连接阶段:使用 connect_timeout */
-    connect_start = time (NULL);
+    connect_start = get_current_time_seconds ();
     hev_socks5_set_timeout (s, connect_timeout);
 
     LOG_D ("%p session: connecting to %s:%d (timeout=%dms)", self, dst_ip,
@@ -837,7 +837,7 @@ run_direct_connect_task (void *data)
 
     if (hev_task_io_socket_connect (fd, (struct sockaddr *)&saddr, saddr_len,
                                     hev_socks5_task_io_yielder, s) < 0) {
-        time_t connect_duration = time (NULL) - connect_start;
+        time_t connect_duration = get_current_time_seconds () - connect_start;
         LOG_E ("%p session: direct connect failed after %ld seconds: %s", self,
                connect_duration, strerror (errno));
         hev_task_del_fd (task, fd);
@@ -901,7 +901,7 @@ run_direct_connect_task (void *data)
         /* 只在无数据时检查空闲超时 */
         if (res_f == 0) {
             if (idle_timer_check (&idle_timer) < 0) {
-                time_t idle_duration = time (NULL) - idle_timer.last_activity;
+                time_t idle_duration = get_current_time_seconds () - idle_timer.last_activity;
                 LOG_I (
                     "%p session: Direct connect %s:%d -> %s:%d idle timeout (no activity for %ld seconds)",
                     self, src_ip, pcb->remote_port, dst_ip, pcb->local_port,
@@ -932,7 +932,7 @@ cleanup_splice:
 
 exit_cleanup:
     if (connect_start > 0) {
-        session_duration = time (NULL) - connect_start;
+        session_duration = get_current_time_seconds () - connect_start;
         LOG_I (
             "%p session: Direct connect %s:%d -> %s:%d ended (duration=%ld seconds)",
             self, src_ip, pcb->remote_port, dst_ip, pcb->local_port,
@@ -1060,7 +1060,7 @@ run_smart_proxy_task (void *data)
        ==================================================================== */
     timeout = hev_config_get_smart_proxy_timeout_ms ();
     hev_socks5_set_timeout (s, timeout);
-    connect_start = time (NULL);
+    connect_start = get_current_time_seconds ();
 
     LOG_D (
         "%p session: smart proxy attempting TCP handshake to %s:%d (timeout=%dms)",
@@ -1068,7 +1068,7 @@ run_smart_proxy_task (void *data)
 
     if (hev_task_io_socket_connect (fd, (struct sockaddr *)&saddr, saddr_len,
                                     hev_socks5_task_io_yielder, s) < 0) {
-        time_t connect_duration = time (NULL) - connect_start;
+        time_t connect_duration = get_current_time_seconds () - connect_start;
 
         LOG_W (
             "%p session: Smart proxy TCP handshake FAILED to %s:%d after %ld ms, "
@@ -1084,7 +1084,7 @@ run_smart_proxy_task (void *data)
         goto fallback_socks5;
     }
 
-    connect_success_time = time (NULL);
+    connect_success_time = get_current_time_seconds ();
     LOG_I (
         "%p session: Smart proxy TCP handshake SUCCESS %s:%d -> %s:%d (took %ld ms)",
         self, src_ip, pcb->remote_port, dst_ip, pcb->local_port,
@@ -1147,7 +1147,7 @@ run_smart_proxy_task (void *data)
         /* 🔍 关键检测点:收到数据后验证是否为真实应用数据 */
         if (first_loop && self->initial_data_received &&
             self->is_smart_proxy_probe) {
-            time_t elapsed_ms = (time (NULL) - connect_success_time) * 1000;
+            time_t elapsed_ms = (get_current_time_seconds () - connect_success_time) * 1000;
             struct iovec iov[2];
             int iovc = hev_ring_buffer_reading (self->buffer, iov);
             int is_valid_response = 0;
@@ -1270,7 +1270,7 @@ run_smart_proxy_task (void *data)
         /* 正常的空闲超时检查（仅在收到数据后生效） */
         if (!first_loop && res_f == 0) {
             if (idle_timer_check (&idle_timer) < 0) {
-                time_t idle_duration = time (NULL) - idle_timer.last_activity;
+                time_t idle_duration = get_current_time_seconds () - idle_timer.last_activity;
                 LOG_I ("%p session: Smart proxy %s:%d -> %s:%d idle timeout "
                        "(no activity for %ld seconds)",
                        self, src_ip, pcb->remote_port, dst_ip, pcb->local_port,
@@ -1294,7 +1294,7 @@ cleanup_splice:
     close (fd);
 
     if (connect_success_time > 0) {
-        session_duration = time (NULL) - connect_success_time;
+        session_duration = get_current_time_seconds () - connect_success_time;
 
         if (gfw_detected) {
             LOG_I ("%p session: ❌ Smart proxy FAILED %s:%d -> %s:%d "
@@ -1393,7 +1393,7 @@ direct_udp_cleanup (HevDirectUDPSession *session)
 
     ipaddr_ntoa_r (&session->src_ip, src_ip, sizeof (src_ip));
     ipaddr_ntoa_r (&session->dest_ip, dst_ip, sizeof (dst_ip));
-    session_duration = time (NULL) - session->session_start;
+    session_duration = get_current_time_seconds () - session->session_start;
 
     LOG_D ("%p session: UDP cleanup started %s:%d -> %s:%d", session, src_ip,
            session->src_port, dst_ip, session->dest_port);
@@ -1455,7 +1455,7 @@ direct_udp_recv_handler (void *arg, struct udp_pcb *pcb, struct pbuf *p,
         return;
     }
 
-    session->last_activity = time (NULL);
+    session->last_activity = get_current_time_seconds ();
 
     if (session->queue_count > 100) {
         LOG_W (
@@ -1523,7 +1523,7 @@ direct_udp_recv_task (void *data)
     while (session->alive & UDP_ALIVE_RECV) {
         addr_len = sizeof (remote_addr);
 
-        time_t now = time (NULL);
+        time_t now = get_current_time_seconds ();
         time_t idle_time = now - session->last_activity;
         if (idle_time > UDP_IDLE_TIMEOUT) {
             LOG_I (
