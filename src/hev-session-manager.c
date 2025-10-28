@@ -901,7 +901,8 @@ run_direct_connect_task (void *data)
         /* 只在无数据时检查空闲超时 */
         if (res_f == 0) {
             if (idle_timer_check (&idle_timer) < 0) {
-                time_t idle_duration = get_current_time_seconds () - idle_timer.last_activity;
+                time_t idle_duration =
+                    get_current_time_seconds () - idle_timer.last_activity;
                 LOG_I (
                     "%p session: Direct connect %s:%d -> %s:%d idle timeout (no activity for %ld seconds)",
                     self, src_ip, pcb->remote_port, dst_ip, pcb->local_port,
@@ -1147,7 +1148,8 @@ run_smart_proxy_task (void *data)
         /* 🔍 关键检测点:收到数据后验证是否为真实应用数据 */
         if (first_loop && self->initial_data_received &&
             self->is_smart_proxy_probe) {
-            time_t elapsed_ms = (get_current_time_seconds () - connect_success_time) * 1000;
+            time_t elapsed_ms =
+                (get_current_time_seconds () - connect_success_time) * 1000;
             struct iovec iov[2];
             int iovc = hev_ring_buffer_reading (self->buffer, iov);
             int is_valid_response = 0;
@@ -1270,7 +1272,8 @@ run_smart_proxy_task (void *data)
         /* 正常的空闲超时检查（仅在收到数据后生效） */
         if (!first_loop && res_f == 0) {
             if (idle_timer_check (&idle_timer) < 0) {
-                time_t idle_duration = get_current_time_seconds () - idle_timer.last_activity;
+                time_t idle_duration =
+                    get_current_time_seconds () - idle_timer.last_activity;
                 LOG_I ("%p session: Smart proxy %s:%d -> %s:%d idle timeout "
                        "(no activity for %ld seconds)",
                        self, src_ip, pcb->remote_port, dst_ip, pcb->local_port,
