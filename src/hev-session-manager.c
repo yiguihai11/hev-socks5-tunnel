@@ -1400,7 +1400,8 @@ direct_udp_cleanup (HevDirectUDPSession *session)
 
     ipaddr_ntoa_r (&session->src_ip, src_ip, sizeof (src_ip));
     ipaddr_ntoa_r (&session->dest_ip, dst_ip, sizeof (dst_ip));
-    session_duration = (get_current_time_seconds () - session->session_start) * 1000;
+    session_duration =
+        (get_current_time_seconds () - session->session_start) * 1000;
 
     LOG_D ("%p session: UDP cleanup started %s:%d -> %s:%d", session, src_ip,
            session->src_port, dst_ip, session->dest_port);
