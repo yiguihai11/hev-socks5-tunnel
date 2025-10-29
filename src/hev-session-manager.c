@@ -1296,7 +1296,12 @@ cleanup_splice:
     close (fd);
 
     if (connect_success_time > 0) {
+<<<<<<< HEAD
         session_duration = get_current_time_ms () - connect_success_time;
+=======
+        session_duration =
+            (get_current_time_ms () - connect_success_time) / 1000;
+>>>>>>> 82fd6968abdaca22fb3ce36198bf352a03bcd0a4
 
         if (gfw_detected) {
             LOG_I ("%p session: ❌ Smart proxy FAILED %s:%d -> %s:%d "
