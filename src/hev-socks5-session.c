@@ -64,6 +64,12 @@ hev_socks5_session_terminate (HevSocks5Session *self)
 
     LOG_D ("%p socks5 session terminate", self);
 
+    /* 添加空指针检查，防止段错误 */
+    if (!self) {
+        LOG_D ("socks5 session terminate: self is NULL, skipping termination");
+        return;
+    }
+
     iface = HEV_OBJECT_GET_IFACE (self, HEV_SOCKS5_SESSION_TYPE);
     hev_socks5_set_timeout (HEV_SOCKS5 (self), 0);
     hev_task_wakeup (iface->get_task (self));
