@@ -19,7 +19,7 @@
 #include <stddef.h>
 #include <time.h>
 #include <strings.h> /* For strcasestr */
-#include <fcntl.h>   /* For fcntl, O_NONBLOCK */
+#include <fcntl.h> /* For fcntl, O_NONBLOCK */
 
 /* memmem compatibility for systems without _GNU_SOURCE */
 #ifndef _GNU_SOURCE
@@ -126,19 +126,22 @@ memmem_compat (const void *haystack, size_t haystacklen, const void *needle,
    GFW异步诊断数据结构
    ============================================================================ */
 
-typedef enum {
-    GFW_BLOCK_REASON_HANDSHAKE_FAILED = 0,  // 协议层面问题
-    GFW_BLOCK_REASON_IP_BLOCKED,            // IP被封锁
+typedef enum
+{
+    GFW_BLOCK_REASON_HANDSHAKE_FAILED = 0, // 协议层面问题
+    GFW_BLOCK_REASON_IP_BLOCKED, // IP被封锁
     GFW_BLOCK_REASON_MAX
 } GFWBlockReason;
 
-typedef enum {
+typedef enum
+{
     GFW_DETECTION_HTTP = 0,
     GFW_DETECTION_TLS_SNI,
     GFW_DETECTION_UNKNOWN
 } GFWDetectionType;
 
-typedef struct _GFWDiagnosisTaskData {
+typedef struct _GFWDiagnosisTaskData
+{
     char dst_ip[INET6_ADDRSTRLEN];
     uint16_t blocked_port;
     char connect_hostname[256];
@@ -182,7 +185,8 @@ static int process_protocol_parsing (HevSocks5SessionTCP *self,
 
 /* GFW异步诊断函数声明 */
 static void run_gfw_diagnosis_task (void *data);
-static GFWBlockReason diagnose_gfw_blocking_type_async (const char *dst_ip, uint16_t blocked_port);
+static GFWBlockReason diagnose_gfw_blocking_type_async (const char *dst_ip,
+                                                        uint16_t blocked_port);
 static int async_ping_test (const char *dst_ip);
 static int async_tcping_test (const char *dst_ip, uint16_t port);
 
@@ -751,7 +755,8 @@ run_direct_connect_task (void *data)
            pcb->remote_port, dst_ip, pcb->local_port);
 
     /* 等待一小段时间让数据到达队列 (端口443和80) */
-    if (!self->queue && (pcb->local_port == 443 || pcb->local_port == 80 || pcb->local_port == 8080)) {
+    if (!self->queue && (pcb->local_port == 443 || pcb->local_port == 80 ||
+                         pcb->local_port == 8080)) {
         if (pcb->local_port == 443) {
             LOG_D ("%p session: Waiting for TLS ClientHello data...", self);
         } else {
@@ -1082,20 +1087,27 @@ run_smart_proxy_task (void *data)
             self, dst_ip, pcb->local_port, connect_duration_ms);
 
         /* 启动异步GFW诊断任务 */
-        LOG_W ("%p session: TCP连接失败，启动异步GFW诊断 %s:%d (连接耗时: %ld ms)",
-               self, dst_ip, pcb->local_port, connect_duration_ms);
+        LOG_W (
+            "%p session: TCP连接失败，启动异步GFW诊断 %s:%d (连接耗时: %ld ms)",
+            self, dst_ip, pcb->local_port, connect_duration_ms);
 
         /* 创建诊断任务数据 */
-        GFWDiagnosisTaskData *diag_data = hev_malloc (sizeof (GFWDiagnosisTaskData));
+        GFWDiagnosisTaskData *diag_data =
+            hev_malloc (sizeof (GFWDiagnosisTaskData));
         if (diag_data) {
             strncpy (diag_data->dst_ip, dst_ip, sizeof (diag_data->dst_ip) - 1);
             diag_data->dst_ip[sizeof (diag_data->dst_ip) - 1] = '\0';
             diag_data->blocked_port = pcb->local_port;
-            strncpy (diag_data->connect_hostname, http_hostname, sizeof (diag_data->connect_hostname) - 1);
-            diag_data->connect_hostname[sizeof (diag_data->connect_hostname) - 1] = '\0';
+            strncpy (diag_data->connect_hostname, http_hostname,
+                     sizeof (diag_data->connect_hostname) - 1);
+            diag_data
+                ->connect_hostname[sizeof (diag_data->connect_hostname) - 1] =
+                '\0';
             diag_data->pcb = pcb;
             diag_data->session = self;
-            diag_data->detection_type = (pcb->local_port == 443) ? GFW_DETECTION_TLS_SNI : GFW_DETECTION_HTTP;
+            diag_data->detection_type = (pcb->local_port == 443) ?
+                                            GFW_DETECTION_TLS_SNI :
+                                            GFW_DETECTION_HTTP;
             diag_data->connect_duration_ms = connect_duration_ms;
             diag_data->original_task = task;
 
@@ -1113,7 +1125,6 @@ run_smart_proxy_task (void *data)
             LOG_E ("%p session: 无法分配异步GFW诊断数据", self);
         }
 
-        
         hev_task_del_fd (task, fd);
         close (fd);
         goto fallback_socks5;
@@ -1875,10 +1886,12 @@ run_gfw_diagnosis_task (void *data)
            diag_data->dst_ip, diag_data->blocked_port);
 
     /* 执行异步诊断 */
-    block_reason = diagnose_gfw_blocking_type_async (diag_data->dst_ip, diag_data->blocked_port);
+    block_reason = diagnose_gfw_blocking_type_async (diag_data->dst_ip,
+                                                     diag_data->blocked_port);
 
-    LOG_I ("%p session: GFW异步诊断完成 %s:%d -> GFW封锁类型: %d", diag_data->session,
-           diag_data->dst_ip, diag_data->blocked_port, block_reason);
+    LOG_I ("%p session: GFW异步诊断完成 %s:%d -> GFW封锁类型: %d",
+           diag_data->session, diag_data->dst_ip, diag_data->blocked_port,
+           block_reason);
 
     /* 清理数据 */
     hev_free (diag_data);
@@ -1944,10 +1957,12 @@ async_ping_test (const char *dst_ip)
     /* 创建ping命令 - 支持IPv6地址检测 */
     if (strchr (dst_ip, ':') != NULL) {
         /* IPv6地址使用ping6命令 */
-        snprintf (ping_cmd, sizeof (ping_cmd), "ping6 -i 1 -c 2 -W 2 %s >/dev/null 2>&1", dst_ip);
+        snprintf (ping_cmd, sizeof (ping_cmd),
+                  "ping6 -i 1 -c 2 -W 2 %s >/dev/null 2>&1", dst_ip);
     } else {
         /* IPv4地址使用ping命令 */
-        snprintf (ping_cmd, sizeof (ping_cmd), "ping -i 1 -c 2 -W 2 %s >/dev/null 2>&1", dst_ip);
+        snprintf (ping_cmd, sizeof (ping_cmd),
+                  "ping -i 1 -c 2 -W 2 %s >/dev/null 2>&1", dst_ip);
     }
 
     /* 执行ping命令 */
@@ -2013,7 +2028,8 @@ async_tcping_test (const char *dst_ip, uint16_t port)
         if (result > 0 && (pfd.revents & POLLOUT)) {
             int error = 0;
             socklen_t len = sizeof (error);
-            if (getsockopt (fd, SOL_SOCKET, SO_ERROR, &error, &len) == 0 && error == 0) {
+            if (getsockopt (fd, SOL_SOCKET, SO_ERROR, &error, &len) == 0 &&
+                error == 0) {
                 result = 1; /* 连接成功 */
             } else {
                 result = 0; /* 连接失败 */
