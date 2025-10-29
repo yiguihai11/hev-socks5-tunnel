@@ -933,7 +933,7 @@ cleanup_splice:
 
 exit_cleanup:
     if (connect_start > 0) {
-        session_duration = get_current_time_seconds () - connect_start;
+        session_duration = (get_current_time_ms () - connect_start) / 1000;
         LOG_I (
             "%p session: Direct connect %s:%d -> %s:%d ended (duration=%ld seconds)",
             self, src_ip, pcb->remote_port, dst_ip, pcb->local_port,
@@ -1296,7 +1296,7 @@ cleanup_splice:
     close (fd);
 
     if (connect_success_time > 0) {
-        session_duration = get_current_time_seconds () - connect_success_time;
+        session_duration = (get_current_time_ms () - connect_success_time) / 1000;
 
         if (gfw_detected) {
             LOG_I ("%p session: ❌ Smart proxy FAILED %s:%d -> %s:%d "
