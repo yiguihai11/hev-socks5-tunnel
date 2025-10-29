@@ -314,9 +314,12 @@ hev_socks5_session_task_entry (void *data)
     ipaddr_ntoa_r (&pcb->local_ip, dst_ip, sizeof (dst_ip));
 
     /* 等待数据到达队列 (根据端口类型) */
-    if (!tcp->queue && (pcb->local_port == 443 || pcb->local_port == 80 || pcb->local_port == 8080)) {
+    if (!tcp->queue && (pcb->local_port == 443 || pcb->local_port == 80 ||
+                        pcb->local_port == 8080)) {
         if (pcb->local_port == 443) {
-            LOG_D ("%p session: SOCKS5 task waiting for TLS ClientHello data...", tcp);
+            LOG_D (
+                "%p session: SOCKS5 task waiting for TLS ClientHello data...",
+                tcp);
         } else {
             LOG_D ("%p session: SOCKS5 task waiting for HTTP data...", tcp);
         }
