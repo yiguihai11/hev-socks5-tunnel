@@ -829,7 +829,7 @@ run_direct_connect_task (void *data)
         hev_task_mod_fd (task, fd, POLLIN | POLLOUT);
 
     /* 连接阶段:使用 connect_timeout */
-    connect_start = get_current_time_seconds ();
+    connect_start = get_current_time_ms ();
     hev_socks5_set_timeout (s, connect_timeout);
 
     LOG_D ("%p session: connecting to %s:%d (timeout=%dms)", self, dst_ip,
@@ -837,9 +837,9 @@ run_direct_connect_task (void *data)
 
     if (hev_task_io_socket_connect (fd, (struct sockaddr *)&saddr, saddr_len,
                                     hev_socks5_task_io_yielder, s) < 0) {
-        time_t connect_duration = get_current_time_seconds () - connect_start;
-        LOG_E ("%p session: direct connect failed after %ld seconds: %s", self,
-               connect_duration, strerror (errno));
+        time_t connect_duration_ms = get_current_time_ms () - connect_start;
+        LOG_E ("%p session: direct connect failed after %ld ms: %s", self,
+               connect_duration_ms, strerror (errno));
         hev_task_del_fd (task, fd);
         close (fd);
         goto exit_cleanup;
@@ -1061,7 +1061,7 @@ run_smart_proxy_task (void *data)
        ==================================================================== */
     timeout = hev_config_get_smart_proxy_timeout_ms ();
     hev_socks5_set_timeout (s, timeout);
-    connect_start = get_current_time_seconds ();
+    connect_start = get_current_time_ms ();
 
     LOG_D (
         "%p session: smart proxy attempting TCP handshake to %s:%d (timeout=%dms)",
@@ -1069,12 +1069,12 @@ run_smart_proxy_task (void *data)
 
     if (hev_task_io_socket_connect (fd, (struct sockaddr *)&saddr, saddr_len,
                                     hev_socks5_task_io_yielder, s) < 0) {
-        time_t connect_duration = get_current_time_seconds () - connect_start;
+        time_t connect_duration_ms = get_current_time_ms () - connect_start;
 
         LOG_W (
             "%p session: Smart proxy TCP handshake FAILED to %s:%d after %ld ms, "
             "fallback to SOCKS5 and BLACKLIST (likely GFW blocking)",
-            self, dst_ip, pcb->local_port, connect_duration * 1000);
+            self, dst_ip, pcb->local_port, connect_duration_ms);
 
         /* Add IP to blacklist due to TCP connection failure */
         hev_filter_blacklist_add (&pcb->local_ip);
@@ -1085,11 +1085,11 @@ run_smart_proxy_task (void *data)
         goto fallback_socks5;
     }
 
-    connect_success_time = get_current_time_seconds ();
+    connect_success_time = get_current_time_ms ();
     LOG_I (
         "%p session: Smart proxy TCP handshake SUCCESS %s:%d -> %s:%d (took %ld ms)",
         self, src_ip, pcb->remote_port, dst_ip, pcb->local_port,
-        (connect_success_time - connect_start) * 1000);
+        connect_success_time - connect_start);
 
     /* ====================================================================
        🔍 阶段 2：等待服务器数据并验证
@@ -1148,8 +1148,7 @@ run_smart_proxy_task (void *data)
         /* 🔍 关键检测点:收到数据后验证是否为真实应用数据 */
         if (first_loop && self->initial_data_received &&
             self->is_smart_proxy_probe) {
-            time_t elapsed_ms =
-                (get_current_time_seconds () - connect_success_time) * 1000;
+          time_t elapsed_ms = get_current_time_ms () - connect_success_time;
             struct iovec iov[2];
             int iovc = hev_ring_buffer_reading (self->buffer, iov);
             int is_valid_response = 0;
