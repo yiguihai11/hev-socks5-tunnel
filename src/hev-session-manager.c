@@ -1148,7 +1148,7 @@ run_smart_proxy_task (void *data)
         /* 🔍 关键检测点:收到数据后验证是否为真实应用数据 */
         if (first_loop && self->initial_data_received &&
             self->is_smart_proxy_probe) {
-          time_t elapsed_ms = get_current_time_ms () - connect_success_time;
+            time_t elapsed_ms = get_current_time_ms () - connect_success_time;
             struct iovec iov[2];
             int iovc = hev_ring_buffer_reading (self->buffer, iov);
             int is_valid_response = 0;
