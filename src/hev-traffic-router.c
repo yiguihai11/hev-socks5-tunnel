@@ -209,20 +209,18 @@ hev_traffic_router_handle_udp (struct udp_pcb *pcb, struct pbuf *p,
     }
 
     /* DNS Forwarder 劫持检查（优先级最高）*/
-    {
-        ip_addr_t target_ip;
-        u16_t target_port = 53;
+    ip_addr_t target_ip;
+    u16_t target_port = 53;
 
-        if (handle_dns_forward_hijack (addr, port, &target_ip, &target_port)) {
-            char tip_str[INET6_ADDRSTRLEN];
-            ipaddr_ntoa_r (&target_ip, tip_str, sizeof (tip_str));
-            LOG_I ("%p router: UDP DNS Forwarder hijack: %s:%d -> %s:%d", pcb,
-                   dst_ip, port, tip_str, target_port);
-            pbuf_ref (p);
-            hev_session_manager_start_direct_udp (pcb, &target_ip, target_port,
-                                                  addr, port, p);
-            return 1;
-        }
+    if (handle_dns_forward_hijack (addr, port, &target_ip, &target_port)) {
+        char tip_str[INET6_ADDRSTRLEN];
+        ipaddr_ntoa_r (&target_ip, tip_str, sizeof (tip_str));
+        LOG_I ("%p router: UDP DNS Forwarder hijack: %s:%d -> %s:%d", pcb,
+               dst_ip, port, tip_str, target_port);
+        pbuf_ref (p);
+        hev_session_manager_start_direct_udp (pcb, &target_ip, target_port,
+                                              addr, port, p);
+        return 1;
     }
 
     /* 国内IP直连检查（第二优先级） */

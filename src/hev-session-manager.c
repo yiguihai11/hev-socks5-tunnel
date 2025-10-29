@@ -299,85 +299,45 @@ hev_socks5_session_task_entry (void *data)
     HevSocks5Session *s = data;
     HevSocks5SessionTCP *tcp = HEV_SOCKS5_SESSION_TCP (s);
     struct tcp_pcb *pcb = tcp->pcb;
-    HevTLSClientHello client_hello;
+    char src_ip[INET6_ADDRSTRLEN];
     char dst_ip[INET6_ADDRSTRLEN];
     char http_hostname[256]; // Buffer for HTTP hostname
 
     LOG_D ("%p session: socks5 proxy task entry", s);
 
-    /* 🔍 在任务内部嗅探 TLS ClientHello（针对端口 443） */
-    if (pcb && pcb->local_port == 443) {
-        /* 等待数据到达 */
+    /* 获取源和目标地址用于日志 */
+    ipaddr_ntoa_r (&pcb->remote_ip, src_ip, sizeof (src_ip));
+    ipaddr_ntoa_r (&pcb->local_ip, dst_ip, sizeof (dst_ip));
+
+    /* 等待数据到达队列 (根据端口类型) */
+    if (!tcp->queue && (pcb->local_port == 443 || pcb->local_port == 80 || pcb->local_port == 8080)) {
+        if (pcb->local_port == 443) {
+            LOG_D ("%p session: SOCKS5 task waiting for TLS ClientHello data...", tcp);
+        } else {
+            LOG_D ("%p session: SOCKS5 task waiting for HTTP data...", tcp);
+        }
+        for (int i = 0; i < 150 && !tcp->queue; i++) { /* 延长等待时间 */
+            hev_task_sleep (10);
+        }
         if (!tcp->queue) {
-            LOG_D (
-                "%p session: SOCKS5 task waiting for TLS ClientHello data...",
-                tcp);
-            for (int i = 0; i < 150 && !tcp->queue; i++) { /* 延长等待时间 */
-                hev_task_sleep (10);
-            }
-            if (!tcp->queue) {
+            if (pcb->local_port == 443) {
                 LOG_W (
                     "%p session: SOCKS5 task timed out waiting for TLS ClientHello data (1500ms)",
                     tcp);
-            }
-        }
-
-        /* 尝试嗅探 */
-        if (tcp->queue) {
-            LOG_D (
-                "%p session: SOCKS5 task attempting to sniff TLS ClientHello (%d bytes in queue)",
-                tcp, tcp->queue->tot_len);
-
-            if (sniff_client_hello (tcp, &client_hello) == 0 &&
-                client_hello.detected) {
-                ipaddr_ntoa_r (&pcb->local_ip, dst_ip, sizeof (dst_ip));
-
-                if (client_hello.sni[0]) {
-                    LOG_I (
-                        "%p session: SOCKS5 proxy detected TLS SNI: %s (target: %s:%d)",
-                        tcp, client_hello.sni, dst_ip, pcb->local_port);
-                    // --- SNI-based ACL check ---
-                    if (hev_filter_is_blocked_hostname (client_hello.sni)) {
-                        LOG_W (
-                            "%p session: SOCKS5 proxy blocked connection to SNI: %s (target: %s:%d)",
-                            tcp, client_hello.sni, dst_ip, pcb->local_port);
-                        goto exit_cleanup; // Terminate session
-                    }
-                }
-                if (client_hello.alpn[0]) {
-                    LOG_I ("%p session: SOCKS5 proxy detected ALPN: %s", tcp,
-                           client_hello.alpn);
-                }
             } else {
-                LOG_D (
-                    "%p session: SOCKS5 TLS ClientHello not detected or parsing failed",
-                    tcp);
-            }
-        }
-    }
-    // --- HTTP Hostname-based ACL check for ports 80/8080 ---
-    else if (pcb && (pcb->local_port == 80 || pcb->local_port == 8080)) {
-        // Wait for data (similar to SNI)
-        if (!tcp->queue) {
-            LOG_D ("%p session: SOCKS5 task waiting for HTTP data...", tcp);
-            for (int i = 0; i < 150 && !tcp->queue; i++) {
-                hev_task_sleep (10);
-            }
-            if (!tcp->queue) {
                 LOG_W (
                     "%p session: SOCKS5 task timed out waiting for HTTP data (1500ms)",
                     tcp);
             }
         }
-        if (tcp->queue && (pcb->local_port == 80 || pcb->local_port == 8080)) {
-            if (process_protocol_parsing (tcp, pcb, http_hostname,
-                                          sizeof (http_hostname),
-                                          "SOCKS5 proxy") < 0) {
-                LOG_W (
-                    "%p session: SOCKS5 proxy blocked connection to HTTP Host: %s (target: %s:%d)",
-                    tcp, http_hostname, dst_ip, pcb->local_port);
-                goto exit_cleanup; // Terminate session
-            }
+    }
+
+    /* Unified protocol parsing for SOCKS5 proxy */
+    if (tcp->queue) {
+        int parse_result = process_protocol_parsing (
+            tcp, pcb, http_hostname, sizeof (http_hostname), "SOCKS5 proxy");
+        if (parse_result < 0) {
+            goto exit_cleanup; // Terminated due to blocked hostname
         }
     }
 
@@ -385,7 +345,7 @@ hev_socks5_session_task_entry (void *data)
 
     LOG_D ("%p session: socks5 proxy task exit", s);
 
-exit_cleanup: // New label for cleanup
+exit_cleanup:
     hev_socks5_tunnel_delete_session (hev_socks5_session_get_node (s));
     hev_object_unref (HEV_OBJECT (s));
 }
@@ -2074,4 +2034,3 @@ async_tcping_test (const char *dst_ip, uint16_t port)
 
     return result;
 }
-
