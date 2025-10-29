@@ -933,9 +933,9 @@ cleanup_splice:
 
 exit_cleanup:
     if (connect_start > 0) {
-        session_duration = (get_current_time_ms () - connect_start) / 1000;
+        session_duration = get_current_time_ms () - connect_start;
         LOG_I (
-            "%p session: Direct connect %s:%d -> %s:%d ended (duration=%ld seconds)",
+            "%p session: Direct connect %s:%d -> %s:%d ended (duration=%ld ms)",
             self, src_ip, pcb->remote_port, dst_ip, pcb->local_port,
             session_duration);
     } else {
@@ -1296,7 +1296,7 @@ cleanup_splice:
     close (fd);
 
     if (connect_success_time > 0) {
-        session_duration = (get_current_time_ms () - connect_success_time) / 1000;
+        session_duration = get_current_time_ms () - connect_success_time;
 
         if (gfw_detected) {
             LOG_I ("%p session: ❌ Smart proxy FAILED %s:%d -> %s:%d "
@@ -1305,13 +1305,13 @@ cleanup_splice:
         } else if (probe_success) {
             LOG_I (
                 "%p session: ✅ Smart proxy direct connect %s:%d -> %s:%d ended "
-                "(duration=%ld seconds, probe was successful)",
+                "(duration=%ld ms, probe was successful)",
                 self, src_ip, pcb->remote_port, dst_ip, pcb->local_port,
                 session_duration);
         } else {
             LOG_I (
                 "%p session: Smart proxy direct connect %s:%d -> %s:%d ended "
-                "(duration=%ld seconds)",
+                "(duration=%ld ms)",
                 self, src_ip, pcb->remote_port, dst_ip, pcb->local_port,
                 session_duration);
         }
@@ -1395,7 +1395,7 @@ direct_udp_cleanup (HevDirectUDPSession *session)
 
     ipaddr_ntoa_r (&session->src_ip, src_ip, sizeof (src_ip));
     ipaddr_ntoa_r (&session->dest_ip, dst_ip, sizeof (dst_ip));
-    session_duration = get_current_time_seconds () - session->session_start;
+    session_duration = (get_current_time_seconds () - session->session_start) * 1000;
 
     LOG_D ("%p session: UDP cleanup started %s:%d -> %s:%d", session, src_ip,
            session->src_port, dst_ip, session->dest_port);
@@ -1432,7 +1432,7 @@ direct_udp_cleanup (HevDirectUDPSession *session)
     }
 
     LOG_I (
-        "%p session: UDP Direct connect %s:%d -> %s:%d ended (duration=%ld seconds, packets_dropped=%d)",
+        "%p session: UDP Direct connect %s:%d -> %s:%d ended (duration=%ld ms, packets_dropped=%d)",
         session, src_ip, session->src_port, dst_ip, session->dest_port,
         session_duration, dropped_packets);
 
