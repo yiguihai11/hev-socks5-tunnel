@@ -19,7 +19,7 @@
 
 #include "hev-logger.h"
 
-#define LOG_BUFFER_SIZE (1024 * 1024)  // 1MB
+#define LOG_BUFFER_SIZE (1024 * 1024) // 1MB
 
 static int fd = -1;
 static HevLoggerLevel req_level;
@@ -44,9 +44,9 @@ hev_logger_init (HevLoggerLevel level, const char *path)
         return -1;
 
     // Initialize memory buffer
-    log_buffer = malloc(LOG_BUFFER_SIZE);
+    log_buffer = malloc (LOG_BUFFER_SIZE);
     if (!log_buffer) {
-        close(fd);
+        close (fd);
         return -1;
     }
     buffer_pos = 0;
@@ -60,7 +60,7 @@ hev_logger_fini (void)
 {
     close (fd);
     if (log_buffer) {
-        free(log_buffer);
+        free (log_buffer);
         log_buffer = NULL;
     }
     buffer_pos = 0;
@@ -138,12 +138,12 @@ hev_logger_log (HevLoggerLevel level, const char *fmt, ...)
 
     // Write to memory buffer
     if (log_buffer) {
-        pthread_mutex_lock(&buffer_mutex);
+        pthread_mutex_lock (&buffer_mutex);
 
         // Build complete message
-        memcpy(full_msg, ts, len);
-        memcpy(full_msg + len, iov[1].iov_base, 4);
-        memcpy(full_msg + len + 4, msg, iov[2].iov_len);
+        memcpy (full_msg, ts, len);
+        memcpy (full_msg + len, iov[1].iov_base, 4);
+        memcpy (full_msg + len + 4, msg, iov[2].iov_len);
         full_msg[len + 4 + iov[2].iov_len] = '\n';
 
         // Handle circular buffer
@@ -151,30 +151,32 @@ hev_logger_log (HevLoggerLevel level, const char *fmt, ...)
             // Buffer is full, wrap around
             size_t remaining = LOG_BUFFER_SIZE - buffer_pos;
             if (total_len <= remaining) {
-                memcpy(log_buffer + buffer_pos, full_msg, total_len);
+                memcpy (log_buffer + buffer_pos, full_msg, total_len);
                 buffer_pos += total_len;
             } else {
-                memcpy(log_buffer + buffer_pos, full_msg, remaining);
-                memcpy(log_buffer, full_msg + remaining, total_len - remaining);
+                memcpy (log_buffer + buffer_pos, full_msg, remaining);
+                memcpy (log_buffer, full_msg + remaining,
+                        total_len - remaining);
                 buffer_pos = total_len - remaining;
             }
             buffer_used = LOG_BUFFER_SIZE;
         } else {
             // Buffer has space
             if (buffer_pos + total_len <= LOG_BUFFER_SIZE) {
-                memcpy(log_buffer + buffer_pos, full_msg, total_len);
+                memcpy (log_buffer + buffer_pos, full_msg, total_len);
                 buffer_pos += total_len;
             } else {
                 // Need to wrap to beginning
                 size_t remaining = LOG_BUFFER_SIZE - buffer_pos;
-                memcpy(log_buffer + buffer_pos, full_msg, remaining);
-                memcpy(log_buffer, full_msg + remaining, total_len - remaining);
+                memcpy (log_buffer + buffer_pos, full_msg, remaining);
+                memcpy (log_buffer, full_msg + remaining,
+                        total_len - remaining);
                 buffer_pos = total_len - remaining;
             }
             buffer_used += total_len;
         }
 
-        pthread_mutex_unlock(&buffer_mutex);
+        pthread_mutex_unlock (&buffer_mutex);
     }
 }
 
@@ -189,14 +191,14 @@ hev_logger_get_logs (int max_lines)
     int i;
 
     if (!log_buffer) {
-        return strdup("No logs available");
+        return strdup ("No logs available");
     }
 
-    pthread_mutex_lock(&buffer_mutex);
+    pthread_mutex_lock (&buffer_mutex);
 
     if (buffer_used == 0) {
-        pthread_mutex_unlock(&buffer_mutex);
-        return strdup("No logs available");
+        pthread_mutex_unlock (&buffer_mutex);
+        return strdup ("No logs available");
     }
 
     // Read lines from buffer in reverse order (newest first)
@@ -208,10 +210,10 @@ hev_logger_get_logs (int max_lines)
         if (log_buffer[read_pos] == '\n') {
             found_newline = 1;
             size_t line_len = (line_start >= read_pos) ?
-                             (line_start - read_pos) :
-                             (LOG_BUFFER_SIZE - read_pos + line_start);
+                                  (line_start - read_pos) :
+                                  (LOG_BUFFER_SIZE - read_pos + line_start);
 
-            if (line_len > 0 && line_len < sizeof(line) - 1) {
+            if (line_len > 0 && line_len < sizeof (line) - 1) {
                 size_t src_pos = (read_pos + 1) % LOG_BUFFER_SIZE;
 
                 for (i = 0; i < line_len; i++) {
@@ -220,9 +222,9 @@ hev_logger_get_logs (int max_lines)
                 line[line_len] = '\0';
 
                 // Add to lines array (reversed order)
-                lines = realloc(lines, (line_count + 1) * sizeof(char *));
+                lines = realloc (lines, (line_count + 1) * sizeof (char *));
                 if (lines) {
-                    lines[line_count] = strdup(line);
+                    lines[line_count] = strdup (line);
                     total_size += line_len + 1; // +1 for newline
                     line_count++;
                 }
@@ -242,27 +244,27 @@ hev_logger_get_logs (int max_lines)
         }
     }
 
-    pthread_mutex_unlock(&buffer_mutex);
+    pthread_mutex_unlock (&buffer_mutex);
 
     // Reverse the lines to show newest first and build result string
-    result = malloc(total_size + 1);
+    result = malloc (total_size + 1);
     if (result) {
         char *ptr = result;
         for (i = line_count - 1; i >= 0; i--) {
             if (lines[i]) {
-                strcpy(ptr, lines[i]);
-                ptr += strlen(lines[i]);
+                strcpy (ptr, lines[i]);
+                ptr += strlen (lines[i]);
                 *ptr = '\n';
                 ptr++;
-                free(lines[i]);
+                free (lines[i]);
             }
         }
         *ptr = '\0';
     }
 
     if (lines) {
-        free(lines);
+        free (lines);
     }
 
-    return result ? result : strdup("Failed to get logs");
+    return result ? result : strdup ("Failed to get logs");
 }
