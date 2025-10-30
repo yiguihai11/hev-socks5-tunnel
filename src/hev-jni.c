@@ -96,7 +96,14 @@ thread_handler (void *data)
 {
     ThreadData *tdata = data;
 
+    printf("DEBUG: thread_handler starting with path=%s, fd=%d\n",
+           tdata->path ? tdata->path : "NULL", tdata->fd);
+    fflush(stdout);
+
     hev_socks5_tunnel_main (tdata->path, tdata->fd);
+
+    printf("DEBUG: thread_handler finished\n");
+    fflush(stdout);
 
     free (tdata->path);
     free (tdata);
@@ -111,10 +118,16 @@ native_start_service (JNIEnv *env, jobject thiz, jstring config_path, jint fd)
     ThreadData *tdata;
     int res;
 
+    printf("DEBUG: native_start_service called with fd=%d\n", fd);
+    fflush(stdout);
+
     pthread_mutex_lock (&mutex);
 
-    if (is_working)
+    if (is_working) {
+        printf("DEBUG: service already working\n");
+        fflush(stdout);
         goto exit;
+    }
 
     tdata = malloc (sizeof (ThreadData));
     tdata->fd = fd;
