@@ -16,6 +16,7 @@
 #include <sys/uio.h>
 #include <sys/stat.h>
 #include <pthread.h>
+#include <stdlib.h>
 
 #include "hev-logger.h"
 
