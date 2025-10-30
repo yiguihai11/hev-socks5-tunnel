@@ -36,4 +36,6 @@ void hev_logger_fini (void);
 int hev_logger_enabled (HevLoggerLevel level);
 void hev_logger_log (HevLoggerLevel level, const char *fmt, ...);
 
+char *hev_logger_get_logs (int max_lines);
+
 #endif /* __HEV_LOGGER_H__ */
