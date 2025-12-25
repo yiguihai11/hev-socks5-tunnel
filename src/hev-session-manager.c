@@ -181,7 +181,8 @@ static int extract_http_host_from_queue (HevSocks5SessionTCP *self,
 static int process_protocol_parsing (HevSocks5SessionTCP *self,
                                      struct tcp_pcb *pcb, char *http_hostname,
                                      size_t hostname_len,
-                                     const char *connection_type);
+                                     const char *connection_type,
+                                     HevACLAction *acl_action_out);
 
 /* GFW异步诊断函数声明 */
 static void run_gfw_diagnosis_task (void *data);
@@ -341,8 +342,10 @@ hev_socks5_session_task_entry (void *data)
 
     /* Unified protocol parsing for SOCKS5 proxy */
     if (tcp->queue) {
+        HevACLAction acl_action;
         int parse_result = process_protocol_parsing (
-            tcp, pcb, http_hostname, sizeof (http_hostname), "SOCKS5 proxy");
+            tcp, pcb, http_hostname, sizeof (http_hostname), "SOCKS5 proxy",
+            &acl_action);
         if (parse_result < 0) {
             goto exit_cleanup; // Terminated due to blocked hostname
         }
@@ -608,27 +611,69 @@ tcp_splice_task_b (void *data)
 static int
 process_protocol_parsing (HevSocks5SessionTCP *self, struct tcp_pcb *pcb,
                           char *http_hostname, size_t hostname_len,
-                          const char *connection_type)
+                          const char *connection_type,
+                          HevACLAction *acl_action_out)
 {
     char dst_ip[INET6_ADDRSTRLEN];
     int result = 0;
 
+    /* Initialize output to DEFAULT */
+    if (acl_action_out)
+        *acl_action_out = HEV_ACL_ACTION_DEFAULT;
+
     ipaddr_ntoa_r (&pcb->local_ip, dst_ip, sizeof (dst_ip));
+
+    /* ====================================================================
+       Stage 1: ACL matching for connection rules (IP/Port/CIDR)
+       Before hostname is known, check connection-level ACL rules
+       ==================================================================== */
+    HevACLResult stage1_result = { 0 };
+    stage1_result = hev_acl_match_stage1_connection (&pcb->local_ip,
+                                                     pcb->local_port);
+    if (stage1_result.matched) {
+        LOG_D ("%p session: Stage 1 ACL matched: %s %s:%d -> %s",
+               self,
+               stage1_result.action == HEV_ACL_ACTION_ALLOW ? "ALLOW" : "BLOCK",
+               dst_ip, pcb->local_port, stage1_result.rule_pattern);
+    }
 
     /* TLS/HTTPS parsing for port 443 */
     if (pcb->local_port == 443) {
         HevTLSClientHello client_hello;
         if (sniff_client_hello (self, &client_hello) == 0 &&
             client_hello.detected) {
-            if (client_hello.sni[0]) {
-                LOG_I ("%p session: %s detected TLS SNI: %s (target: %s:%d)",
-                       self, connection_type, client_hello.sni, dst_ip,
+            if (client_hello.hostname[0]) {
+                LOG_I ("%p session: %s detected TLS hostname: %s (target: %s:%d)",
+                       self, connection_type, client_hello.hostname, dst_ip,
                        pcb->local_port);
-                if (hev_filter_is_blocked_hostname (client_hello.sni)) {
-                    LOG_W ("%p session: SNI %s blocked by hostname ACL", self,
-                           client_hello.sni);
+
+                /* ====================================================================
+                   Stage 2: ACL matching for domain rules (after hostname detection)
+                   ==================================================================== */
+                HevACLResult stage2_result = { 0 };
+                stage2_result = hev_acl_match_stage2_domain (client_hello.hostname,
+                                                             pcb->local_port);
+
+                /* Combine Stage 1 and Stage 2 results */
+                HevACLAction final_action = hev_acl_check_final_decision (
+                    &stage1_result, &stage2_result);
+
+                if (stage2_result.matched) {
+                    LOG_D ("%p session: Stage 2 ACL matched: %s %s -> %s",
+                           self,
+                           final_action == HEV_ACL_ACTION_ALLOW ? "ALLOW" : "BLOCK",
+                           client_hello.hostname, stage2_result.rule_pattern);
+                }
+
+                if (final_action == HEV_ACL_ACTION_BLOCK) {
+                    LOG_W ("%p session: Connection BLOCKED by ACL (hostname: %s)",
+                           self, client_hello.hostname);
                     return -1;
                 }
+
+                /* Set output action for caller */
+                if (acl_action_out)
+                    *acl_action_out = final_action;
             }
             result = 1; /* TLS parsing successful */
         }
@@ -641,13 +686,49 @@ process_protocol_parsing (HevSocks5SessionTCP *self, struct tcp_pcb *pcb,
             LOG_I ("%p session: %s detected HTTP Host: %s (target: %s:%d)",
                    self, connection_type, http_hostname, dst_ip,
                    pcb->local_port);
-            if (hev_filter_is_blocked_hostname (http_hostname)) {
-                LOG_W ("%p session: Host %s blocked by hostname ACL", self,
-                       http_hostname);
+
+            /* ====================================================================
+               Stage 2: ACL matching for domain rules (after hostname detection)
+               ==================================================================== */
+            HevACLResult stage2_result = { 0 };
+            stage2_result = hev_acl_match_stage2_domain (http_hostname,
+                                                         pcb->local_port);
+
+            /* Combine Stage 1 and Stage 2 results */
+            HevACLAction final_action = hev_acl_check_final_decision (
+                &stage1_result, &stage2_result);
+
+            if (stage2_result.matched) {
+                LOG_D ("%p session: Stage 2 ACL matched: %s %s -> %s",
+                       self,
+                       final_action == HEV_ACL_ACTION_ALLOW ? "ALLOW" : "BLOCK",
+                       http_hostname, stage2_result.rule_pattern);
+            }
+
+            if (final_action == HEV_ACL_ACTION_BLOCK) {
+                LOG_W ("%p session: Connection BLOCKED by ACL (hostname: %s)",
+                       self, http_hostname);
                 return -1;
             }
+
+            /* Set output action for caller */
+            if (acl_action_out)
+                *acl_action_out = final_action;
+
             result = 1; /* HTTP parsing successful */
         }
+    }
+
+    /* For non-HTTP/HTTPS connections, use Stage 1 result only */
+    if (result == 0 && stage1_result.matched) {
+        if (stage1_result.action == HEV_ACL_ACTION_BLOCK) {
+            LOG_W ("%p session: Connection BLOCKED by Stage 1 ACL %s:%d", self,
+                   dst_ip, pcb->local_port);
+            return -1;
+        }
+        /* Set output action for caller */
+        if (acl_action_out)
+            *acl_action_out = stage1_result.action;
     }
 
     return result;
@@ -749,6 +830,10 @@ run_direct_connect_task (void *data)
     time_t session_duration = 0;
     HevTLSClientHello client_hello;
     char http_hostname[256]; // Buffer for HTTP hostname
+    char detected_hostname[256]; // ⭐ Unified hostname for blacklist
+
+    /* Initialize hostname buffer */
+    memset (detected_hostname, 0, sizeof (detected_hostname));
 
     /* 获取源和目标地址用于日志 */
     ipaddr_ntoa_r (&pcb->remote_ip, src_ip, sizeof (src_ip));
@@ -783,20 +868,35 @@ run_direct_connect_task (void *data)
 
     /* Unified protocol parsing */
     if (self->queue) {
+        HevACLAction acl_action;
         int parse_result = process_protocol_parsing (
-            self, pcb, http_hostname, sizeof (http_hostname), "Direct connect");
+            self, pcb, http_hostname, sizeof (http_hostname), "Direct connect",
+            &acl_action);
         if (parse_result < 0) {
             goto exit_cleanup; // Terminated due to blocked hostname
         }
 
+        /* ⭐ Save detected hostname for blacklist usage */
+        if (pcb->local_port == 443) {
+            if (sniff_client_hello (self, &client_hello) == 0 &&
+                client_hello.detected && client_hello.hostname[0]) {
+                snprintf (detected_hostname, sizeof (detected_hostname),
+                         "%s", client_hello.hostname);
+                LOG_D ("%p session: Saved TLS hostname: %s", self, detected_hostname);
+            }
+        } else if (pcb->local_port == 80 || pcb->local_port == 8080) {
+            if (http_hostname[0]) {
+                snprintf (detected_hostname, sizeof (detected_hostname),
+                         "%s", http_hostname);
+                LOG_D ("%p session: Saved HTTP hostname: %s", self, detected_hostname);
+            }
+        }
+
         /* Handle ALPN for HTTPS connections */
         if (parse_result > 0 && pcb->local_port == 443) {
-            if (sniff_client_hello (self, &client_hello) == 0 &&
-                client_hello.detected) {
-                if (client_hello.alpn[0]) {
-                    LOG_I ("%p session: Direct connect detected ALPN: %s", self,
-                           client_hello.alpn);
-                }
+            if (client_hello.alpn[0]) {
+                LOG_I ("%p session: Direct connect detected ALPN: %s", self,
+                       client_hello.alpn);
             }
         }
     }
@@ -993,10 +1093,14 @@ run_smart_proxy_task (void *data)
     time_t session_duration = 0;
     HevTLSClientHello client_hello;
     char http_hostname[256]; // Buffer for HTTP hostname
+    char detected_hostname[256]; // ⭐ Unified hostname for blacklist
     int gfw_detected = 0;
     int first_loop = 1;
     int probe_success = 0; /* ✅ 新增：探测成功标志 */
     self->is_smart_proxy_probe = 1; //一个开关标记
+
+    /* Initialize hostname buffer */
+    memset (detected_hostname, 0, sizeof (detected_hostname));
 
     ipaddr_ntoa_r (&pcb->remote_ip, src_ip, sizeof (src_ip));
     ipaddr_ntoa_r (&pcb->local_ip, dst_ip, sizeof (dst_ip));
@@ -1019,20 +1123,43 @@ run_smart_proxy_task (void *data)
 
     /* Unified protocol parsing */
     if (self->queue) {
+        HevACLAction acl_action;
         int parse_result = process_protocol_parsing (
-            self, pcb, http_hostname, sizeof (http_hostname), "Smart proxy");
+            self, pcb, http_hostname, sizeof (http_hostname), "Smart proxy",
+            &acl_action);
         if (parse_result < 0) {
             goto exit_cleanup; // Terminated due to blocked hostname
         }
 
+        /* Check if ACL allows direct connection (skip smart_proxy) */
+        if (acl_action == HEV_ACL_ACTION_ALLOW) {
+            LOG_I ("%p session: ACL allows direct connection, skipping smart_proxy",
+                   self);
+            /* Fall through to direct connect logic below */
+            self->is_smart_proxy_probe = 0;
+        }
+
+        /* ⭐ Save detected hostname for blacklist usage */
+        if (pcb->local_port == 443) {
+            if (sniff_client_hello (self, &client_hello) == 0 &&
+                client_hello.detected && client_hello.hostname[0]) {
+                snprintf (detected_hostname, sizeof (detected_hostname),
+                         "%s", client_hello.hostname);
+                LOG_D ("%p session: Saved TLS hostname: %s", self, detected_hostname);
+            }
+        } else if (pcb->local_port == 80 || pcb->local_port == 8080) {
+            if (http_hostname[0]) {
+                snprintf (detected_hostname, sizeof (detected_hostname),
+                         "%s", http_hostname);
+                LOG_D ("%p session: Saved HTTP hostname: %s", self, detected_hostname);
+            }
+        }
+
         /* Handle ALPN for HTTPS connections */
         if (parse_result > 0 && pcb->local_port == 443) {
-            if (sniff_client_hello (self, &client_hello) == 0 &&
-                client_hello.detected) {
-                if (client_hello.alpn[0]) {
-                    LOG_I ("%p session: Smart proxy detected ALPN: %s", self,
-                           client_hello.alpn);
-                }
+            if (client_hello.alpn[0]) {
+                LOG_I ("%p session: Smart proxy detected ALPN: %s", self,
+                       client_hello.alpn);
             }
         }
     }
@@ -1221,7 +1348,14 @@ run_smart_proxy_task (void *data)
                             "(expected 'HTTP/', got %d bytes starting with 0x%02x), BLACKLIST",
                             self, pcb->local_port, dst_ip, (int)iov[0].iov_len,
                             first_byte);
-                        hev_filter_blacklist_add (&pcb->local_ip);
+                        /* ⭐ Prefer hostname for blacklist */
+                        if (detected_hostname[0]) {
+                            hev_filter_blacklist_add_entry (
+                                HEV_BLACKLIST_ENTRY_DOMAIN, NULL, 0, detected_hostname,
+                                "Invalid HTTP response", HEV_BLACKLIST_SOURCE_AUTO, 5, 0);
+                        } else {
+                            hev_filter_blacklist_add (&pcb->local_ip);
+                        }
                         gfw_detected = 1;
                         break;
                     }
@@ -1247,7 +1381,14 @@ run_smart_proxy_task (void *data)
                             "%p session: ❌ Smart proxy received TLS Alert (0x15) from %s:%d "
                             "(likely SNI mismatch or certificate error), BLACKLIST",
                             self, dst_ip, pcb->local_port);
-                        hev_filter_blacklist_add (&pcb->local_ip);
+                        /* ⭐ Prefer hostname for blacklist */
+                        if (detected_hostname[0]) {
+                            hev_filter_blacklist_add_entry (
+                                HEV_BLACKLIST_ENTRY_DOMAIN, NULL, 0, detected_hostname,
+                                "TLS Alert (SNI blocked)", HEV_BLACKLIST_SOURCE_AUTO, 7, 0);
+                        } else {
+                            hev_filter_blacklist_add (&pcb->local_ip);
+                        }
                         gfw_detected = 1;
                         break;
                     } else {
@@ -1256,7 +1397,14 @@ run_smart_proxy_task (void *data)
                             "%p session: ❌ Smart proxy received INVALID TLS response (0x%02x) from %s:%d "
                             "(expected 0x14/0x16/0x17), BLACKLIST",
                             self, first_byte, dst_ip, pcb->local_port);
-                        hev_filter_blacklist_add (&pcb->local_ip);
+                        /* ⭐ Prefer hostname for blacklist */
+                        if (detected_hostname[0]) {
+                            hev_filter_blacklist_add_entry (
+                                HEV_BLACKLIST_ENTRY_DOMAIN, NULL, 0, detected_hostname,
+                                "Invalid TLS response", HEV_BLACKLIST_SOURCE_AUTO, 5, 0);
+                        } else {
+                            hev_filter_blacklist_add (&pcb->local_ip);
+                        }
                         gfw_detected = 1;
                         break;
                     }
@@ -1287,7 +1435,14 @@ run_smart_proxy_task (void *data)
                        "(handshake OK but NO valid data received in %d ms), "
                        "fallback to SOCKS5 and BLACKLIST",
                        self, dst_ip, pcb->local_port, timeout);
-                hev_filter_blacklist_add (&pcb->local_ip);
+                /* ⭐ Prefer hostname for blacklist */
+                if (detected_hostname[0]) {
+                    hev_filter_blacklist_add_entry (
+                        HEV_BLACKLIST_ENTRY_DOMAIN, NULL, 0, detected_hostname,
+                        "Smart proxy timeout", HEV_BLACKLIST_SOURCE_AUTO, 5, 0);
+                } else {
+                    hev_filter_blacklist_add (&pcb->local_ip);
+                }
                 gfw_detected = 1;
                 break;
             }

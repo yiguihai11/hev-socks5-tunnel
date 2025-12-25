@@ -25,19 +25,53 @@
 #define TLS_EXT_SERVER_NAME 0x0000
 #define TLS_EXT_ALPN 0x0010
 
-/* Maximum SNI/Host length */
-#define MAX_SNI_LENGTH 255
-#define MAX_HOST_LENGTH 255
+/* Maximum hostname length */
+#define MAX_HOSTNAME_LENGTH 255
+
+/* ============================================================================
+   ACL Rule Types and Actions (Two-Stage Matching)
+   ============================================================================ */
+
+/* ACL Action Types */
+typedef enum {
+    HEV_ACL_ACTION_ALLOW,   /* Allow direct connection */
+    HEV_ACL_ACTION_BLOCK,    /* Block connection */
+    HEV_ACL_ACTION_DEFAULT   /* Use default behavior */
+} HevACLAction;
+
+/* ACL Rule Types */
+typedef enum {
+    HEV_ACL_TYPE_IP,        /* Single IP address */
+    HEV_ACL_TYPE_CIDR,      /* CIDR range */
+    HEV_ACL_TYPE_PORT,      /* Port number */
+    HEV_ACL_TYPE_DOMAIN     /* Domain name */
+} HevACLType;
+
+/* ACL Rule Structure */
+typedef struct _HevACLRule {
+    HevACLAction action;
+    HevACLType type;
+    char pattern[256];      /* IP, CIDR, domain, or port */
+    struct _HevACLRule *next;
+} HevACLRule;
+
+/* ACL Match Result */
+typedef struct _HevACLResult {
+    int matched;
+    HevACLAction action;
+    const char *rule_pattern;
+} HevACLResult;
 
 /**
- * TLS ClientHello Information
+ * TLS ClientHello / HTTP Host Information (unified)
+ * Hostname from either HTTPS SNI or HTTP Host header
  */
 typedef struct _HevTLSClientHello
 {
-    uint8_t detected; /* TLS detected */
-    uint16_t tls_version; /* TLS version */
-    char sni[MAX_SNI_LENGTH + 1]; /* Server Name Indication */
-    char alpn[64]; /* ALPN protocol */
+    uint8_t detected; /* TLS/HTTP detected */
+    uint16_t tls_version; /* TLS version (0 for HTTP) */
+    char hostname[MAX_HOSTNAME_LENGTH + 1]; /* Hostname from SNI or Host header */
+    char alpn[64]; /* ALPN protocol (HTTPS only) */
 } HevTLSClientHello;
 
 /**
@@ -121,6 +155,49 @@ int hev_filter_is_blocked_hostname (const char *hostname);
  * Returns: 1 if blocked, 0 if allowed.
  */
 int hev_filter_is_blocked_port (int port);
+
+/* ============================================================================
+   Two-Stage ACL Matching (New Implementation)
+   ============================================================================ */
+
+/**
+ * hev_acl_match_stage1_connection:
+ * @ip: IP address to check
+ * @port: Port number to check
+ *
+ * Stage 1: Match connection rules (IP/Port/CIDR) before hostname is known.
+ * This is called when establishing connection, before parsing TLS/HTTP.
+ *
+ * Returns: ACL result (action and whether matched)
+ */
+HevACLResult hev_acl_match_stage1_connection (const ip_addr_t *ip, int port);
+
+/**
+ * hev_acl_match_stage2_domain:
+ * @hostname: Hostname to check (from SNI or Host header)
+ * @port: Port number to check
+ *
+ * Stage 2: Match domain rules after hostname is detected.
+ * Domain rules have higher priority than Stage 1 connection rules.
+ *
+ * Returns: ACL result (action and whether matched)
+ */
+HevACLResult hev_acl_match_stage2_domain (const char *hostname, int port);
+
+/**
+ * hev_acl_check_final_decision:
+ * @stage1_result: Result from stage 1 (connection)
+ * @stage2_result: Result from stage 2 (domain), if available
+ *
+ * Combine both stages to get final decision.
+ * Stage 2 (domain) overrides Stage 1 (connection) if matched.
+ *
+ * Returns: Final action (ALLOW or BLOCK)
+ */
+HevACLAction hev_acl_check_final_decision (HevACLResult *stage1_result,
+                                           HevACLResult *stage2_result);
+
+/* ============================================================================ */
 
 /**
  * hev_filter_check_all_filters:

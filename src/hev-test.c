@@ -97,10 +97,10 @@ run_parser_tests (void)
     };
     HevTLSClientHello hello;
     res = hev_filter_parse_tls (NULL, tls_req, sizeof (tls_req), &hello);
-    printf ("Extracted SNI: '%s'\n", hello.sni); // Debug print
+    printf ("Extracted hostname: '%s'\n", hello.hostname); // Debug print
     TEST_ASSERT (res == 0);
     TEST_ASSERT (hello.detected == 1);
-    TEST_ASSERT (strcmp (hello.sni, "tls.example.com") == 0);
+    TEST_ASSERT (strcmp (hello.hostname, "tls.example.com") == 0);
 }
 
 static void
@@ -314,33 +314,69 @@ run_filter_tests (void)
     const char *acl_file = "test_acl.txt";
     const char *chn_file = "test_chnroutes.txt";
 
-    create_test_file (acl_file, "8.8.8.8\n2001:db8::1\nblocked.example.com\n");
+    /* New ACL format with action and type */
+    create_test_file (
+        acl_file,
+        "block ip 8.8.8.8\n"
+        "block ip 2001:db8::1\n"
+        "block domain blocked.example.com\n"
+        "allow domain allowed.example.com\n"
+        "block port 25\n");
     create_test_file (chn_file, "1.0.1.0/24\n2001:db8:1::/48\n");
 
     // Manually call load functions, skipping init/fini to avoid task system
     TEST_ASSERT (hev_filter_load_acl (acl_file) == 0);
     TEST_ASSERT (hev_filter_load_chnroutes (chn_file) == 0);
 
-    // Test: hev_filter_is_blocked_hostname
-    printf ("\nTesting hostname blocking...\n");
-    TEST_ASSERT (hev_filter_is_blocked_hostname ("blocked.example.com") == 1);
-    TEST_ASSERT (hev_filter_is_blocked_hostname ("allowed.example.com") == 0);
+    // Test: Two-stage ACL matching - Stage 1 (connection rules)
+    printf ("\nTesting Stage 1 ACL (IP/Port/CIDR)...\n");
+    ip_addr_t test_ip;
+    ipaddr_aton ("8.8.8.8", &test_ip);
+    HevACLResult result = hev_acl_match_stage1_connection (&test_ip, 443);
+    TEST_ASSERT (result.matched == 1);
+    TEST_ASSERT (result.action == HEV_ACL_ACTION_BLOCK);
 
-    // Test: hev_filter_is_blocked_ip (IPv4)
-    printf ("\nTesting IPv4 blocking...\n");
-    ip_addr_t blocked_ip4, allowed_ip4;
-    ipaddr_aton ("8.8.8.8", &blocked_ip4);
-    ipaddr_aton ("1.1.1.1", &allowed_ip4);
-    TEST_ASSERT (hev_filter_is_blocked_ip (&blocked_ip4) == 1);
-    TEST_ASSERT (hev_filter_is_blocked_ip (&allowed_ip4) == 0);
+    // Test: Stage 1 port rule
+    result = hev_acl_match_stage1_connection (&test_ip, 25);
+    TEST_ASSERT (result.matched == 1);
+    TEST_ASSERT (result.action == HEV_ACL_ACTION_BLOCK);
 
-    // Test: hev_filter_is_blocked_ip (IPv6)
-    printf ("\nTesting IPv6 blocking...\n");
-    ip_addr_t blocked_ip6, allowed_ip6;
-    ipaddr_aton ("2001:db8::1", &blocked_ip6);
-    ipaddr_aton ("2001:db8::2", &allowed_ip6);
-    TEST_ASSERT (hev_filter_is_blocked_ip (&blocked_ip6) == 1);
-    TEST_ASSERT (hev_filter_is_blocked_ip (&allowed_ip6) == 0);
+    // Test: Two-stage ACL matching - Stage 2 (domain rules)
+    printf ("\nTesting Stage 2 ACL (domain rules)...\n");
+    result = hev_acl_match_stage2_domain ("blocked.example.com", 443);
+    TEST_ASSERT (result.matched == 1);
+    TEST_ASSERT (result.action == HEV_ACL_ACTION_BLOCK);
+
+    result = hev_acl_match_stage2_domain ("allowed.example.com", 443);
+    TEST_ASSERT (result.matched == 1);
+    TEST_ASSERT (result.action == HEV_ACL_ACTION_ALLOW);
+
+    // Test: Final decision (Stage 1 takes priority over Stage 2)
+    printf ("\nTesting final ACL decision...\n");
+    HevACLResult stage1 = hev_acl_match_stage1_connection (&test_ip, 443);
+    HevACLResult stage2 = hev_acl_match_stage2_domain ("allowed.example.com", 443);
+    HevACLAction final = hev_acl_check_final_decision (&stage1, &stage2);
+    /* Stage 1 (IP rule: block 8.8.8.8) should take priority, not Stage 2 */
+    TEST_ASSERT (final == HEV_ACL_ACTION_BLOCK);
+
+    // Test: Stage 2 only applies when Stage 1 doesn't match
+    printf ("\nTesting Stage 2 only applies when Stage 1 doesn't match...\n");
+    ip_addr_t test_ip2;
+    ipaddr_aton ("1.2.3.4", &test_ip2);
+    stage1 = hev_acl_match_stage1_connection (&test_ip2, 443);
+    stage2 = hev_acl_match_stage2_domain ("blocked.example.com", 443);
+    final = hev_acl_check_final_decision (&stage1, &stage2);
+    /* Stage 1 didn't match, so Stage 2 (domain: block) should apply */
+    TEST_ASSERT (final == HEV_ACL_ACTION_BLOCK);
+
+    // Test: Default behavior when no rules match
+    printf ("\nTesting default ACL behavior...\n");
+    ip_addr_t unknown_ip;
+    ipaddr_aton ("1.2.3.4", &unknown_ip);
+    stage1 = hev_acl_match_stage1_connection (&unknown_ip, 443);
+    stage2 = hev_acl_match_stage2_domain ("unknown.example.com", 443);
+    final = hev_acl_check_final_decision (&stage1, &stage2);
+    TEST_ASSERT (final == HEV_ACL_ACTION_DEFAULT); /* No match -> DEFAULT */
 
     // Test: hev_filter_is_domestic (IPv4)
     printf ("\nTesting IPv4 domestic IP rule...\n");

@@ -77,7 +77,7 @@ radix_tree_free (RadixNode *node)
 
 typedef struct _HostnameEntry
 {
-    char hostname[MAX_HOST_LENGTH + 1];
+    char hostname[MAX_HOSTNAME_LENGTH + 1];
     struct _HostnameEntry *next;
 } HostnameEntry;
 
@@ -118,6 +118,43 @@ static HevBlacklistEntry *blacklist_table[BLACKLIST_HASH_SIZE];
 static size_t blacklist_count = 0;
 static HevTaskMutex blacklist_mutex;
 
+/* ============================================================================
+   ACL Hash Functions (defined before use)
+   ============================================================================ */
+
+/* Simple hash function for domain names (1024 buckets) */
+static unsigned int
+domain_hash_func (const char *str)
+{
+    unsigned int hash = 5381;
+    int c;
+    while ((c = *str++)) {
+        c = tolower (c);
+        hash = ((hash << 5) + hash) + c;
+    }
+    return hash % 1024;
+}
+
+/* ============================================================================
+   New ACL Rules Storage (Two-Stage Matching)
+   ============================================================================ */
+
+/* Port rules array (indexed by port number) */
+static HevACLRule *acl_port_rules[65536] = { NULL };
+
+/* IP rules list (for two-stage ACL matching) */
+static HevACLRule *acl_ip_rules = NULL;
+
+/* CIDR rules list (for two-stage ACL matching) */
+static HevACLRule *acl_cidr_rules = NULL;
+
+/* Domain rules with three hash tables */
+static HevACLRule *acl_domain_exact[1024] = { NULL };    /* exact match */
+static HevACLRule *acl_domain_wildcard[1024] = { NULL };  /* *.example.com */
+static HevACLRule *acl_domain_suffix[1024] = { NULL };    /* .example.com */
+
+/* ============================================================================ */
+
 /* 黑名单统计 */
 static uint64_t total_hits = 0;
 static uint64_t total_blocked_bytes = 0;
@@ -144,7 +181,7 @@ radix_tree_insert_ipv4 (uint32_t ip, uint8_t prefix)
     (*current)->blocked = 1;
 }
 
-static void
+static void __attribute__((unused))
 radix_tree_insert_ipv6 (const uint8_t *ip, uint8_t prefix)
 {
     RadixNode **current = &acl_ipv6_tree;
@@ -398,7 +435,7 @@ hostname_hash (const char *hostname)
            (HOSTNAME_HASH_SIZE - 1); /* Faster than modulo for power of 2 */
 }
 
-static void
+static void __attribute__((unused))
 hostname_table_insert (const char *hostname)
 {
     uint32_t hash = hostname_hash (hostname);
@@ -407,7 +444,7 @@ hostname_table_insert (const char *hostname)
     if (!entry)
         return;
 
-    safe_str_copy (entry->hostname, hostname, MAX_HOST_LENGTH + 1);
+    safe_str_copy (entry->hostname, hostname, MAX_HOSTNAME_LENGTH + 1);
     entry->next = hostname_table[hash];
     hostname_table[hash] = entry;
 }
@@ -608,19 +645,33 @@ hev_filter_parse_tls (void *log_data, const unsigned char *data, size_t len,
 
     memset (hello, 0, sizeof (HevTLSClientHello));
 
-    if (len < 5)
+    /* ⭐ Borrowed from SmartProxy: stricter length check (43 bytes minimum)
+     * This ensures we have enough data to parse SNI */
+    if (len < 43) {
+        LOG_D ("%p filter: TLS data too short (%zu < 43)", log_data, len);
         return -1;
+    }
 
+    /* Check TLS record type (0x16 = Handshake) */
     uint8_t content_type = data[pos++];
     if (content_type != TLS_CONTENT_TYPE_HANDSHAKE) {
         LOG_D ("%p filter: Not TLS handshake (0x%02x)", log_data, content_type);
         return -1;
     }
 
+    /* Read TLS version */
     uint16_t tls_version = read_uint16 (data + pos);
     pos += 2;
     hello->tls_version = tls_version;
 
+    /* ⭐ Borrowed from SmartProxy: validate TLS version
+     * SSL 3.0 (0x0300) or TLS 1.0+ (>= 0x0301) */
+    if (tls_version < 0x0301 && tls_version != 0x0300) {
+        LOG_D ("%p filter: Invalid TLS version (0x%04x)", log_data, tls_version);
+        return -1;
+    }
+
+    /* Read record length */
     uint16_t record_len = read_uint16 (data + pos);
     pos += 2;
 
@@ -629,6 +680,7 @@ hev_filter_parse_tls (void *log_data, const unsigned char *data, size_t len,
         return -1;
     }
 
+    /* Check handshake type (0x01 = ClientHello) at position 5 */
     if (pos >= len)
         return -1;
     uint8_t handshake_type = data[pos++];
@@ -642,7 +694,7 @@ hev_filter_parse_tls (void *log_data, const unsigned char *data, size_t len,
     uint32_t handshake_len = read_uint24 (data + pos);
     pos += 3;
 
-    LOG_D ("%p filter: ClientHello (version=0x%04x, len=%u)", log_data,
+    LOG_D ("%p filter: ClientHello detected (version=0x%04x, len=%u)", log_data,
            tls_version, handshake_len);
 
     /* Skip Client Version + Random */
@@ -704,8 +756,8 @@ hev_filter_parse_tls (void *log_data, const unsigned char *data, size_t len,
         switch (ext_type) {
         case TLS_EXT_SERVER_NAME:
             LOG_D ("%p filter: Found SNI extension", log_data);
-            parse_sni_extension (data + pos, ext_len, hello->sni,
-                                 MAX_SNI_LENGTH);
+            parse_sni_extension (data + pos, ext_len, hello->hostname,
+                                 MAX_HOSTNAME_LENGTH);
             break;
 
         case TLS_EXT_ALPN:
@@ -720,8 +772,8 @@ hev_filter_parse_tls (void *log_data, const unsigned char *data, size_t len,
 
     hello->detected = 1;
 
-    if (hello->sni[0]) {
-        LOG_I ("%p filter: Detected SNI: %s", log_data, hello->sni);
+    if (hello->hostname[0]) {
+        LOG_I ("%p filter: Detected TLS hostname: %s", log_data, hello->hostname);
         stats.tls_parsed++;
     }
 
@@ -893,7 +945,8 @@ hev_filter_load_acl (const char *file_path)
 {
     FILE *fp;
     char line[1024];
-    int ipv4_count = 0, ipv6_count = 0, hostname_count = 0;
+    int ip_count = 0, cidr_count = 0, port_count = 0, domain_count = 0;
+    int allow_count = 0, block_count = 0;
 
     if (!file_path || strlen (file_path) == 0) {
         LOG_D ("filter: ACL file path not set");
@@ -905,7 +958,7 @@ hev_filter_load_acl (const char *file_path)
         return -1;
     }
 
-    LOG_I ("filter: Loading ACL from %s", file_path);
+    LOG_I ("filter: Loading ACL from %s (new format)", file_path);
 
     while (fgets (line, sizeof (line), fp)) {
         char *trim = line;
@@ -916,6 +969,7 @@ hev_filter_load_acl (const char *file_path)
         while (end >= trim && isspace ((unsigned char)*end))
             *end-- = '\0';
 
+        /* Remove comments */
         char *comment = strchr (trim, '#');
         if (comment)
             *comment = '\0';
@@ -923,27 +977,152 @@ hev_filter_load_acl (const char *file_path)
         if (strlen (trim) == 0)
             continue;
 
-        ip_addr_t ip_test;
-        if (ipaddr_aton (trim, &ip_test)) {
-            if (IP_IS_V4 (&ip_test)) {
-                uint32_t ip = ntohl (ip_2_ip4 (&ip_test)->addr);
-                radix_tree_insert_ipv4 (ip, 32);
-                ipv4_count++;
-            } else if (IP_IS_V6 (&ip_test)) {
-                radix_tree_insert_ipv6 (
-                    (const uint8_t *)ip_2_ip6 (&ip_test)->addr, 128);
-                ipv6_count++;
+        /* Parse new format: [allow|block] [ip|cidr|port|domain] [value] */
+        char action_str[16];
+        char type_str[16];
+        char value_str[256];
+
+        int parse_result = sscanf (trim, "%15s %15s %255s", action_str, type_str, value_str);
+        if (parse_result != 3) {
+            /* Try old format (just IP or hostname) - treat as block */
+            LOG_D ("filter: Legacy ACL format detected, treating as block: %s (parse_result=%d)", trim, parse_result);
+            strcpy (action_str, "block");
+
+            /* Detect if it's an IP or hostname */
+            ip_addr_t ip_test;
+            if (ipaddr_aton (trim, &ip_test)) {
+                strcpy (type_str, "ip");
+                strncpy (value_str, trim, sizeof (value_str) - 1);
+            } else {
+                strcpy (type_str, "domain");
+                strncpy (value_str, trim, sizeof (value_str) - 1);
             }
+            value_str[sizeof (value_str) - 1] = '\0';
+        }
+
+        /* Convert action string to enum */
+        HevACLAction action = HEV_ACL_ACTION_DEFAULT;
+        if (strcasecmp (action_str, "allow") == 0) {
+            action = HEV_ACL_ACTION_ALLOW;
+            allow_count++;
+        } else if (strcasecmp (action_str, "block") == 0) {
+            action = HEV_ACL_ACTION_BLOCK;
+            block_count++;
         } else {
-            hostname_table_insert (trim);
-            hostname_count++;
+            LOG_W ("filter: Unknown action '%s' in ACL line: %s", action_str, trim);
+            continue;
+        }
+
+        /* Process by type */
+        if (strcasecmp (type_str, "port") == 0) {
+            /* Port rule */
+            int port = atoi (value_str);
+            if (port >= 0 && port < 65536) {
+                HevACLRule *rule = hev_malloc (sizeof (HevACLRule));
+                rule->action = action;
+                rule->type = HEV_ACL_TYPE_PORT;
+                strncpy (rule->pattern, value_str, sizeof (rule->pattern) - 1);
+                rule->pattern[sizeof (rule->pattern) - 1] = '\0';
+
+                /* Add to port rules array */
+                rule->next = acl_port_rules[port];
+                acl_port_rules[port] = rule;
+                port_count++;
+
+                LOG_D ("filter: Added port rule: %s %d (%s)",
+                       action == HEV_ACL_ACTION_ALLOW ? "ALLOW" : "BLOCK",
+                       port, value_str);
+            }
+        } else if (strcasecmp (type_str, "ip") == 0) {
+            /* Single IP rule */
+            ip_addr_t ip_test;
+            if (ipaddr_aton (value_str, &ip_test)) {
+                /* Add to new ACL system (two-stage matching) */
+                HevACLRule *rule = hev_malloc (sizeof (HevACLRule));
+                rule->action = action;
+                rule->type = HEV_ACL_TYPE_IP;
+                snprintf (rule->pattern, sizeof (rule->pattern), "%s", value_str);
+                rule->next = acl_ip_rules;
+                acl_ip_rules = rule;
+                ip_count++;
+
+                LOG_D ("filter: Added IP rule: %s %s",
+                       action == HEV_ACL_ACTION_ALLOW ? "ALLOW" : "BLOCK",
+                       value_str);
+
+                /* Also add to old radix tree for backward compatibility */
+                if (IP_IS_V4 (&ip_test) && action == HEV_ACL_ACTION_BLOCK) {
+                    uint32_t ip = ntohl (ip_2_ip4 (&ip_test)->addr);
+                    radix_tree_insert_ipv4 (ip, 32);
+                }
+            }
+        } else if (strcasecmp (type_str, "cidr") == 0) {
+            /* CIDR rule */
+            char ip_str[128];
+            int prefix_len;
+            if (sscanf (value_str, "%[^/]/%d", ip_str, &prefix_len) == 2) {
+                ip_addr_t ip_test;
+                if (ipaddr_aton (ip_str, &ip_test)) {
+                    /* Add to new ACL system (two-stage matching) */
+                    HevACLRule *rule = hev_malloc (sizeof (HevACLRule));
+                    rule->action = action;
+                    rule->type = HEV_ACL_TYPE_CIDR;
+                    snprintf (rule->pattern, sizeof (rule->pattern), "%s", value_str);
+                    rule->next = acl_cidr_rules;
+                    acl_cidr_rules = rule;
+                    cidr_count++;
+
+                    /* Also add to old radix tree for backward compatibility */
+                    if (IP_IS_V4 (&ip_test) && action == HEV_ACL_ACTION_BLOCK) {
+                        uint32_t ip = ntohl (ip_2_ip4 (&ip_test)->addr);
+                        radix_tree_insert_ipv4 (ip, prefix_len);
+                    }
+
+                    LOG_D ("filter: Added CIDR rule: %s %s",
+                           action == HEV_ACL_ACTION_ALLOW ? "ALLOW" : "BLOCK",
+                           value_str);
+                }
+            }
+        } else if (strcasecmp (type_str, "domain") == 0) {
+            /* Domain rule */
+            HevACLRule *rule = hev_malloc (sizeof (HevACLRule));
+            rule->action = action;
+            rule->type = HEV_ACL_TYPE_DOMAIN;
+            strncpy (rule->pattern, value_str, sizeof (rule->pattern) - 1);
+            rule->pattern[sizeof (rule->pattern) - 1] = '\0';
+            rule->next = NULL;
+
+            /* Determine which hash table to use */
+            unsigned int hash = domain_hash_func (value_str);
+
+            if (value_str[0] == '*') {
+                /* Wildcard: *.example.com */
+                rule->next = acl_domain_wildcard[hash];
+                acl_domain_wildcard[hash] = rule;
+            } else if (value_str[0] == '.') {
+                /* Suffix: .example.com */
+                rule->next = acl_domain_suffix[hash];
+                acl_domain_suffix[hash] = rule;
+            } else {
+                /* Exact match */
+                rule->next = acl_domain_exact[hash];
+                acl_domain_exact[hash] = rule;
+            }
+
+            domain_count++;
+            LOG_D ("filter: Added domain rule: %s %s",
+                   action == HEV_ACL_ACTION_ALLOW ? "ALLOW" : "BLOCK",
+                   value_str);
+        } else {
+            LOG_W ("filter: Unknown type '%s' in ACL line: %s", type_str, trim);
         }
     }
 
     fclose (fp);
-    LOG_I ("filter: Loaded %d ACL entries (IPv4:%d, IPv6:%d, Hostname:%d)",
-           ipv4_count + ipv6_count + hostname_count, ipv4_count, ipv6_count,
-           hostname_count);
+    LOG_I ("filter: Loaded ACL rules (total:%d, allow:%d, block:%d) "
+           "[ip:%d, cidr:%d, port:%d, domain:%d]",
+           allow_count + block_count, allow_count, block_count,
+           ip_count, cidr_count, port_count, domain_count);
     return 0;
 }
 
@@ -1201,8 +1380,8 @@ hev_filter_sniff_pcb_hostname (struct tcp_pcb *pcb, struct pbuf *queue,
     if (pcb->local_port == 443) {
         HevTLSClientHello hello;
         if (hev_filter_parse_tls (pcb, buffer, total_len, &hello) == 0 &&
-            hello.sni[0]) {
-            strncpy (hostname, hello.sni, hostname_len - 1);
+            hello.hostname[0]) {
+            strncpy (hostname, hello.hostname, hostname_len - 1);
             hostname[hostname_len - 1] = '\0';
             return 0;
         }
@@ -1798,3 +1977,208 @@ hev_filter_blacklist_check (const ip_addr_t *addr)
 {
     return hev_filter_blacklist_check_ip (addr);
 }
+
+/* ============================================================================
+   Two-Stage ACL Matching Implementation
+   ============================================================================ */
+
+/* Check if domain matches pattern (wildcard/suffix) */
+static int
+match_domain_pattern (const char *pattern, const char *domain)
+{
+    /* Exact match */
+    if (strcasecmp (pattern, domain) == 0)
+        return 1;
+
+    /* Wildcard: *.example.com */
+    if (pattern[0] == '*') {
+        const char *suffix = pattern + 1;
+        size_t domain_len = strlen (domain);
+        size_t suffix_len = strlen (suffix);
+        if (suffix_len > 0 && suffix_len < domain_len) {
+            return strcasecmp (domain + domain_len - suffix_len, suffix) == 0;
+        }
+    }
+
+    /* Suffix: .example.com */
+    if (pattern[0] == '.') {
+        size_t domain_len = strlen (domain);
+        size_t pattern_len = strlen (pattern);
+        if (pattern_len > 0 && pattern_len < domain_len) {
+            return strcasecmp (domain + domain_len - pattern_len, pattern) == 0;
+        }
+    }
+
+    return 0;
+}
+
+/* Stage 1: Match connection rules (IP/Port/CIDR) */
+HevACLResult
+hev_acl_match_stage1_connection (const ip_addr_t *ip, int port)
+{
+    HevACLResult result = { 0, HEV_ACL_ACTION_DEFAULT, NULL };
+
+    if (!ip)
+        return result;
+
+    /* 1. Check port rules first (highest priority for connection stage) */
+    if (port >= 0 && port < 65536) {
+        HevACLRule *rule = acl_port_rules[port];
+        while (rule) {
+            result.matched = 1;
+            result.action = rule->action;
+            result.rule_pattern = rule->pattern;
+            LOG_D ("ACL Stage1: Port %d matched rule '%s' -> action=%d",
+                   port, rule->pattern, rule->action);
+            return result;
+        }
+    }
+
+    /* 2. Check IP rules (exact match) */
+    HevACLRule *rule = acl_ip_rules;
+    while (rule) {
+        ip_addr_t rule_ip;
+        if (ipaddr_aton (rule->pattern, &rule_ip)) {
+            /* Only match if IP types are the same (IPv4 vs IPv6) */
+            int type_match = 0;
+            if (IP_IS_V4 (ip) && IP_IS_V4 (&rule_ip)) {
+                type_match = 1;
+            } else if (IP_IS_V6 (ip) && IP_IS_V6 (&rule_ip)) {
+                type_match = 1;
+            }
+
+            if (type_match) {
+                /* Compare IP addresses directly */
+                int match = 0;
+                if (IP_IS_V4 (ip) && IP_IS_V4 (&rule_ip)) {
+                    uint32_t ip1 = ip_2_ip4 (ip)->addr;
+                    uint32_t ip2 = ip_2_ip4 (&rule_ip)->addr;
+                    match = (ip1 == ip2);
+                } else if (IP_IS_V6 (ip) && IP_IS_V6 (&rule_ip)) {
+                    match = (memcmp (ip_2_ip6 (ip)->addr, ip_2_ip6 (&rule_ip)->addr, 16) == 0);
+                }
+
+                if (match) { /* Match */
+                    result.matched = 1;
+                    result.action = rule->action;
+                    result.rule_pattern = rule->pattern;
+                    LOG_D ("ACL Stage1: IP %s matched rule '%s' -> action=%d",
+                           ipaddr_ntoa (ip), rule->pattern, rule->action);
+                    return result;
+                }
+            }
+        }
+        rule = rule->next;
+    }
+
+    /* 3. Check CIDR rules */
+    rule = acl_cidr_rules;
+    while (rule) {
+        char ip_str[128];
+        int prefix_len;
+        if (sscanf (rule->pattern, "%[^/]/%d", ip_str, &prefix_len) == 2) {
+            ip_addr_t rule_ip;
+            if (ipaddr_aton (ip_str, &rule_ip)) {
+                if (IP_IS_V4 (ip) && IP_IS_V4 (&rule_ip)) {
+                    uint32_t ip_addr = ntohl (ip_2_ip4 (ip)->addr);
+                    uint32_t rule_addr = ntohl (ip_2_ip4 (&rule_ip)->addr);
+                    uint32_t mask = prefix_len > 0 ?
+                            (0xFFFFFFFF << (32 - prefix_len)) : 0;
+                    if ((ip_addr & mask) == (rule_addr & mask)) {
+                        result.matched = 1;
+                        result.action = rule->action;
+                        result.rule_pattern = rule->pattern;
+                        LOG_D ("ACL Stage1: IP %s matched CIDR rule '%s' -> action=%d",
+                               ipaddr_ntoa (ip), rule->pattern, rule->action);
+                        return result;
+                    }
+                }
+            }
+        }
+        rule = rule->next;
+    }
+
+    return result;
+}
+
+/* Stage 2: Match domain rules after hostname detection */
+HevACLResult
+hev_acl_match_stage2_domain (const char *hostname, int port)
+{
+    HevACLResult result = { 0, HEV_ACL_ACTION_DEFAULT, NULL };
+
+    if (!hostname || hostname[0] == '\0')
+        return result;
+
+    char hostname_lower[MAX_HOSTNAME_LENGTH + 1];
+    strncpy (hostname_lower, hostname, MAX_HOSTNAME_LENGTH);
+    hostname_lower[MAX_HOSTNAME_LENGTH] = '\0';
+    for (char *p = hostname_lower; *p; p++)
+        *p = tolower (*p);
+
+    /* 1. Check exact domain match */
+    unsigned int hash = domain_hash_func (hostname_lower);
+    HevACLRule *rule = acl_domain_exact[hash];
+    while (rule) {
+        if (strcasecmp (rule->pattern, hostname_lower) == 0) {
+            result.matched = 1;
+            result.action = rule->action;
+            result.rule_pattern = rule->pattern;
+            LOG_D ("ACL Stage2: Domain '%s' matched exact rule '%s' -> action=%d",
+                   hostname, rule->pattern, rule->action);
+            return result;
+        }
+        rule = rule->next;
+    }
+
+    /* 2. Check wildcard domains (*.example.com) */
+    rule = acl_domain_wildcard[hash];
+    while (rule) {
+        if (match_domain_pattern (rule->pattern, hostname_lower)) {
+            result.matched = 1;
+            result.action = rule->action;
+            result.rule_pattern = rule->pattern;
+            LOG_D ("ACL Stage2: Domain '%s' matched wildcard rule '%s' -> action=%d",
+                   hostname, rule->pattern, rule->action);
+            return result;
+        }
+        rule = rule->next;
+    }
+
+    /* 3. Check suffix domains (.example.com) */
+    rule = acl_domain_suffix[hash];
+    while (rule) {
+        if (match_domain_pattern (rule->pattern, hostname_lower)) {
+            result.matched = 1;
+            result.action = rule->action;
+            result.rule_pattern = rule->pattern;
+            LOG_D ("ACL Stage2: Domain '%s' matched suffix rule '%s' -> action=%d",
+                   hostname, rule->pattern, rule->action);
+            return result;
+        }
+        rule = rule->next;
+    }
+
+    return result;
+}
+
+/* Combine both stages to get final decision */
+HevACLAction
+hev_acl_check_final_decision (HevACLResult *stage1_result,
+                               HevACLResult *stage2_result)
+{
+    /* Stage 1 (IP/Port/CIDR) is checked first */
+    if (stage1_result && stage1_result->matched) {
+        return stage1_result->action;
+    }
+
+    /* Stage 2 (domain) is only checked if Stage 1 didn't match */
+    if (stage2_result && stage2_result->matched) {
+        return stage2_result->action;
+    }
+
+    /* Default: use DEFAULT behavior (SOCKS5 proxy) */
+    return HEV_ACL_ACTION_DEFAULT;
+}
+
+/* ============================================================================ */
