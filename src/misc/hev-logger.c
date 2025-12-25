@@ -205,11 +205,9 @@ hev_logger_get_logs (int max_lines)
     // Read lines from buffer in reverse order (newest first)
     size_t read_pos = (buffer_pos > 0) ? buffer_pos - 1 : LOG_BUFFER_SIZE - 1;
     size_t line_start = read_pos;
-    int found_newline = 0;
 
     while (line_count < max_lines && read_pos != buffer_pos) {
         if (log_buffer[read_pos] == '\n') {
-            found_newline = 1;
             size_t line_len = (line_start >= read_pos) ?
                                   (line_start - read_pos) :
                                   (LOG_BUFFER_SIZE - read_pos + line_start);
