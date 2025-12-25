@@ -104,6 +104,15 @@ smart-proxy:
   # Expiry time in minutes for temporarily blocked IPs.
   blocked-ip-expiry-minutes: 360
 
+  # List of ports to enable protocol detection (TLS SNI / HTTP Host)
+  # Only connections to these ports will trigger smart-proxy probe.
+  # Common ports: 80 (HTTP), 443 (HTTPS), 8080 (HTTP Alt), 8443 (HTTPS Alt)
+  probe-ports:
+    - 80
+    - 443
+    - 8080
+    - 8443
+
 acl:
   # Path to the ACL file containing IP addresses and hostnames/SNI to block.
   # Each line in the file can be an IP address (IPv4 or IPv6) or a hostname/SNI.

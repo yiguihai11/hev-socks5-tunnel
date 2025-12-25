@@ -172,12 +172,10 @@ typedef struct _HevSpliceTaskData
 /* Forward declarations */
 static void run_direct_connect_task (void *data);
 static void run_smart_proxy_task (void *data);
+static void run_domain_first_task (void *data);
 static void tcp_splice_task_b (void *data);
 static int sniff_client_hello (HevSocks5SessionTCP *self,
                                HevTLSClientHello *hello);
-static int extract_http_host_from_queue (HevSocks5SessionTCP *self,
-                                         char *hostname_buffer,
-                                         size_t buffer_len);
 static int process_protocol_parsing (HevSocks5SessionTCP *self,
                                      struct tcp_pcb *pcb, char *http_hostname,
                                      size_t hostname_len,
@@ -295,6 +293,112 @@ hev_session_manager_fini (void)
 }
 
 /* ============================================================================
+   Domain-First Routing Task - 先解析域名，再决定路由
+   ============================================================================ */
+
+static void
+run_domain_first_task (void *data)
+{
+    HevSocks5SessionTCP *self = data;
+    struct tcp_pcb *pcb = self->pcb;
+    char src_ip[INET6_ADDRSTRLEN];
+    char dst_ip[INET6_ADDRSTRLEN];
+    char http_hostname[256] = { 0 };
+    HevACLAction final_action = HEV_ACL_ACTION_DEFAULT;
+    int hostname_found = 0;
+
+    LOG_D ("%p session: domain-first task entry", self);
+
+    ipaddr_ntoa_r (&pcb->remote_ip, src_ip, sizeof (src_ip));
+    ipaddr_ntoa_r (&pcb->local_ip, dst_ip, sizeof (dst_ip));
+
+    /* 等待数据到达队列 (最多 1500ms) */
+    if (!self->queue) {
+        LOG_D ("%p session: Waiting for protocol data on port %d...", self,
+               pcb->local_port);
+        for (int i = 0; i < 150 && !self->queue; i++) {
+            hev_task_sleep (10);
+        }
+        if (!self->queue) {
+            LOG_W ("%p session: Timed out waiting for protocol data on port %d (1500ms)",
+                   self, pcb->local_port);
+        }
+    }
+
+    /* 解析 SNI/Host */
+    if (self->queue) {
+        if (hev_filter_sniff_pcb_hostname (pcb, self->queue,
+                                            http_hostname,
+                                            sizeof (http_hostname)) == 0) {
+            hostname_found = 1;
+            LOG_I ("%p session: Domain-first detected hostname: %s (target: %s:%d)",
+                   self, http_hostname, dst_ip, pcb->local_port);
+        }
+    }
+
+    /* 统一 ACL 决策: Stage 1 (IP/Port) + Stage 2 (Domain) */
+    HevACLResult stage1_result =
+        hev_acl_match_stage1_connection (&pcb->local_ip, pcb->local_port);
+
+    if (hostname_found) {
+        HevACLResult stage2_result =
+            hev_acl_match_stage2_domain (http_hostname, pcb->local_port);
+        final_action = hev_acl_check_final_decision (&stage1_result,
+                                                      &stage2_result);
+
+        if (stage2_result.matched) {
+            LOG_D ("%p session: Stage 2 ACL matched: %s %s -> %s", self,
+                   final_action == HEV_ACL_ACTION_ALLOW ? "ALLOW" : "BLOCK",
+                   http_hostname, stage2_result.rule_pattern);
+        }
+    } else {
+        final_action = hev_acl_check_final_decision (&stage1_result, NULL);
+    }
+
+    if (stage1_result.matched) {
+        LOG_D ("%p session: Stage 1 ACL matched: %s %s:%d -> %s", self,
+               stage1_result.action == HEV_ACL_ACTION_ALLOW ? "ALLOW" : "BLOCK",
+               dst_ip, pcb->local_port, stage1_result.rule_pattern);
+    }
+
+    /* 根据最终决策执行相应操作 */
+    switch (final_action) {
+    case HEV_ACL_ACTION_ALLOW:
+        LOG_I ("%p session: Domain-first ACL ALLOW → Direct connect to %s:%d",
+               self, dst_ip, pcb->local_port);
+        /* 清理当前 session，启动直接连接 */
+        hev_socks5_tunnel_delete_session (
+            hev_socks5_session_get_node (HEV_SOCKS5_SESSION (self)));
+        hev_object_unref (HEV_OBJECT (self));
+        hev_session_manager_start_direct_tcp (pcb);
+        break;
+
+    case HEV_ACL_ACTION_BLOCK:
+        LOG_W ("%p session: Domain-first ACL BLOCK → Reject connection to %s:%d",
+               self, dst_ip, pcb->local_port);
+        /* 清理并终止 */
+        hev_socks5_tunnel_delete_session (
+            hev_socks5_session_get_node (HEV_SOCKS5_SESSION (self)));
+        hev_object_unref (HEV_OBJECT (self));
+        tcp_abort (pcb);
+        break;
+
+    case HEV_ACL_ACTION_DEFAULT:
+    default:
+        LOG_I ("%p session: Domain-first ACL DEFAULT → SOCKS5 proxy to %s:%d",
+               self, dst_ip, pcb->local_port);
+        /* 清理当前 session，启动 SOCKS5 代理 */
+        hev_socks5_tunnel_delete_session (
+            hev_socks5_session_get_node (HEV_SOCKS5_SESSION (self)));
+        hev_object_unref (HEV_OBJECT (self));
+        hev_session_manager_start_socks5_tcp (pcb);
+        break;
+    }
+
+    LOG_D ("%p session: domain-first task exit", self);
+}
+
+/* ============================================================================
    SOCKS5 TCP 任务入口 - 在这里嗅探 SNI
    ============================================================================ */
 
@@ -314,29 +418,16 @@ hev_socks5_session_task_entry (void *data)
     ipaddr_ntoa_r (&pcb->remote_ip, src_ip, sizeof (src_ip));
     ipaddr_ntoa_r (&pcb->local_ip, dst_ip, sizeof (dst_ip));
 
-    /* 等待数据到达队列 (根据端口类型) */
-    if (!tcp->queue && (pcb->local_port == 443 || pcb->local_port == 80 ||
-                        pcb->local_port == 8080)) {
-        if (pcb->local_port == 443) {
-            LOG_D (
-                "%p session: SOCKS5 task waiting for TLS ClientHello data...",
-                tcp);
-        } else {
-            LOG_D ("%p session: SOCKS5 task waiting for HTTP data...", tcp);
-        }
+    /* 等待数据到达队列 (仅对配置的探测端口) */
+    if (!tcp->queue && hev_config_is_smart_proxy_probe_port (pcb->local_port)) {
+        LOG_D ("%p session: SOCKS5 task waiting for protocol data on port %d...",
+               tcp, pcb->local_port);
         for (int i = 0; i < 150 && !tcp->queue; i++) { /* 延长等待时间 */
             hev_task_sleep (10);
         }
         if (!tcp->queue) {
-            if (pcb->local_port == 443) {
-                LOG_W (
-                    "%p session: SOCKS5 task timed out waiting for TLS ClientHello data (1500ms)",
-                    tcp);
-            } else {
-                LOG_W (
-                    "%p session: SOCKS5 task timed out waiting for HTTP data (1500ms)",
-                    tcp);
-            }
+            LOG_W ("%p session: SOCKS5 task timed out waiting for protocol data on port %d (1500ms)",
+                   tcp, pcb->local_port);
         }
     }
 
@@ -463,6 +554,41 @@ hev_session_manager_start_smart_proxy (struct tcp_pcb *pcb)
     node = hev_socks5_session_get_node (HEV_SOCKS5_SESSION (tcp));
     hev_socks5_tunnel_insert_session (node);
     hev_task_run (task, run_smart_proxy_task, tcp);
+}
+
+void
+hev_session_manager_start_domain_first_tcp (struct tcp_pcb *pcb)
+{
+    HevSocks5SessionTCP *tcp;
+    HevListNode *node;
+    int stack_size;
+    HevTask *task;
+    char src_ip[INET6_ADDRSTRLEN];
+    char dst_ip[INET6_ADDRSTRLEN];
+
+    tcp = hev_socks5_session_tcp_new (pcb, &mutex);
+    if (!tcp) {
+        tcp_abort (pcb);
+        return;
+    }
+
+    ipaddr_ntoa_r (&pcb->remote_ip, src_ip, sizeof (src_ip));
+    ipaddr_ntoa_r (&pcb->local_ip, dst_ip, sizeof (dst_ip));
+    LOG_I ("%p session: Domain-first routing started %s:%d -> %s:%d", tcp,
+           src_ip, pcb->remote_port, dst_ip, pcb->local_port);
+
+    stack_size = hev_config_get_misc_task_stack_size ();
+    task = hev_task_new (stack_size);
+    if (!task) {
+        LOG_E ("%p session: failed to create domain-first task", tcp);
+        hev_object_unref (HEV_OBJECT (tcp));
+        return;
+    }
+
+    hev_socks5_session_set_task (HEV_SOCKS5_SESSION (tcp), task);
+    node = hev_socks5_session_get_node (HEV_SOCKS5_SESSION (tcp));
+    hev_socks5_tunnel_insert_session (node);
+    hev_task_run (task, run_domain_first_task, tcp);
 }
 
 /* ============================================================================
@@ -637,61 +763,21 @@ process_protocol_parsing (HevSocks5SessionTCP *self, struct tcp_pcb *pcb,
                dst_ip, pcb->local_port, stage1_result.rule_pattern);
     }
 
-    /* TLS/HTTPS parsing for port 443 */
-    if (pcb->local_port == 443) {
-        HevTLSClientHello client_hello;
-        if (sniff_client_hello (self, &client_hello) == 0 &&
-            client_hello.detected) {
-            if (client_hello.hostname[0]) {
-                LOG_I ("%p session: %s detected TLS hostname: %s (target: %s:%d)",
-                       self, connection_type, client_hello.hostname, dst_ip,
-                       pcb->local_port);
-
-                /* ====================================================================
-                   Stage 2: ACL matching for domain rules (after hostname detection)
-                   ==================================================================== */
-                HevACLResult stage2_result = { 0 };
-                stage2_result = hev_acl_match_stage2_domain (client_hello.hostname,
-                                                             pcb->local_port);
-
-                /* Combine Stage 1 and Stage 2 results */
-                HevACLAction final_action = hev_acl_check_final_decision (
-                    &stage1_result, &stage2_result);
-
-                if (stage2_result.matched) {
-                    LOG_D ("%p session: Stage 2 ACL matched: %s %s -> %s",
-                           self,
-                           final_action == HEV_ACL_ACTION_ALLOW ? "ALLOW" : "BLOCK",
-                           client_hello.hostname, stage2_result.rule_pattern);
-                }
-
-                if (final_action == HEV_ACL_ACTION_BLOCK) {
-                    LOG_W ("%p session: Connection BLOCKED by ACL (hostname: %s)",
-                           self, client_hello.hostname);
-                    return -1;
-                }
-
-                /* Set output action for caller */
-                if (acl_action_out)
-                    *acl_action_out = final_action;
-            }
-            result = 1; /* TLS parsing successful */
-        }
-    }
-
-    /* HTTP parsing for ports 80 and 8080 */
-    if ((pcb->local_port == 80 || pcb->local_port == 8080)) {
-        if (extract_http_host_from_queue (self, http_hostname, hostname_len) ==
-            0) {
-            LOG_I ("%p session: %s detected HTTP Host: %s (target: %s:%d)",
-                   self, connection_type, http_hostname, dst_ip,
+    /* Unified protocol parsing for configured probe ports (TLS -> HTTP) */
+    if (hev_config_is_smart_proxy_probe_port (pcb->local_port)) {
+        char detected_hostname[256];
+        if (hev_filter_sniff_pcb_hostname (pcb, self->queue,
+                                            detected_hostname,
+                                            sizeof (detected_hostname)) == 0) {
+            LOG_I ("%p session: %s detected hostname: %s (target: %s:%d)",
+                   self, connection_type, detected_hostname, dst_ip,
                    pcb->local_port);
 
             /* ====================================================================
                Stage 2: ACL matching for domain rules (after hostname detection)
                ==================================================================== */
             HevACLResult stage2_result = { 0 };
-            stage2_result = hev_acl_match_stage2_domain (http_hostname,
+            stage2_result = hev_acl_match_stage2_domain (detected_hostname,
                                                          pcb->local_port);
 
             /* Combine Stage 1 and Stage 2 results */
@@ -702,12 +788,12 @@ process_protocol_parsing (HevSocks5SessionTCP *self, struct tcp_pcb *pcb,
                 LOG_D ("%p session: Stage 2 ACL matched: %s %s -> %s",
                        self,
                        final_action == HEV_ACL_ACTION_ALLOW ? "ALLOW" : "BLOCK",
-                       http_hostname, stage2_result.rule_pattern);
+                       detected_hostname, stage2_result.rule_pattern);
             }
 
             if (final_action == HEV_ACL_ACTION_BLOCK) {
                 LOG_W ("%p session: Connection BLOCKED by ACL (hostname: %s)",
-                       self, http_hostname);
+                       self, detected_hostname);
                 return -1;
             }
 
@@ -715,11 +801,11 @@ process_protocol_parsing (HevSocks5SessionTCP *self, struct tcp_pcb *pcb,
             if (acl_action_out)
                 *acl_action_out = final_action;
 
-            result = 1; /* HTTP parsing successful */
+            result = 1; /* Protocol parsing successful */
         }
     }
 
-    /* For non-HTTP/HTTPS connections, use Stage 1 result only */
+    /* For non-probe-port connections, use Stage 1 result only */
     if (result == 0 && stage1_result.matched) {
         if (stage1_result.action == HEV_ACL_ACTION_BLOCK) {
             LOG_W ("%p session: Connection BLOCKED by Stage 1 ACL %s:%d", self,
@@ -732,42 +818,6 @@ process_protocol_parsing (HevSocks5SessionTCP *self, struct tcp_pcb *pcb,
     }
 
     return result;
-}
-
-/* Extract HTTP Host from pbuf queue using filter module */
-static int
-extract_http_host_from_queue (HevSocks5SessionTCP *self, char *hostname_buffer,
-                              size_t buffer_len)
-{
-    struct pbuf *p = self->queue;
-    unsigned char buffer[2048]; /* Use larger buffer for better compatibility */
-    size_t total_len = 0;
-
-    if (!p) {
-        return -1; // No data
-    }
-
-    /* Copy data from pbuf queue to linear buffer */
-    for (p = self->queue; p && total_len < sizeof (buffer) - 1; p = p->next) {
-        size_t copy_len = p->len;
-        if (total_len + copy_len >= sizeof (buffer))
-            copy_len = sizeof (buffer) - 1 - total_len;
-
-        memcpy (buffer + total_len, p->payload, copy_len);
-        total_len += copy_len;
-    }
-    buffer[total_len] = '\0';
-
-    if (total_len == 0) {
-        return -1; // No data
-    }
-
-    LOG_D ("%p session: extracted %zu bytes from pbuf queue for HTTP parsing",
-           self, total_len);
-
-    /* Use filter module's HTTP parser */
-    return hev_filter_parse_http_host (self, buffer, total_len, hostname_buffer,
-                                       buffer_len);
 }
 
 /* 嗅探并解析 ClientHello */
@@ -842,27 +892,16 @@ run_direct_connect_task (void *data)
     LOG_D ("%p session: direct connect task run %s:%d -> %s:%d", self, src_ip,
            pcb->remote_port, dst_ip, pcb->local_port);
 
-    /* 等待一小段时间让数据到达队列 (端口443和80) */
-    if (!self->queue && (pcb->local_port == 443 || pcb->local_port == 80 ||
-                         pcb->local_port == 8080)) {
-        if (pcb->local_port == 443) {
-            LOG_D ("%p session: Waiting for TLS ClientHello data...", self);
-        } else {
-            LOG_D ("%p session: Waiting for HTTP data...", self);
-        }
+    /* 等待一小段时间让数据到达队列 (仅对配置的探测端口) */
+    if (!self->queue && hev_config_is_smart_proxy_probe_port (pcb->local_port)) {
+        LOG_D ("%p session: Waiting for protocol data on port %d...", self,
+               pcb->local_port);
         for (int i = 0; i < 150 && !self->queue; i++) { /* 延长等待时间 */
             hev_task_sleep (10);
         }
         if (!self->queue) {
-            if (pcb->local_port == 443) {
-                LOG_W (
-                    "%p session: Direct connect task timed out waiting for TLS ClientHello data (1500ms)",
-                    self);
-            } else {
-                LOG_W (
-                    "%p session: Direct connect task timed out waiting for HTTP data (1500ms)",
-                    self);
-            }
+            LOG_W ("%p session: Direct connect task timed out waiting for protocol data on port %d (1500ms)",
+                   self, pcb->local_port);
         }
     }
 
@@ -877,24 +916,16 @@ run_direct_connect_task (void *data)
         }
 
         /* ⭐ Save detected hostname for blacklist usage */
-        if (pcb->local_port == 443) {
-            if (sniff_client_hello (self, &client_hello) == 0 &&
-                client_hello.detected && client_hello.hostname[0]) {
-                snprintf (detected_hostname, sizeof (detected_hostname),
-                         "%s", client_hello.hostname);
-                LOG_D ("%p session: Saved TLS hostname: %s", self, detected_hostname);
-            }
-        } else if (pcb->local_port == 80 || pcb->local_port == 8080) {
-            if (http_hostname[0]) {
-                snprintf (detected_hostname, sizeof (detected_hostname),
-                         "%s", http_hostname);
-                LOG_D ("%p session: Saved HTTP hostname: %s", self, detected_hostname);
-            }
+        if (http_hostname[0]) {
+            snprintf (detected_hostname, sizeof (detected_hostname),
+                     "%s", http_hostname);
+            LOG_D ("%p session: Saved hostname: %s", self, detected_hostname);
         }
 
-        /* Handle ALPN for HTTPS connections */
+        /* Handle ALPN for HTTPS connections (port 443) */
         if (parse_result > 0 && pcb->local_port == 443) {
-            if (client_hello.alpn[0]) {
+            if (sniff_client_hello (self, &client_hello) == 0 &&
+                client_hello.detected && client_hello.alpn[0]) {
                 LOG_I ("%p session: Direct connect detected ALPN: %s", self,
                        client_hello.alpn);
             }
@@ -1108,16 +1139,16 @@ run_smart_proxy_task (void *data)
     LOG_D ("%p session: smart proxy task run %s:%d -> %s:%d", self, src_ip,
            pcb->remote_port, dst_ip, pcb->local_port);
 
-    /* 等待数据到达队列（用于 SNI 检测） */
-    if (pcb->local_port == 443 && !self->queue) {
-        LOG_D ("%p session: Waiting for TLS ClientHello data...", self);
+    /* 等待数据到达队列（仅对配置的探测端口） */
+    if (!self->queue && hev_config_is_smart_proxy_probe_port (pcb->local_port)) {
+        LOG_D ("%p session: Waiting for protocol data on port %d...", self,
+               pcb->local_port);
         for (int i = 0; i < 150 && !self->queue; i++) { /* 延长等待时间 */
             hev_task_sleep (10);
         }
         if (!self->queue) {
-            LOG_W (
-                "%p session: Smart proxy task timed out waiting for TLS ClientHello data (1500ms)",
-                self);
+            LOG_W ("%p session: Smart proxy task timed out waiting for protocol data on port %d (1500ms)",
+                   self, pcb->local_port);
         }
     }
 
@@ -1140,24 +1171,16 @@ run_smart_proxy_task (void *data)
         }
 
         /* ⭐ Save detected hostname for blacklist usage */
-        if (pcb->local_port == 443) {
-            if (sniff_client_hello (self, &client_hello) == 0 &&
-                client_hello.detected && client_hello.hostname[0]) {
-                snprintf (detected_hostname, sizeof (detected_hostname),
-                         "%s", client_hello.hostname);
-                LOG_D ("%p session: Saved TLS hostname: %s", self, detected_hostname);
-            }
-        } else if (pcb->local_port == 80 || pcb->local_port == 8080) {
-            if (http_hostname[0]) {
-                snprintf (detected_hostname, sizeof (detected_hostname),
-                         "%s", http_hostname);
-                LOG_D ("%p session: Saved HTTP hostname: %s", self, detected_hostname);
-            }
+        if (http_hostname[0]) {
+            snprintf (detected_hostname, sizeof (detected_hostname),
+                     "%s", http_hostname);
+            LOG_D ("%p session: Saved hostname: %s", self, detected_hostname);
         }
 
-        /* Handle ALPN for HTTPS connections */
+        /* Handle ALPN for HTTPS connections (port 443) */
         if (parse_result > 0 && pcb->local_port == 443) {
-            if (client_hello.alpn[0]) {
+            if (sniff_client_hello (self, &client_hello) == 0 &&
+                client_hello.detected && client_hello.alpn[0]) {
                 LOG_I ("%p session: Smart proxy detected ALPN: %s", self,
                        client_hello.alpn);
             }
@@ -1329,95 +1352,13 @@ run_smart_proxy_task (void *data)
             int is_valid_response = 0;
 
             if (iovc > 0 && iov[0].iov_len > 0) {
-                unsigned char *data = (unsigned char *)iov[0].iov_base;
-                unsigned char first_byte = data[0];
-
-                /* 🔍 检测 HTTP (端口 80, 8080) */
-                if (pcb->local_port == 80 || pcb->local_port == 8080) {
-                    if (iov[0].iov_len >= 7 &&
-                        (memcmp (data, "HTTP/1.", 7) == 0 ||
-                         memcmp (data, "HTTP/2", 6) == 0)) {
-                        LOG_I (
-                            "%p session: ✅ Smart proxy SUCCESS for HTTP port %d: "
-                            "Valid HTTP response from %s (data received in %ld ms)",
-                            self, pcb->local_port, dst_ip, elapsed_ms);
-                        is_valid_response = 1;
-                    } else {
-                        LOG_W (
-                            "%p session: ❌ Smart proxy received INVALID HTTP response on port %d from %s "
-                            "(expected 'HTTP/', got %d bytes starting with 0x%02x), BLACKLIST",
-                            self, pcb->local_port, dst_ip, (int)iov[0].iov_len,
-                            first_byte);
-                        /* ⭐ Prefer hostname for blacklist */
-                        if (detected_hostname[0]) {
-                            hev_filter_blacklist_add_entry (
-                                HEV_BLACKLIST_ENTRY_DOMAIN, NULL, 0, detected_hostname,
-                                "Invalid HTTP response", HEV_BLACKLIST_SOURCE_AUTO, 5, 0);
-                        } else {
-                            hev_filter_blacklist_add (&pcb->local_ip);
-                        }
-                        gfw_detected = 1;
-                        break;
-                    }
-                }
-                /* 🔍 检测 HTTPS (端口 443) */
-                else if (pcb->local_port == 443) {
-                    if (first_byte == 0x14 || first_byte == 0x16 ||
-                        first_byte == 0x17) {
-                        /* ✅ Valid TLS: ChangeCipherSpec (0x14), Handshake (0x16), Application Data (0x17) */
-                        const char *tls_type =
-                            (first_byte == 0x14) ? "ChangeCipherSpec" :
-                            (first_byte == 0x16) ? "Handshake (ServerHello)" :
-                                                   "Application Data";
-                        LOG_I (
-                            "%p session: ✅ Smart proxy SUCCESS for HTTPS: "
-                            "Valid TLS %s (0x%02x) from %s:%d (data received in %ld ms)",
-                            self, tls_type, first_byte, dst_ip, pcb->local_port,
-                            elapsed_ms);
-                        is_valid_response = 1;
-                    } else if (first_byte == 0x15) {
-                        /* ❌ TLS Alert (服务器拒绝,如 SNI 不匹配) */
-                        LOG_W (
-                            "%p session: ❌ Smart proxy received TLS Alert (0x15) from %s:%d "
-                            "(likely SNI mismatch or certificate error), BLACKLIST",
-                            self, dst_ip, pcb->local_port);
-                        /* ⭐ Prefer hostname for blacklist */
-                        if (detected_hostname[0]) {
-                            hev_filter_blacklist_add_entry (
-                                HEV_BLACKLIST_ENTRY_DOMAIN, NULL, 0, detected_hostname,
-                                "TLS Alert (SNI blocked)", HEV_BLACKLIST_SOURCE_AUTO, 7, 0);
-                        } else {
-                            hev_filter_blacklist_add (&pcb->local_ip);
-                        }
-                        gfw_detected = 1;
-                        break;
-                    } else {
-                        /* ❌ Invalid TLS response */
-                        LOG_W (
-                            "%p session: ❌ Smart proxy received INVALID TLS response (0x%02x) from %s:%d "
-                            "(expected 0x14/0x16/0x17), BLACKLIST",
-                            self, first_byte, dst_ip, pcb->local_port);
-                        /* ⭐ Prefer hostname for blacklist */
-                        if (detected_hostname[0]) {
-                            hev_filter_blacklist_add_entry (
-                                HEV_BLACKLIST_ENTRY_DOMAIN, NULL, 0, detected_hostname,
-                                "Invalid TLS response", HEV_BLACKLIST_SOURCE_AUTO, 5, 0);
-                        } else {
-                            hev_filter_blacklist_add (&pcb->local_ip);
-                        }
-                        gfw_detected = 1;
-                        break;
-                    }
-                }
-                /* 🔍 其他端口:任意数据都算成功 */
-                else {
-                    LOG_I (
-                        "%p session: ✅ Smart proxy SUCCESS for port %d: "
-                        "Received %zu bytes from %s (data received in %ld ms)",
-                        self, pcb->local_port, iov[0].iov_len, dst_ip,
-                        elapsed_ms);
-                    is_valid_response = 1;
-                }
+                /* 🔍 简化验证:收到任意数据即视为成功 */
+                LOG_I (
+                    "%p session: ✅ Smart proxy SUCCESS for port %d: "
+                    "Received %zu bytes from %s (data received in %ld ms)",
+                    self, pcb->local_port, iov[0].iov_len, dst_ip,
+                    elapsed_ms);
+                is_valid_response = 1;
             }
 
             if (is_valid_response) {

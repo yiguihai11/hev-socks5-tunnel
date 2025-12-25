@@ -274,8 +274,9 @@ int hev_filter_parse_http_host (void *log_data, const unsigned char *data,
  * @hostname: Output buffer
  * @hostname_len: Buffer size
  *
- * Convenience function to sniff hostname from TCP PCB queue.
- * Automatically detects TLS (443) or HTTP (80/8080).
+ * Unified protocol detection to sniff hostname from TCP PCB queue.
+ * Tries TLS SNI extraction first, falls back to HTTP Host header if TLS fails.
+ * Works for any port - not limited to specific protocol ports.
  *
  * Returns: 0 on success, -1 if not detected.
  */

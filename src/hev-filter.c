@@ -1376,22 +1376,20 @@ hev_filter_sniff_pcb_hostname (struct tcp_pcb *pcb, struct pbuf *queue,
     if (total_len == 0)
         return -1;
 
-    /* Try TLS for port 443 */
-    if (pcb->local_port == 443) {
-        HevTLSClientHello hello;
-        if (hev_filter_parse_tls (pcb, buffer, total_len, &hello) == 0 &&
-            hello.hostname[0]) {
-            strncpy (hostname, hello.hostname, hostname_len - 1);
-            hostname[hostname_len - 1] = '\0';
-            return 0;
-        }
+    /* Unified protocol detection: Try TLS first, fallback to HTTP */
+    /* Step 1: Try TLS SNI extraction (works for any port) */
+    HevTLSClientHello hello;
+    if (hev_filter_parse_tls (pcb, buffer, total_len, &hello) == 0 &&
+        hello.hostname[0]) {
+        strncpy (hostname, hello.hostname, hostname_len - 1);
+        hostname[hostname_len - 1] = '\0';
+        return 0;
     }
-    /* Try HTTP for ports 80/8080 */
-    else if (pcb->local_port == 80 || pcb->local_port == 8080) {
-        if (hev_filter_parse_http_host (pcb, buffer, total_len, hostname,
-                                        hostname_len) == 0) {
-            return 0;
-        }
+
+    /* Step 2: TLS failed, try HTTP Host extraction (works for any port) */
+    if (hev_filter_parse_http_host (pcb, buffer, total_len, hostname,
+                                    hostname_len) == 0) {
+        return 0;
     }
 
     return -1;

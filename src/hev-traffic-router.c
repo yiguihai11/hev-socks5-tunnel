@@ -135,6 +135,7 @@ hev_traffic_router_handle_tcp (struct tcp_pcb *pcb)
     const ip_addr_t *local_ip = &pcb->local_ip;
     char dst_ip[INET6_ADDRSTRLEN];
     char src_ip[INET6_ADDRSTRLEN];
+    int is_probe_port;
 
     ipaddr_ntoa_r (local_ip, dst_ip, sizeof (dst_ip));
     ipaddr_ntoa_r (&pcb->remote_ip, src_ip, sizeof (src_ip));
@@ -150,6 +151,18 @@ hev_traffic_router_handle_tcp (struct tcp_pcb *pcb)
         int stack_size = hev_config_get_misc_task_stack_size ();
         hev_task_run (hev_task_new (stack_size), terminate_pcb_task,
                       pcb); // Create a new task to terminate the PCB
+        return 1;
+    }
+
+    /* Check if this is a probe port (for domain-first routing) */
+    is_probe_port = hev_config_is_smart_proxy_probe_port (pcb->local_port);
+
+    /* 0. For probe ports: use domain-first routing (parse SNI/Host first, then decide) */
+    if (is_probe_port) {
+        LOG_I (
+            "%p router: TCP routing %s:%d -> %s:%d via DOMAIN-FIRST (probe port, will parse hostname)",
+            pcb, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
+        hev_session_manager_start_domain_first_tcp (pcb);
         return 1;
     }
 

@@ -172,6 +172,8 @@ static char chnroutes_file_path[1024];
 /* smart-proxy */
 static int smart_proxy_timeout_ms;
 static int smart_proxy_blocked_ip_expiry_minutes;
+static int *smart_proxy_probe_ports = NULL;
+static int smart_proxy_probe_ports_count = 0;
 
 /* acl */
 static char acl_file_path[1024];
@@ -458,7 +460,7 @@ hev_config_parse_smart_proxy (yaml_document_t *doc, yaml_node_t *base)
     for (pair = base->data.mapping.pairs.start;
          pair < base->data.mapping.pairs.top; pair++) {
         yaml_node_t *node;
-        const char *key, *value;
+        const char *key;
 
         if (!pair->key || !pair->value)
             break;
@@ -469,14 +471,54 @@ hev_config_parse_smart_proxy (yaml_document_t *doc, yaml_node_t *base)
         key = (const char *)node->data.scalar.value;
 
         node = yaml_document_get_node (doc, pair->value);
-        if (!node || YAML_SCALAR_NODE != node->type)
-            break;
-        value = (const char *)node->data.scalar.value;
 
-        if (0 == strcmp (key, "timeout-ms"))
-            smart_proxy_timeout_ms = strtoul (value, NULL, 10);
-        else if (0 == strcmp (key, "blocked-ip-expiry-minutes"))
-            smart_proxy_blocked_ip_expiry_minutes = strtoul (value, NULL, 10);
+        if (0 == strcmp (key, "timeout-ms")) {
+            if (node && YAML_SCALAR_NODE == node->type) {
+                const char *value = (const char *)node->data.scalar.value;
+                smart_proxy_timeout_ms = strtoul (value, NULL, 10);
+            }
+        } else if (0 == strcmp (key, "blocked-ip-expiry-minutes")) {
+            if (node && YAML_SCALAR_NODE == node->type) {
+                const char *value = (const char *)node->data.scalar.value;
+                smart_proxy_blocked_ip_expiry_minutes = strtoul (value, NULL, 10);
+            }
+        } else if (0 == strcmp (key, "probe-ports")) {
+            /* Parse port list (YAML sequence) */
+            if (node && YAML_SEQUENCE_NODE == node->type) {
+                yaml_node_item_t *item;
+                int count = 0;
+
+                /* Count ports first */
+                for (item = node->data.sequence.items.start;
+                     item < node->data.sequence.items.top; item++) {
+                    count++;
+                }
+
+                /* Allocate array */
+                if (smart_proxy_probe_ports) {
+                    free (smart_proxy_probe_ports);
+                }
+                smart_proxy_probe_ports = malloc (sizeof (int) * count);
+                if (!smart_proxy_probe_ports)
+                    return -1;
+
+                /* Fill array */
+                int idx = 0;
+                for (item = node->data.sequence.items.start;
+                     item < node->data.sequence.items.top; item++) {
+                    yaml_node_t *port_node =
+                        yaml_document_get_node (doc, *item);
+                    if (port_node && YAML_SCALAR_NODE == port_node->type) {
+                        smart_proxy_probe_ports[idx++] =
+                            strtoul ((const char *)port_node->data.scalar.value,
+                                     NULL, 10);
+                    }
+                }
+                smart_proxy_probe_ports_count = count;
+
+                LOG_I ("config: Loaded %d smart-proxy probe ports", count);
+            }
+        }
     }
 
     return 0;
@@ -889,6 +931,26 @@ int
 hev_config_get_smart_proxy_blocked_ip_expiry_minutes (void)
 {
     return smart_proxy_blocked_ip_expiry_minutes;
+}
+
+int
+hev_config_get_smart_proxy_probe_ports (int **ports)
+{
+    if (ports)
+        *ports = smart_proxy_probe_ports;
+    return smart_proxy_probe_ports_count;
+}
+
+int
+hev_config_is_smart_proxy_probe_port (int port)
+{
+    int i;
+
+    for (i = 0; i < smart_proxy_probe_ports_count; i++) {
+        if (smart_proxy_probe_ports[i] == port)
+            return 1;
+    }
+    return 0;
 }
 
 /* acl */
