@@ -333,11 +333,16 @@ run_domain_first_task (void *data)
     case HEV_ACL_ACTION_ALLOW:
         LOG_I ("%p session: Domain-first ACL ALLOW → Direct connect to %s:%d",
                self, dst_ip, pcb->local_port);
+
+        /* 清除 PCB 引用，防止析构函数 abort 它 */
+        LOG_D ("%p session: Clearing PCB reference to prevent abort", self);
+        self->pcb = NULL;
+
         /* 清理当前 session，启动直接连接 */
         hev_socks5_tunnel_delete_session (
             hev_socks5_session_get_node (HEV_SOCKS5_SESSION (self)));
         hev_object_unref (HEV_OBJECT (self));
-        hev_session_manager_start_direct_tcp (pcb);
+        hev_session_manager_start_direct_tcp (pcb, NULL);
         break;
 
     case HEV_ACL_ACTION_BLOCK:
@@ -355,23 +360,53 @@ run_domain_first_task (void *data)
     default:
         /* ACL returned DEFAULT, check chnroutes for final decision */
         if (hev_filter_is_domestic (&pcb->local_ip)) {
-            LOG_I (
-                "%p session: Domain-first ACL DEFAULT + Domestic IP → Direct connect to %s:%d",
-                self, dst_ip, pcb->local_port);
+            LOG_I ("%p session: Domain-first ACL DEFAULT + Domestic IP → Direct connect to %s:%d",
+                   self, dst_ip, pcb->local_port);
+
+            /* 保存队列数据，因为 unref 会释放 session */
+            struct pbuf *saved_queue = self->queue;
+
+            /* 保存队列引用，防止 unref 时被释放 */
+            if (saved_queue) {
+                LOG_D ("%p session: Preserving %d bytes of queued data", self,
+                       pbuf_clen(saved_queue) > 0 ? saved_queue->tot_len : 0);
+                self->queue = NULL; /* 防止析构函数释放队列 */
+            }
+
+            /* 清除 PCB 引用，防止析构函数 abort 它 */
+            LOG_D ("%p session: Clearing PCB reference to prevent abort", self);
+            self->pcb = NULL;
+
             /* 清理当前 session，启动直接连接 */
             hev_socks5_tunnel_delete_session (
                 hev_socks5_session_get_node (HEV_SOCKS5_SESSION (self)));
             hev_object_unref (HEV_OBJECT (self));
-            hev_session_manager_start_direct_tcp (pcb);
+
+            hev_session_manager_start_direct_tcp (pcb, saved_queue);
         } else {
-            LOG_I (
-                "%p session: Domain-first ACL DEFAULT + Foreign IP → SOCKS5 proxy to %s:%d",
-                self, dst_ip, pcb->local_port);
+            LOG_I ("%p session: Domain-first ACL DEFAULT + Foreign IP → SOCKS5 proxy to %s:%d",
+                   self, dst_ip, pcb->local_port);
+
+            /* 保存队列数据，因为 unref 会释放 session */
+            struct pbuf *saved_queue = self->queue;
+
+            /* 保存队列引用，防止 unref 时被释放 */
+            if (saved_queue) {
+                LOG_D ("%p session: Preserving %d bytes of queued data", self,
+                       pbuf_clen(saved_queue) > 0 ? saved_queue->tot_len : 0);
+                self->queue = NULL; /* 防止析构函数释放队列 */
+            }
+
+            /* 清除 PCB 引用，防止析构函数 abort 它 */
+            LOG_D ("%p session: Clearing PCB reference to prevent abort", self);
+            self->pcb = NULL;
+
             /* 清理当前 session，启动 SOCKS5 代理 */
             hev_socks5_tunnel_delete_session (
                 hev_socks5_session_get_node (HEV_SOCKS5_SESSION (self)));
             hev_object_unref (HEV_OBJECT (self));
-            hev_session_manager_start_socks5_tcp (pcb);
+
+            hev_session_manager_start_socks5_tcp (pcb, saved_queue);
         }
         break;
     }
@@ -436,7 +471,7 @@ exit_cleanup:
 }
 
 void
-hev_session_manager_start_socks5_tcp (struct tcp_pcb *pcb)
+hev_session_manager_start_socks5_tcp (struct tcp_pcb *pcb, struct pbuf *queue)
 {
     HevSocks5SessionTCP *tcp;
     HevListNode *node;
@@ -445,10 +480,23 @@ hev_session_manager_start_socks5_tcp (struct tcp_pcb *pcb)
     char src_ip[INET6_ADDRSTRLEN];
     char dst_ip[INET6_ADDRSTRLEN];
 
+    ipaddr_ntoa_r (&pcb->local_ip, dst_ip, sizeof (dst_ip));
+    LOG_D ("session_manager_start_socks5_tcp: entry with pcb->local_ip=%s, pcb->local_port=%d, queue=%p",
+           dst_ip, pcb->local_port, queue);
+
     tcp = hev_socks5_session_tcp_new (pcb, &mutex);
     if (!tcp) {
         tcp_abort (pcb);
+        if (queue)
+            pbuf_free (queue);
         return;
+    }
+
+    /* 传递保存的队列数据到新 session */
+    if (queue) {
+        LOG_D ("session_manager_start_socks5_tcp: Transferring %d bytes of queued data",
+               queue->tot_len);
+        tcp->queue = queue;
     }
 
     ipaddr_ntoa_r (&pcb->remote_ip, src_ip, sizeof (src_ip));
@@ -471,7 +519,7 @@ hev_session_manager_start_socks5_tcp (struct tcp_pcb *pcb)
 }
 
 void
-hev_session_manager_start_direct_tcp (struct tcp_pcb *pcb)
+hev_session_manager_start_direct_tcp (struct tcp_pcb *pcb, struct pbuf *queue)
 {
     HevSocks5SessionTCP *tcp;
     HevListNode *node;
@@ -483,7 +531,16 @@ hev_session_manager_start_direct_tcp (struct tcp_pcb *pcb)
     tcp = hev_socks5_session_tcp_new (pcb, &mutex);
     if (!tcp) {
         tcp_abort (pcb);
+        if (queue)
+            pbuf_free (queue);
         return;
+    }
+
+    /* 传递保存的队列数据到新 session */
+    if (queue) {
+        LOG_D ("session_manager_start_direct_tcp: Transferring %d bytes of queued data",
+               queue->tot_len);
+        tcp->queue = queue;
     }
 
     ipaddr_ntoa_r (&pcb->remote_ip, src_ip, sizeof (src_ip));

@@ -12,6 +12,7 @@
 
 #include <lwip/tcp.h>
 #include <lwip/udp.h>
+#include <lwip/pbuf.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -22,8 +23,8 @@ extern "C" {
 void hev_session_manager_init (void);
 void hev_session_manager_fini (void);
 
-void hev_session_manager_start_socks5_tcp (struct tcp_pcb *pcb);
-void hev_session_manager_start_direct_tcp (struct tcp_pcb *pcb);
+void hev_session_manager_start_socks5_tcp (struct tcp_pcb *pcb, struct pbuf *queue);
+void hev_session_manager_start_direct_tcp (struct tcp_pcb *pcb, struct pbuf *queue);
 void hev_session_manager_start_smart_proxy (struct tcp_pcb *pcb);
 /* Domain-first routing: parse SNI/Host first, then decide routing */
 void hev_session_manager_start_domain_first_tcp (struct tcp_pcb *pcb);

@@ -346,6 +346,11 @@ hev_socks5_session_tcp_construct (HevSocks5SessionTCP *self,
     char dst_ip[INET6_ADDRSTRLEN];
     int res;
 
+    /* 在 lwIP 隧道模式下，local_ip/local_port 存储的是目标服务器地址 */
+    ipaddr_ntoa_r (&pcb->local_ip, dst_ip, sizeof (dst_ip));
+    LOG_D ("%p socks5 session tcp construct: pcb->local_ip=%s, pcb->local_port=%d",
+           self, dst_ip, pcb->local_port);
+
     res = hev_socks5_addr_from_lwip (&addr, &pcb->local_ip, pcb->local_port);
     if (res < 0) {
         LOG_E ("%p socks5 session tcp construct: failed to convert address",
@@ -360,9 +365,9 @@ hev_socks5_session_tcp_construct (HevSocks5SessionTCP *self,
         return -1;
     }
 
-    ipaddr_ntoa_r (&pcb->local_ip, dst_ip, sizeof (dst_ip));
+    ipaddr_ntoa_r (&pcb->remote_ip, dst_ip, sizeof (dst_ip));
     LOG_D ("%p socks5 session tcp construct for %s:%d", self, dst_ip,
-           pcb->local_port);
+           pcb->remote_port);
 
     HEV_OBJECT (self)->klass = HEV_SOCKS5_SESSION_TCP_TYPE;
 

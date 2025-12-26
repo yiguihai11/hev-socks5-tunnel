@@ -88,12 +88,18 @@ hev_socks5_addr_from_lwip (HevSocks5Addr *addr, const ip_addr_t *ip, u16_t port)
     case IPADDR_TYPE_V4: {
         HevMappedDNS *dns = hev_mapped_dns_get ();
         const char *name = NULL;
+        char tmp_ip[INET6_ADDRSTRLEN];
+        ipaddr_ntoa_r (ip, tmp_ip, sizeof (tmp_ip));
+
         if (dns)
             name = hev_mapped_dns_lookup (dns, ntohl (ip_2_ip4 (ip)->addr));
-        if (name)
+        if (name) {
+            LOG_D ("addr_from_lwip: IP %s -> hostname %s:%d", tmp_ip, name, ntohs(port));
             hev_socks5_addr_from_name (addr, name, htons (port));
-        else
+        } else {
+            LOG_D ("addr_from_lwip: IP %s:%d (no hostname mapping)", tmp_ip, ntohs(port));
             hev_socks5_addr_from_ipv4 (addr, ip, htons (port));
+        }
         return 0;
     }
     case IPADDR_TYPE_V6:

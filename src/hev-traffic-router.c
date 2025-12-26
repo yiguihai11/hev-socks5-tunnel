@@ -169,10 +169,9 @@ hev_traffic_router_handle_tcp (struct tcp_pcb *pcb)
 
     // --- Priority 3: chnroutes (domestic IP check) for non-probe ports ---
     if (hev_filter_is_domestic (local_ip)) {
-        LOG_I (
-            "%p router: TCP routing %s:%d -> %s:%d via DIRECT (domestic IP, non-probe port)",
-            pcb, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
-        hev_session_manager_start_direct_tcp (pcb);
+        LOG_I ("%p router: TCP routing %s:%d -> %s:%d via DIRECT (domestic IP, non-probe port)",
+               pcb, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
+        hev_session_manager_start_direct_tcp (pcb, NULL);
         return 1;
     }
 
@@ -197,7 +196,7 @@ hev_traffic_router_handle_tcp (struct tcp_pcb *pcb)
             "%p router: TCP routing %s:%d -> %s:%d via SOCKS5 (smart proxy disabled)",
             pcb, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
     }
-    hev_session_manager_start_socks5_tcp (pcb);
+    hev_session_manager_start_socks5_tcp (pcb, NULL);
     return 1;
 }
 
