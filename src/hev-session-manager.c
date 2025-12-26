@@ -80,9 +80,12 @@ memmem_compat (const void *haystack, size_t haystacklen, const void *needle,
 #define HEV_TCP_KEEPCNT TCP_KEEPCNT
 #endif
 
-/* 取消冲突宏 */
+/* 取消与 lwIP 冲突的宏 */
 #ifdef TCP_MSS
 #undef TCP_MSS
+#endif
+#ifdef TCP_STATS
+#undef TCP_STATS
 #endif
 
 #elif defined(_WIN32)
