@@ -116,8 +116,9 @@ run_blacklist_tests (void)
     ip_addr_t test_ip;
     ipaddr_aton ("192.168.100.1", &test_ip);
 
-    const char *entry_id = hev_filter_blacklist_add_ip (
-        &test_ip, "Test malicious activity", HEV_BLACKLIST_SOURCE_MANUAL, 3600);
+    const char *entry_id = hev_filter_blacklist_add_entry (
+        HEV_BLACKLIST_ENTRY_IP, &test_ip, 0, NULL,
+        "Test malicious activity", HEV_BLACKLIST_SOURCE_MANUAL, 5, 3600);
 
     TEST_ASSERT (entry_id != NULL);
     TEST_ASSERT (strlen (entry_id) > 0);
@@ -229,9 +230,9 @@ run_blacklist_tests (void)
     ipaddr_aton ("10.100.50.25", &test_ip_integration);
 
     // Add to dynamic blacklist
-    const char *integration_entry_id = hev_filter_blacklist_add_ip (
-        &test_ip_integration, "Integration test IP",
-        HEV_BLACKLIST_SOURCE_MANUAL, 3600);
+    const char *integration_entry_id = hev_filter_blacklist_add_entry (
+        HEV_BLACKLIST_ENTRY_IP, &test_ip_integration, 0, NULL,
+        "Integration test IP", HEV_BLACKLIST_SOURCE_MANUAL, 5, 3600);
     TEST_ASSERT (integration_entry_id != NULL);
 
     // Test integrated IP check (should NOT be blocked by ACL rules)

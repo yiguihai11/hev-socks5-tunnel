@@ -1417,16 +1417,31 @@ hev_filter_reset_stats (void)
 
 #include "hev-config.h"
 
-/* 新的增强黑名单添加IP函数 */
+/* Simplified blacklist add function for IP addresses */
 const char *
-hev_filter_blacklist_add_ip (const ip_addr_t *addr, const char *reason,
-                             HevBlacklistSource source, int ttl_seconds)
+hev_filter_blacklist_add_ip (const ip_addr_t *addr)
 {
+    int ttl_seconds = hev_config_get_smart_proxy_blocked_ip_expiry_minutes () * 60;
+    if (ttl_seconds <= 0) {
+        ttl_seconds = 3600; /* Default 1 hour */
+    }
     return hev_filter_blacklist_add_entry (
-        HEV_BLACKLIST_ENTRY_IP, addr, 0, NULL, reason, source, 5, ttl_seconds);
+        HEV_BLACKLIST_ENTRY_IP, addr, 0, NULL, "Smart proxy", HEV_BLACKLIST_SOURCE_AUTO, 5, ttl_seconds);
 }
 
-/* 新的增强黑名单添加通用条目函数 */
+/* Simplified blacklist add function for domain names */
+const char *
+hev_filter_blacklist_add_domain (const char *domain)
+{
+    int ttl_seconds = hev_config_get_smart_proxy_blocked_ip_expiry_minutes () * 60;
+    if (ttl_seconds <= 0) {
+        ttl_seconds = 3600; /* Default 1 hour */
+    }
+    return hev_filter_blacklist_add_entry (
+        HEV_BLACKLIST_ENTRY_DOMAIN, NULL, 0, domain, "Smart proxy", HEV_BLACKLIST_SOURCE_AUTO, 5, ttl_seconds);
+}
+
+/* Enhanced blacklist add function (internal/test use only) */
 const char *
 hev_filter_blacklist_add_entry (HevBlacklistEntryType type,
                                 const ip_addr_t *ip_addr, int port,
@@ -1965,8 +1980,7 @@ void
 hev_filter_blacklist_add (const ip_addr_t *addr)
 {
     if (addr) {
-        hev_filter_blacklist_add_ip (addr, "Legacy API",
-                                     HEV_BLACKLIST_SOURCE_MANUAL, 0);
+        hev_filter_blacklist_add_ip (addr);
     }
 }
 

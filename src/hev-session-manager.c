@@ -1210,9 +1210,10 @@ run_smart_proxy_task (void *data)
 
         LOG_W (
             "%p session: Smart proxy TCP handshake FAILED to %s:%d after %ld ms, "
-            "fallback to SOCKS5 and BLACKLIST",
+            "fallback to SOCKS5 (will blacklist if proxy succeeds)",
             self, dst_ip, pcb->local_port, connect_duration_ms);
 
+        gfw_detected = 1; /* Mark direct connection as failed */
         hev_task_del_fd (task, fd);
         close (fd);
         goto fallback_socks5;
@@ -1309,16 +1310,8 @@ run_smart_proxy_task (void *data)
                 /* ❌ 超时无数据(严格按照 timeout-ms 判断) */
                 LOG_W ("%p session: ❌ Smart proxy TIMEOUT for %s:%d "
                        "(handshake OK but NO valid data received in %d ms), "
-                       "fallback to SOCKS5 and BLACKLIST",
+                       "fallback to SOCKS5 (will blacklist if proxy succeeds)",
                        self, dst_ip, pcb->local_port, timeout);
-                /* ⭐ Prefer hostname for blacklist */
-                if (detected_hostname[0]) {
-                    hev_filter_blacklist_add_entry (
-                        HEV_BLACKLIST_ENTRY_DOMAIN, NULL, 0, detected_hostname,
-                        "Smart proxy timeout", HEV_BLACKLIST_SOURCE_AUTO, 5, 0);
-                } else {
-                    hev_filter_blacklist_add (&pcb->local_ip);
-                }
                 gfw_detected = 1;
                 break;
             }
@@ -1419,6 +1412,18 @@ fallback_socks5:
 
     LOG_I ("%p session: SOCKS5 proxy session ended %s:%d -> %s:%d", self,
            src_ip, pcb->remote_port, dst_ip, pcb->local_port);
+
+    /* ⭐ Smart-proxy logic: Only blacklist if direct FAILED and proxy SUCCEEDED
+     * This indicates true GFW blocking (direct blocked but proxy works) */
+    if (gfw_detected) {
+        LOG_I ("%p session: ✅ Direct failed but proxy succeeded - adding to blacklist",
+               self);
+        if (detected_hostname[0]) {
+            hev_filter_blacklist_add_domain (detected_hostname);
+        } else {
+            hev_filter_blacklist_add (&pcb->local_ip);
+        }
+    }
 
 exit_cleanup: // Added exit_cleanup label
     hev_socks5_session_terminate (s);

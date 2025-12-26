@@ -362,22 +362,29 @@ typedef HevBlacklistEntry HevBlacklistedIP;
 /**
  * hev_filter_blacklist_add_ip:
  * @addr: IP address to blacklist
- * @reason: 添加原因（可选）
- * @source: 来源类型
- * @ttl_seconds: 生存时间（秒，0表示使用默认值）
  *
- * Add an IP address to the blacklist with detailed information.
- * This will automatically expire old entries.
+ * Add an IP address to the dynamic blacklist.
+ * Uses configured expiry time (blocked-ip-expiry-minutes).
+ * Entries automatically expire after the configured time.
  *
  * Returns: 新增条目的唯一标识符，失败返回NULL
  */
-const char *hev_filter_blacklist_add_ip (const ip_addr_t *addr,
-                                         const char *reason,
-                                         HevBlacklistSource source,
-                                         int ttl_seconds);
+const char *hev_filter_blacklist_add_ip (const ip_addr_t *addr);
 
 /**
- * hev_filter_blacklist_add_entry:
+ * hev_filter_blacklist_add_domain:
+ * @domain: Domain name to blacklist
+ *
+ * Add a domain name to the dynamic blacklist.
+ * Uses configured expiry time (blocked-ip-expiry-minutes).
+ * Entries automatically expire after the configured time.
+ *
+ * Returns: 新增条目的唯一标识符，失败返回NULL
+ */
+const char *hev_filter_blacklist_add_domain (const char *domain);
+
+/**
+ * hev_filter_blacklist_add_entry: (Internal use only)
  * @type: 条目类型
  * @ip_addr: IP地址（可选，对于IP类型必须提供）
  * @port: 端口（可选，对于端口类型必须提供）
