@@ -7,7 +7,10 @@
  ============================================================================
  */
 
-#define _BSD_SOURCE
+#ifndef _DEFAULT_SOURCE
+#define _DEFAULT_SOURCE
+#endif
+#define __BSD_VISIBLE 1
 #include <sys/types.h>
 #include <stdio.h>
 #include <stdlib.h>
