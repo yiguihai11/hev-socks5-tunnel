@@ -123,36 +123,6 @@ memmem_compat (const void *haystack, size_t haystacklen, const void *needle,
 #endif
 
 /* ============================================================================
-   GFW异步诊断数据结构
-   ============================================================================ */
-
-typedef enum
-{
-    GFW_BLOCK_REASON_HANDSHAKE_FAILED = 0, // 协议层面问题
-    GFW_BLOCK_REASON_IP_BLOCKED, // IP被封锁
-    GFW_BLOCK_REASON_MAX
-} GFWBlockReason;
-
-typedef enum
-{
-    GFW_DETECTION_HTTP = 0,
-    GFW_DETECTION_TLS_SNI,
-    GFW_DETECTION_UNKNOWN
-} GFWDetectionType;
-
-typedef struct _GFWDiagnosisTaskData
-{
-    char dst_ip[INET6_ADDRSTRLEN];
-    uint16_t blocked_port;
-    char connect_hostname[256];
-    struct tcp_pcb *pcb;
-    HevSocks5SessionTCP *session;
-    GFWDetectionType detection_type;
-    time_t connect_duration_ms;
-    HevTask *original_task;
-} GFWDiagnosisTaskData;
-
-/* ============================================================================
    空闲超时检查机制
    ============================================================================ */
 
@@ -181,13 +151,6 @@ static int process_protocol_parsing (HevSocks5SessionTCP *self,
                                      size_t hostname_len,
                                      const char *connection_type,
                                      HevACLAction *acl_action_out);
-
-/* GFW异步诊断函数声明 */
-static void run_gfw_diagnosis_task (void *data);
-static GFWBlockReason diagnose_gfw_blocking_type_async (const char *dst_ip,
-                                                        uint16_t blocked_port);
-static int async_ping_test (const char *dst_ip);
-static int async_tcping_test (const char *dst_ip, uint16_t port);
 
 /* ============================================================================
    High-Precision Time Functions
@@ -385,13 +348,24 @@ run_domain_first_task (void *data)
 
     case HEV_ACL_ACTION_DEFAULT:
     default:
-        LOG_I ("%p session: Domain-first ACL DEFAULT → SOCKS5 proxy to %s:%d",
-               self, dst_ip, pcb->local_port);
-        /* 清理当前 session，启动 SOCKS5 代理 */
-        hev_socks5_tunnel_delete_session (
-            hev_socks5_session_get_node (HEV_SOCKS5_SESSION (self)));
-        hev_object_unref (HEV_OBJECT (self));
-        hev_session_manager_start_socks5_tcp (pcb);
+        /* ACL returned DEFAULT, check chnroutes for final decision */
+        if (hev_filter_is_domestic (&pcb->local_ip)) {
+            LOG_I ("%p session: Domain-first ACL DEFAULT + Domestic IP → Direct connect to %s:%d",
+                   self, dst_ip, pcb->local_port);
+            /* 清理当前 session，启动直接连接 */
+            hev_socks5_tunnel_delete_session (
+                hev_socks5_session_get_node (HEV_SOCKS5_SESSION (self)));
+            hev_object_unref (HEV_OBJECT (self));
+            hev_session_manager_start_direct_tcp (pcb);
+        } else {
+            LOG_I ("%p session: Domain-first ACL DEFAULT + Foreign IP → SOCKS5 proxy to %s:%d",
+                   self, dst_ip, pcb->local_port);
+            /* 清理当前 session，启动 SOCKS5 代理 */
+            hev_socks5_tunnel_delete_session (
+                hev_socks5_session_get_node (HEV_SOCKS5_SESSION (self)));
+            hev_object_unref (HEV_OBJECT (self));
+            hev_session_manager_start_socks5_tcp (pcb);
+        }
         break;
     }
 
@@ -1236,47 +1210,8 @@ run_smart_proxy_task (void *data)
 
         LOG_W (
             "%p session: Smart proxy TCP handshake FAILED to %s:%d after %ld ms, "
-            "fallback to SOCKS5 and BLACKLIST (likely GFW blocking)",
+            "fallback to SOCKS5 and BLACKLIST",
             self, dst_ip, pcb->local_port, connect_duration_ms);
-
-        /* 启动异步GFW诊断任务 */
-        LOG_W (
-            "%p session: TCP连接失败，启动异步GFW诊断 %s:%d (连接耗时: %ld ms)",
-            self, dst_ip, pcb->local_port, connect_duration_ms);
-
-        /* 创建诊断任务数据 */
-        GFWDiagnosisTaskData *diag_data =
-            hev_malloc (sizeof (GFWDiagnosisTaskData));
-        if (diag_data) {
-            strncpy (diag_data->dst_ip, dst_ip, sizeof (diag_data->dst_ip) - 1);
-            diag_data->dst_ip[sizeof (diag_data->dst_ip) - 1] = '\0';
-            diag_data->blocked_port = pcb->local_port;
-            strncpy (diag_data->connect_hostname, http_hostname,
-                     sizeof (diag_data->connect_hostname) - 1);
-            diag_data
-                ->connect_hostname[sizeof (diag_data->connect_hostname) - 1] =
-                '\0';
-            diag_data->pcb = pcb;
-            diag_data->session = self;
-            diag_data->detection_type = (pcb->local_port == 443) ?
-                                            GFW_DETECTION_TLS_SNI :
-                                            GFW_DETECTION_HTTP;
-            diag_data->connect_duration_ms = connect_duration_ms;
-            diag_data->original_task = task;
-
-            /* 创建并启动异步诊断任务 */
-            int stack_size = hev_config_get_misc_task_stack_size ();
-            HevTask *diag_task = hev_task_new (stack_size);
-            if (diag_task) {
-                hev_task_run (diag_task, run_gfw_diagnosis_task, diag_data);
-                LOG_D ("%p session: 异步GFW诊断任务已启动", self);
-            } else {
-                LOG_E ("%p session: 无法创建异步GFW诊断任务", self);
-                hev_free (diag_data);
-            }
-        } else {
-            LOG_E ("%p session: 无法分配异步GFW诊断数据", self);
-        }
 
         hev_task_del_fd (task, fd);
         close (fd);
@@ -1969,183 +1904,4 @@ hev_session_manager_start_direct_udp (struct udp_pcb *pcb,
 
     hev_socks5_tunnel_insert_session (&session->node);
     hev_task_run (task, run_direct_udp_task, session);
-}
-
-/* ============================================================================
-   GFW异步诊断实现
-   ============================================================================ */
-
-static void
-run_gfw_diagnosis_task (void *data)
-{
-    GFWDiagnosisTaskData *diag_data = data;
-    GFWBlockReason block_reason;
-
-    LOG_I ("%p session: GFW异步诊断任务开始 %s:%d", diag_data->session,
-           diag_data->dst_ip, diag_data->blocked_port);
-
-    /* 执行异步诊断 */
-    block_reason = diagnose_gfw_blocking_type_async (diag_data->dst_ip,
-                                                     diag_data->blocked_port);
-
-    LOG_I ("%p session: GFW异步诊断完成 %s:%d -> GFW封锁类型: %d",
-           diag_data->session, diag_data->dst_ip, diag_data->blocked_port,
-           block_reason);
-
-    /* 清理数据 */
-    hev_free (diag_data);
-}
-
-static GFWBlockReason
-diagnose_gfw_blocking_type_async (const char *dst_ip, uint16_t blocked_port)
-{
-    int ping_reachable = 0;
-    int tcping_reachable = 0;
-    ip_addr_t black_ip;
-
-    LOG_D ("GFW异步诊断：检测IP %s 端口 %d 的封锁类型", dst_ip, blocked_port);
-
-    /* 第一步：异步ping测试 */
-    LOG_D ("GFW异步诊断：异步ping测试IP %s", dst_ip);
-    ping_reachable = async_ping_test (dst_ip);
-
-    if (ping_reachable) {
-        LOG_D ("GFW异步诊断：IP %s ping可达", dst_ip);
-    } else {
-        LOG_D ("GFW异步诊断：IP %s ping不可达", dst_ip);
-    }
-
-    /* 第二步：异步tcping测试（三次握手测试） */
-    LOG_D ("GFW异步诊断：异步tcping测试IP %s 端口 %d", dst_ip, blocked_port);
-    tcping_reachable = async_tcping_test (dst_ip, blocked_port);
-
-    if (tcping_reachable) {
-        LOG_D ("GFW异步诊断：IP %s 端口 %d TCP握手成功", dst_ip, blocked_port);
-    } else {
-        LOG_D ("GFW异步诊断：IP %s 端口 %d TCP握手失败", dst_ip, blocked_port);
-    }
-
-    /* 第三步：根据测试结果判断GFW封锁类型 */
-    if (ping_reachable || tcping_reachable) {
-        /* ping或tcping至少有一个通，说明IP可达，返回协议层面问题 */
-        LOG_I ("GFW异步诊断：IP %s 可达，判断为协议层面问题", dst_ip);
-        return GFW_BLOCK_REASON_HANDSHAKE_FAILED;
-    } else {
-        /* ping和tcping都不可达，判断为IP被封锁 */
-        LOG_W ("GFW异步诊断：IP %s ping和TCP都不可达，判断为IP被封锁", dst_ip);
-
-        /* 将字符串IP转换为ip_addr_t格式 */
-        if (!ipaddr_aton (dst_ip, &black_ip)) {
-            LOG_E ("GFW异步诊断：IP地址转换失败 %s", dst_ip);
-        } else {
-            /* 在确认IP被封锁时添加到黑名单 */
-            hev_filter_blacklist_add (&black_ip);
-            LOG_W ("GFW异步诊断：已将IP %s 添加到黑名单", dst_ip);
-        }
-
-        return GFW_BLOCK_REASON_IP_BLOCKED;
-    }
-}
-
-static int
-async_ping_test (const char *dst_ip)
-{
-    char ping_cmd[256];
-    int result;
-
-    /* 创建ping命令 - 支持IPv6地址检测 */
-    if (strchr (dst_ip, ':') != NULL) {
-        /* IPv6地址使用ping6命令 */
-        snprintf (ping_cmd, sizeof (ping_cmd),
-                  "ping6 -i 1 -c 2 -W 2 %s >/dev/null 2>&1", dst_ip);
-    } else {
-        /* IPv4地址使用ping命令 */
-        snprintf (ping_cmd, sizeof (ping_cmd),
-                  "ping -i 1 -c 2 -W 2 %s >/dev/null 2>&1", dst_ip);
-    }
-
-    /* 执行ping命令 */
-    result = system (ping_cmd);
-
-    /* 让出CPU，避免阻塞 */
-    hev_task_yield (HEV_TASK_YIELD);
-
-    return (result == 0);
-}
-
-static int
-async_tcping_test (const char *dst_ip, uint16_t port)
-{
-    int fd;
-    int result = 0;
-    struct sockaddr_storage addr;
-    socklen_t addr_len;
-
-    /* 创建socket - 支持IPv6 */
-    if (strchr (dst_ip, ':') != NULL) {
-        /* IPv6地址 */
-        fd = socket (AF_INET6, SOCK_STREAM, 0);
-        struct sockaddr_in6 *addr6 = (struct sockaddr_in6 *)&addr;
-        memset (addr6, 0, sizeof (struct sockaddr_in6));
-        addr6->sin6_family = AF_INET6;
-        addr6->sin6_port = htons (port);
-        inet_pton (AF_INET6, dst_ip, &addr6->sin6_addr);
-        addr_len = sizeof (struct sockaddr_in6);
-    } else {
-        /* IPv4地址 */
-        fd = socket (AF_INET, SOCK_STREAM, 0);
-        struct sockaddr_in *addr4 = (struct sockaddr_in *)&addr;
-        memset (addr4, 0, sizeof (struct sockaddr_in));
-        addr4->sin_family = AF_INET;
-        addr4->sin_port = htons (port);
-        inet_pton (AF_INET, dst_ip, &addr4->sin_addr);
-        addr_len = sizeof (struct sockaddr_in);
-    }
-
-    if (fd < 0) {
-        LOG_E ("GFW异步诊断：创建socket失败: %s", strerror (errno));
-        return 0;
-    }
-
-    /* 设置非阻塞模式 */
-    int flags = fcntl (fd, F_GETFL, 0);
-    fcntl (fd, F_SETFL, flags | O_NONBLOCK);
-
-    /* 尝试连接 */
-    result = connect (fd, (struct sockaddr *)&addr, addr_len);
-
-    if (result < 0 && errno == EINPROGRESS) {
-        /* 非阻塞连接中，使用poll等待 */
-        struct pollfd pfd;
-        pfd.fd = fd;
-        pfd.events = POLLOUT;
-
-        /* 等待连接完成，最多3秒 */
-        hev_task_yield (HEV_TASK_YIELD);
-        result = poll (&pfd, 1, 3000);
-
-        if (result > 0 && (pfd.revents & POLLOUT)) {
-            int error = 0;
-            socklen_t len = sizeof (error);
-            if (getsockopt (fd, SOL_SOCKET, SO_ERROR, &error, &len) == 0 &&
-                error == 0) {
-                result = 1; /* 连接成功 */
-            } else {
-                result = 0; /* 连接失败 */
-            }
-        } else {
-            result = 0; /* 超时或错误 */
-        }
-    } else if (result == 0) {
-        result = 1; /* 连接成功 */
-    } else {
-        result = 0; /* 连接失败 */
-    }
-
-    close (fd);
-
-    /* 让出CPU */
-    hev_task_yield (HEV_TASK_YIELD);
-
-    return result;
 }

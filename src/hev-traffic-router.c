@@ -143,7 +143,7 @@ hev_traffic_router_handle_tcp (struct tcp_pcb *pcb)
     LOG_D ("%p router: TCP routing decision for %s:%d -> %s:%d", pcb, src_ip,
            pcb->remote_port, dst_ip, pcb->local_port);
 
-    // --- IP-based ACL check ---
+    // --- Priority 1: ACL IP block check ---
     if (hev_filter_is_blocked_ip (local_ip)) {
         LOG_W (
             "%p router: TCP connection blocked to IP: %s:%d (from %s:%d) by ACL. Deferring termination.",
@@ -157,35 +157,36 @@ hev_traffic_router_handle_tcp (struct tcp_pcb *pcb)
     /* Check if this is a probe port (for domain-first routing) */
     is_probe_port = hev_config_is_smart_proxy_probe_port (pcb->local_port);
 
-    /* 0. For probe ports: use domain-first routing (parse SNI/Host first, then decide) */
+    // --- Priority 2: Domain-first routing for probe ports ---
+    // Domain-first sends fake reply to quickly get hostname, then decides routing
     if (is_probe_port) {
         LOG_I (
-            "%p router: TCP routing %s:%d -> %s:%d via DOMAIN-FIRST (probe port, will parse hostname)",
+            "%p router: TCP routing %s:%d -> %s:%d via DOMAIN-FIRST (probe port, quick hostname detection)",
             pcb, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
         hev_session_manager_start_domain_first_tcp (pcb);
         return 1;
     }
 
-    /* 1. Domestic IPs are connected directly. */
+    // --- Priority 3: chnroutes (domestic IP check) for non-probe ports ---
     if (hev_filter_is_domestic (local_ip)) {
-        LOG_I ("%p router: TCP routing %s:%d -> %s:%d via DIRECT (domestic IP)",
+        LOG_I ("%p router: TCP routing %s:%d -> %s:%d via DIRECT (domestic IP, non-probe port)",
                pcb, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
         hev_session_manager_start_direct_tcp (pcb);
         return 1;
     }
 
-    /* 2. For non-domestic IPs, attempt smart proxy if enabled and not blacklisted. */
+    // --- Priority 4: Smart proxy for foreign IPs ---
     if (hev_config_get_smart_proxy_timeout_ms () > 0 &&
         hev_config_get_smart_proxy_blocked_ip_expiry_minutes () > 0 &&
         !hev_filter_blacklist_check (local_ip)) {
         LOG_I (
-            "%p router: TCP routing %s:%d -> %s:%d via SMART_PROXY (trying direct first)",
+            "%p router: TCP routing %s:%d -> %s:%d via SMART_PROXY (foreign IP, non-probe port, trying direct first)",
             pcb, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
         hev_session_manager_start_smart_proxy (pcb);
         return 1;
     }
 
-    /* 3. Fallback to SOCKS5 for all other cases (blacklisted, smart proxy disabled). */
+    // --- Priority 5: Fallback to SOCKS5 ---
     if (hev_filter_blacklist_check (local_ip)) {
         LOG_I (
             "%p router: TCP routing %s:%d -> %s:%d via SOCKS5 (IP is blacklisted)",
