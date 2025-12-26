@@ -53,8 +53,10 @@ allow domain cdn.example.com
 allow domain api.internal.com
 
 # 允许特定端口直连
-allow port 80
-allow port 443
+# 注意：全局允许端口 80/443 会导致所有流量直连，包括无法直连的国外 IP
+# 如需特定端口直连，建议使用 allow domain 或 allow cidr 规则
+# allow port 80
+# allow port 443
 
 # 允许特定 IP 范围直连
 allow cidr 192.168.100.0/24
