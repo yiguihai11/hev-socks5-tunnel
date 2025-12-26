@@ -35,6 +35,17 @@ void hev_memory_pool_set_udp_size (int size);
 void hev_session_manager_init (void);
 void hev_session_manager_fini (void);
 
+// Forward declarations for config functions
+int hev_config_get_misc_task_stack_size (void);
+int hev_config_get_misc_tcp_buffer_size (void);
+int hev_config_get_misc_max_session_count (void);
+int hev_config_get_misc_connect_timeout (void);
+int hev_config_get_misc_read_write_timeout (void);
+const char *hev_config_get_tunnel_name (void);
+unsigned int hev_config_get_tunnel_mtu (void);
+const char *hev_config_get_acl_file_path (void);
+const char *hev_config_get_chnroutes_file_path (void);
+
 #define ANSI_COLOR_RED "\x1b[31m"
 #define ANSI_COLOR_GREEN "\x1b[32m"
 #define ANSI_COLOR_RESET "\x1b[0m"
@@ -675,6 +686,104 @@ run_session_manager_tests (void)
     TEST_ASSERT (lifecycle_stages >= 3);
 }
 
+static void
+run_config_tests (void)
+{
+    printf ("--- Running tests for config ---\n");
+
+    // Test: Configuration values from test config
+    printf ("\nTesting configuration values...\n");
+
+    int task_stack_size = hev_config_get_misc_task_stack_size ();
+    int tcp_buffer_size = hev_config_get_misc_tcp_buffer_size ();
+    int max_session_count = hev_config_get_misc_max_session_count ();
+    int connect_timeout = hev_config_get_misc_connect_timeout ();
+    int rw_timeout = hev_config_get_misc_read_write_timeout ();
+
+    TEST_ASSERT (task_stack_size > 0);
+    TEST_ASSERT (tcp_buffer_size > 0);
+    TEST_ASSERT (max_session_count >= 0); // 0 means use default
+    TEST_ASSERT (connect_timeout > 0);
+    TEST_ASSERT (rw_timeout > 0);
+
+    printf ("  Task stack size: %d bytes\n", task_stack_size);
+    printf ("  TCP buffer size: %d bytes\n", tcp_buffer_size);
+    printf ("  Max session count: %d%s\n", max_session_count,
+           max_session_count == 0 ? " (default)" : "");
+    printf ("  Connect timeout: %d ms\n", connect_timeout);
+    printf ("  Read/Write timeout: %d ms\n", rw_timeout);
+
+    // Test: Tunnel configuration
+    printf ("\nTesting tunnel configuration...\n");
+
+    const char *tunnel_name = hev_config_get_tunnel_name ();
+    unsigned int tunnel_mtu = hev_config_get_tunnel_mtu ();
+
+    printf ("  Tunnel name: %s\n", tunnel_name ? tunnel_name : "(default)");
+    printf ("  Tunnel MTU: %u bytes\n", tunnel_mtu);
+
+    TEST_ASSERT (tunnel_mtu > 0);
+
+    // Test: Smart-proxy configuration
+    printf ("\nTesting smart-proxy configuration...\n");
+
+    int smart_proxy_timeout = hev_config_get_smart_proxy_timeout_ms ();
+    int smart_proxy_expiry = hev_config_get_smart_proxy_blocked_ip_expiry_minutes ();
+
+    TEST_ASSERT (smart_proxy_timeout > 0);
+    TEST_ASSERT (smart_proxy_expiry > 0);
+
+    printf ("  Smart-proxy timeout: %d ms\n", smart_proxy_timeout);
+    printf ("  Smart-proxy expiry: %d minutes\n", smart_proxy_expiry);
+
+    // Test: Probe ports configuration
+    printf ("\nTesting probe ports configuration...\n");
+
+    int is_port_80 = hev_config_is_smart_proxy_probe_port (80);
+    int is_port_443 = hev_config_is_smart_proxy_probe_port (443);
+    int is_port_8080 = hev_config_is_smart_proxy_probe_port (8080);
+    int is_port_8443 = hev_config_is_smart_proxy_probe_port (8443);
+
+    TEST_ASSERT (is_port_80 == 1);
+    TEST_ASSERT (is_port_443 == 1);
+    TEST_ASSERT (is_port_8080 == 1);
+    TEST_ASSERT (is_port_8443 == 1);
+
+    printf ("  Probe ports configured: 80=%s, 443=%s, 8080=%s, 8443=%s\n",
+           is_port_80 ? "YES" : "NO", is_port_443 ? "YES" : "NO",
+           is_port_8080 ? "YES" : "NO", is_port_8443 ? "YES" : "NO");
+
+    // Test: Configuration value ranges
+    printf ("\nTesting configuration value ranges...\n");
+
+    // Verify reasonable ranges
+    TEST_ASSERT (task_stack_size >= 8192 && task_stack_size <= 1048576); // 8KB - 1MB
+    TEST_ASSERT (tcp_buffer_size >= 4096 && tcp_buffer_size <= 65536); // 4KB - 64KB
+    TEST_ASSERT (max_session_count >= 0 && max_session_count <= 10000); // 0 means default
+    TEST_ASSERT (connect_timeout >= 1000 && connect_timeout <= 60000); // 1s - 60s
+    TEST_ASSERT (tunnel_mtu >= 1280 && tunnel_mtu <= 9000); // 1280 - 9000 bytes
+
+    printf ("  All configuration values within valid ranges\n");
+
+    // Test: DNS forwarder configuration
+    printf ("\nTesting DNS forwarder configuration...\n");
+
+    const char *dns_vip4 = hev_config_get_dns_forwarder_virtual_ip4 ();
+    const char *dns_target4 = hev_config_get_dns_forwarder_target_ip4 ();
+
+    printf ("  DNS virtual IP4: %s\n", dns_vip4 ? dns_vip4 : "(not configured)");
+    printf ("  DNS target IP4: %s\n", dns_target4 ? dns_target4 : "(not configured)");
+
+    // Test: ACL and chnroutes configuration
+    printf ("\nTesting ACL and chnroutes configuration...\n");
+
+    const char *acl_file = hev_config_get_acl_file_path ();
+    const char *chnroutes_file = hev_config_get_chnroutes_file_path ();
+
+    printf ("  ACL file: %s\n", acl_file ? acl_file : "(not configured)");
+    printf ("  chnroutes file: %s\n", chnroutes_file ? chnroutes_file : "(not configured)");
+}
+
 int
 hev_test_run (void)
 {
@@ -692,6 +801,7 @@ hev_test_run (void)
     run_traffic_router_tests ();
     run_performance_optimizer_tests ();
     run_session_manager_tests ();
+    run_config_tests ();
 
     printf ("=========================================\n");
     printf ("Test Summary: %d/%d passed.\n", passed_tests, total_tests);
