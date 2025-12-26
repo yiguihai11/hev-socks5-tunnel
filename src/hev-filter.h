@@ -471,17 +471,6 @@ void hev_filter_blacklist_get_stats (size_t *total_entries,
                                      uint64_t *total_hits,
                                      uint64_t *total_blocked);
 
-/**
- * hev_filter_blacklist_export:
- * @buffer: 输出缓冲区
- * @buffer_size: 缓冲区大小
- *
- * 导出黑名单条目为JSON格式字符串。
- *
- * Returns: 实际写入的字节数，缓冲区不足返回-1
- */
-int hev_filter_blacklist_export (char *buffer, size_t buffer_size);
-
 /* 兼容性函数 - 保持向后兼容 */
 void hev_filter_blacklist_add (const ip_addr_t *addr);
 int hev_filter_blacklist_check (const ip_addr_t *addr);

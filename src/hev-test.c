@@ -162,15 +162,6 @@ run_blacklist_tests (void)
     TEST_ASSERT (total_hits >= 2);
     TEST_ASSERT (total_blocked >= 1024);
 
-    // Test: JSON export
-    printf ("\nTesting JSON export...\n");
-    char json_buffer[2048];
-    int export_result =
-        hev_filter_blacklist_export (json_buffer, sizeof (json_buffer));
-    TEST_ASSERT (export_result > 0);
-    TEST_ASSERT (strstr (json_buffer, "\"blacklist\"") != NULL);
-    TEST_ASSERT (strstr (json_buffer, "\"entries\"") != NULL);
-
     // Test: Entry removal
     printf ("\nTesting entry removal...\n");
     int remove_result = hev_filter_blacklist_remove_entry (entry_id);
