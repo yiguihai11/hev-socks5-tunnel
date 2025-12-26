@@ -1,17 +1,71 @@
+# ============================================================================
 # ACL (Access Control List) for hev-socks5-tunnel
-# Lines starting with '#' are comments.
-# Each line can be an IP address (IPv4 or IPv6) or a hostname/SNI.
-# Connections matching these entries will be blocked.
+# ============================================================================
+#
+# 新格式：[allow|block] [ip|cidr|port|domain] [value]
+#
+# Actions:
+#   - allow: 允许直连
+#   - block: 阻止连接
+#
+# Types:
+#   - ip: 单个 IP 地址
+#   - cidr: CIDR 范围 (如 192.168.1.0/24)
+#   - port: 端口号
+#   - domain: 域名 (支持精确匹配、*.example.com、.example.com)
+#
+# 旧格式（向后兼容）: 直接写 IP 或域名，默认为 block
+# ============================================================================
+# 示例阻止规则
+# ============================================================================
 
-# Example IPv4 addresses to block
-192.168.1.100
-10.0.0.5
+# 阻止特定 IP 地址
+block ip 192.168.1.100
+block ip 10.0.0.5
 
-# Example IPv6 addresses to block
-::1
-2001:db8::1
+# 阻止 IPv6 地址
+block ip ::1
+block ip 2001:db8::1
 
-# Example hostnames/SNI to block (case-insensitive)
-example.com
-www.blocked-site.org
-malicious.domain
+# 阻止 CIDR 范围
+block cidr 192.168.0.0/16
+block cidr 10.0.0.0/8
+
+# 阻止特定端口（谨慎使用）
+# block port 25      # SMTP
+# block port 135     # Windows RPC
+
+# 阻止域名（支持精确匹配）
+block domain example.com
+block domain www.blocked-site.org
+block domain malicious.domain
+
+# 阻止域名（通配符匹配 *.example.com）
+block domain *.tracker.example.com
+
+# 阻止域名（后缀匹配 .example.com）
+block domain .ads.example.com
+
+# ============================================================================
+# 示例允许规则
+# ============================================================================
+
+# 允许特定域名直连
+allow domain cdn.example.com
+allow domain api.internal.com
+
+# 允许特定端口直连
+allow port 80
+allow port 443
+
+# 允许特定 IP 范围直连
+allow cidr 192.168.100.0/24
+
+# ============================================================================
+# 旧格式示例（向后兼容，默认为 block）
+# ============================================================================
+# 以下规则仍然有效，会被自动识别为 block
+#
+# 192.168.1.200
+# 10.1.1.1
+# another-blocked-domain.com
