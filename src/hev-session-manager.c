@@ -312,7 +312,8 @@ run_domain_first_task (void *data)
      * Combine IP/Port (Stage 1) and Domain (Stage 2) ACL results to determine
      * the final routing action.
      */
-    typedef enum {
+    typedef enum
+    {
         NEXT_ACTION_DIRECT,
         NEXT_ACTION_SOCKS5,
         NEXT_ACTION_BLOCK,
@@ -373,9 +374,11 @@ run_domain_first_task (void *data)
         struct pbuf *saved_queue = self->queue;
 
         if (saved_queue) {
-            LOG_D ("%p session: Preserving %d bytes of queued data for next session", self,
-                   saved_queue->tot_len);
-            self->queue = NULL; /* Detach queue to prevent it from being freed */
+            LOG_D (
+                "%p session: Preserving %d bytes of queued data for next session",
+                self, saved_queue->tot_len);
+            self->queue =
+                NULL; /* Detach queue to prevent it from being freed */
         }
 
         /* Detach PCB to prevent it from being aborted */
