@@ -384,28 +384,6 @@ const char *hev_filter_blacklist_add_ip (const ip_addr_t *addr);
 const char *hev_filter_blacklist_add_domain (const char *domain);
 
 /**
- * hev_filter_blacklist_add_entry: (Internal use only)
- * @type: 条目类型
- * @ip_addr: IP地址（可选，对于IP类型必须提供）
- * @port: 端口（可选，对于端口类型必须提供）
- * @hostname: 主机名/SNI（可选，对于SNI/域名类型必须提供）
- * @reason: 添加原因
- * @source: 来源类型
- * @severity: 严重级别 (1-10)
- * @ttl_seconds: 生存时间（秒，0表示使用默认值）
- *
- * Add a detailed entry to the blacklist.
- *
- * Returns: 新增条目的唯一标识符，失败返回NULL
- */
-const char *hev_filter_blacklist_add_entry (HevBlacklistEntryType type,
-                                            const ip_addr_t *ip_addr, int port,
-                                            const char *hostname,
-                                            const char *reason,
-                                            HevBlacklistSource source,
-                                            int severity, int ttl_seconds);
-
-/**
  * hev_filter_blacklist_check_ip:
  * @addr: IP address to check
  *

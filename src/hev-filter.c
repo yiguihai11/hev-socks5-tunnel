@@ -373,26 +373,6 @@ blacklist_hash_multi (HevBlacklistEntryType type, const ip_addr_t *ip_addr,
     return hash & (BLACKLIST_HASH_SIZE - 1);
 }
 
-/* 获取来源字符串 */
-static const char *
-source_to_string (HevBlacklistSource source)
-{
-    switch (source) {
-    case HEV_BLACKLIST_SOURCE_MANUAL:
-        return "Manual";
-    case HEV_BLACKLIST_SOURCE_ACL:
-        return "ACL";
-    case HEV_BLACKLIST_SOURCE_CHNROUTES:
-        return "Chnroutes";
-    case HEV_BLACKLIST_SOURCE_AUTO:
-        return "Auto";
-    case HEV_BLACKLIST_SOURCE_API:
-        return "API";
-    default:
-        return "Unknown";
-    }
-}
-
 /* 获取类型字符串 */
 static const char *
 type_to_string (HevBlacklistEntryType type)
@@ -1417,47 +1397,23 @@ hev_filter_reset_stats (void)
 
 #include "hev-config.h"
 
-/* Simplified blacklist add function for IP addresses */
-const char *
-hev_filter_blacklist_add_ip (const ip_addr_t *addr)
-{
-    int ttl_seconds = hev_config_get_smart_proxy_blocked_ip_expiry_minutes () * 60;
-    if (ttl_seconds <= 0) {
-        ttl_seconds = 3600; /* Default 1 hour */
-    }
-    return hev_filter_blacklist_add_entry (
-        HEV_BLACKLIST_ENTRY_IP, addr, 0, NULL, "Smart proxy", HEV_BLACKLIST_SOURCE_AUTO, 5, ttl_seconds);
-}
-
-/* Simplified blacklist add function for domain names */
-const char *
-hev_filter_blacklist_add_domain (const char *domain)
-{
-    int ttl_seconds = hev_config_get_smart_proxy_blocked_ip_expiry_minutes () * 60;
-    if (ttl_seconds <= 0) {
-        ttl_seconds = 3600; /* Default 1 hour */
-    }
-    return hev_filter_blacklist_add_entry (
-        HEV_BLACKLIST_ENTRY_DOMAIN, NULL, 0, domain, "Smart proxy", HEV_BLACKLIST_SOURCE_AUTO, 5, ttl_seconds);
-}
-
-/* Enhanced blacklist add function (internal/test use only) */
-const char *
-hev_filter_blacklist_add_entry (HevBlacklistEntryType type,
-                                const ip_addr_t *ip_addr, int port,
-                                const char *hostname, const char *reason,
-                                HevBlacklistSource source, int severity,
-                                int ttl_seconds)
+/* Internal helper: add blacklist entry with common logic */
+static const char *
+blacklist_add_internal (HevBlacklistEntryType type,
+                       const ip_addr_t *ip_addr,
+                       const char *hostname)
 {
     HevBlacklistEntry *entry;
     unsigned int hash;
     time_t now;
     char ip_str[INET6_ADDRSTRLEN] = { 0 };
-    const char *type_str = type_to_string (type);
-    const char *source_str = source_to_string (source);
+    const char *reason = "Smart proxy";
+    const char *source_str = "Auto";
 
-    if (!reason) {
-        reason = "Unknown";
+    /* 获取配置的TTL */
+    int ttl_seconds = hev_config_get_smart_proxy_blocked_ip_expiry_minutes () * 60;
+    if (ttl_seconds <= 0) {
+        ttl_seconds = 3600; /* 默认1小时 */
     }
 
     /* 参数验证 */
@@ -1468,26 +1424,13 @@ hev_filter_blacklist_add_entry (HevBlacklistEntryType type,
     if ((type == HEV_BLACKLIST_ENTRY_SNI ||
          type == HEV_BLACKLIST_ENTRY_DOMAIN) &&
         (!hostname || strlen (hostname) == 0)) {
-        LOG_E ("filter: SNI/Domain type requires valid hostname");
+        LOG_E ("filter: Domain type requires valid hostname");
         return NULL;
-    }
-    if (type == HEV_BLACKLIST_ENTRY_PORT && port <= 0) {
-        LOG_E ("filter: Port type requires valid port number");
-        return NULL;
-    }
-
-    /* 设置默认TTL */
-    if (ttl_seconds <= 0) {
-        ttl_seconds =
-            hev_config_get_smart_proxy_blocked_ip_expiry_minutes () * 60;
-        if (ttl_seconds <= 0) {
-            ttl_seconds = 3600; /* 默认1小时 */
-        }
     }
 
     entry = hev_malloc0 (sizeof (HevBlacklistEntry));
     if (!entry) {
-        LOG_E ("filter: Failed to allocate enhanced blacklist entry");
+        LOG_E ("filter: Failed to allocate blacklist entry");
         return NULL;
     }
 
@@ -1495,12 +1438,12 @@ hev_filter_blacklist_add_entry (HevBlacklistEntryType type,
 
     /* 初始化基本字段 */
     entry->type = type;
-    entry->source = source;
+    entry->source = HEV_BLACKLIST_SOURCE_AUTO;
     entry->added_time = now;
     entry->expiry_time = now + ttl_seconds;
     entry->first_seen = now;
     entry->last_seen = now;
-    entry->severity = (severity > 0 && severity <= 10) ? severity : 5;
+    entry->severity = 5;
     entry->is_active = 1;
     entry->ttl_seconds = ttl_seconds;
     entry->auto_refresh = 0;
@@ -1509,9 +1452,6 @@ hev_filter_blacklist_add_entry (HevBlacklistEntryType type,
     if (type == HEV_BLACKLIST_ENTRY_IP && ip_addr) {
         ip_addr_copy (entry->ip_addr, *ip_addr);
         ipaddr_ntoa_r (ip_addr, ip_str, sizeof (ip_str));
-    }
-    if (type == HEV_BLACKLIST_ENTRY_PORT) {
-        entry->port = port;
     }
     if ((type == HEV_BLACKLIST_ENTRY_SNI ||
          type == HEV_BLACKLIST_ENTRY_DOMAIN) &&
@@ -1526,15 +1466,13 @@ hev_filter_blacklist_add_entry (HevBlacklistEntryType type,
 
     /* 初始化元数据 */
     safe_str_copy (entry->reason, reason, sizeof (entry->reason));
-    snprintf (entry->source_info, sizeof (entry->source_info), "%s",
-              source_str);
+    snprintf (entry->source_info, sizeof (entry->source_info), "%s", source_str);
 
     /* 生成唯一ID */
-    generate_entry_id (entry->id, sizeof (entry->id), type, ip_addr, port,
-                       hostname);
+    generate_entry_id (entry->id, sizeof (entry->id), type, ip_addr, 0, hostname);
 
     /* 计算哈希值并插入 */
-    hash = blacklist_hash_multi (type, ip_addr, port, hostname);
+    hash = blacklist_hash_multi (type, ip_addr, 0, hostname);
 
     hev_task_mutex_lock (&blacklist_mutex);
     entry->next = blacklist_table[hash];
@@ -1543,31 +1481,30 @@ hev_filter_blacklist_add_entry (HevBlacklistEntryType type,
     stats.blacklist_adds++;
     hev_task_mutex_unlock (&blacklist_mutex);
 
-    /* 记录详细日志 */
-    switch (type) {
-    case HEV_BLACKLIST_ENTRY_IP:
-        LOG_I ("filter: Added IP %s to blacklist (id=%s, reason=%s, source=%s, "
-               "ttl=%ds, severity=%d)",
-               ip_str, entry->id, reason, source_str, ttl_seconds,
-               entry->severity);
-        break;
-    case HEV_BLACKLIST_ENTRY_PORT:
-        LOG_I (
-            "filter: Added Port %d to blacklist (id=%s, reason=%s, source=%s, "
-            "ttl=%ds, severity=%d)",
-            port, entry->id, reason, source_str, ttl_seconds, entry->severity);
-        break;
-    case HEV_BLACKLIST_ENTRY_SNI:
-    case HEV_BLACKLIST_ENTRY_DOMAIN:
-        LOG_I (
-            "filter: Added %s '%s' to blacklist (id=%s, reason=%s, source=%s, "
-            "ttl=%ds, severity=%d)",
-            type_str, hostname, entry->id, reason, source_str, ttl_seconds,
-            entry->severity);
-        break;
+    /* 记录日志 */
+    if (type == HEV_BLACKLIST_ENTRY_IP) {
+        LOG_I ("filter: Added IP %s to blacklist (id=%s, ttl=%dm)",
+               ip_str, entry->id, ttl_seconds / 60);
+    } else {
+        LOG_I ("filter: Added domain '%s' to blacklist (id=%s, ttl=%dm)",
+               hostname, entry->id, ttl_seconds / 60);
     }
 
     return entry->id;
+}
+
+/* Simplified blacklist add function for IP addresses */
+const char *
+hev_filter_blacklist_add_ip (const ip_addr_t *addr)
+{
+    return blacklist_add_internal (HEV_BLACKLIST_ENTRY_IP, addr, NULL);
+}
+
+/* Simplified blacklist add function for domain names */
+const char *
+hev_filter_blacklist_add_domain (const char *domain)
+{
+    return blacklist_add_internal (HEV_BLACKLIST_ENTRY_DOMAIN, NULL, domain);
 }
 
 /* 新的IP检查函数 */

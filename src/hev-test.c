@@ -111,14 +111,12 @@ run_blacklist_tests (void)
     // Initialize filter for blacklist tests
     hev_filter_init ();
 
-    // Test: Enhanced IP blacklist with metadata
-    printf ("\nTesting enhanced IP blacklist...\n");
+    // Test: IP blacklist
+    printf ("\nTesting IP blacklist...\n");
     ip_addr_t test_ip;
     ipaddr_aton ("192.168.100.1", &test_ip);
 
-    const char *entry_id = hev_filter_blacklist_add_entry (
-        HEV_BLACKLIST_ENTRY_IP, &test_ip, 0, NULL,
-        "Test malicious activity", HEV_BLACKLIST_SOURCE_MANUAL, 5, 3600);
+    const char *entry_id = hev_filter_blacklist_add_ip (&test_ip);
 
     TEST_ASSERT (entry_id != NULL);
     TEST_ASSERT (strlen (entry_id) > 0);
@@ -131,8 +129,6 @@ run_blacklist_tests (void)
     HevBlacklistEntry *entry = hev_filter_blacklist_get_entry (entry_id);
     TEST_ASSERT (entry != NULL);
     TEST_ASSERT (entry->type == HEV_BLACKLIST_ENTRY_IP);
-    TEST_ASSERT (entry->source == HEV_BLACKLIST_SOURCE_MANUAL);
-    TEST_ASSERT (strcmp (entry->reason, "Test malicious activity") == 0);
     TEST_ASSERT (entry->hit_count == 1); // Should be incremented by check
 
     // Test: Update hit statistics
@@ -144,33 +140,9 @@ run_blacklist_tests (void)
     TEST_ASSERT (entry->hit_count == 2);
     TEST_ASSERT (entry->bytes_blocked == 1024);
 
-    // Test: Port blacklist
-    printf ("\nTesting port blacklist...\n");
-    const char *port_entry_id = hev_filter_blacklist_add_entry (
-        HEV_BLACKLIST_ENTRY_PORT, NULL, 8080, NULL, "Blocked proxy port",
-        HEV_BLACKLIST_SOURCE_AUTO, 7, 1800);
-
-    TEST_ASSERT (port_entry_id != NULL);
-    int port_blocked = hev_filter_blacklist_check_entry (
-        HEV_BLACKLIST_ENTRY_PORT, NULL, 8080, NULL);
-    TEST_ASSERT (port_blocked == 1);
-
-    // Test: SNI blacklist
-    printf ("\nTesting SNI blacklist...\n");
-    const char *sni_entry_id = hev_filter_blacklist_add_entry (
-        HEV_BLACKLIST_ENTRY_SNI, NULL, 0, "malicious.example.com",
-        "Malware domain", HEV_BLACKLIST_SOURCE_AUTO, 9, 7200);
-
-    TEST_ASSERT (sni_entry_id != NULL);
-    int sni_blocked = hev_filter_blacklist_check_entry (
-        HEV_BLACKLIST_ENTRY_SNI, NULL, 0, "malicious.example.com");
-    TEST_ASSERT (sni_blocked == 1);
-
     // Test: Domain blacklist
     printf ("\nTesting domain blacklist...\n");
-    const char *domain_entry_id = hev_filter_blacklist_add_entry (
-        HEV_BLACKLIST_ENTRY_DOMAIN, NULL, 0, "bad-site.org", "Phishing domain",
-        HEV_BLACKLIST_SOURCE_ACL, 8, 3600);
+    const char *domain_entry_id = hev_filter_blacklist_add_domain ("bad-site.org");
 
     TEST_ASSERT (domain_entry_id != NULL);
     int domain_blocked = hev_filter_blacklist_check_entry (
@@ -185,9 +157,9 @@ run_blacklist_tests (void)
     hev_filter_blacklist_get_stats (&total_entries, &active_entries,
                                     &total_hits, &total_blocked);
 
-    TEST_ASSERT (total_entries >= 4);
-    TEST_ASSERT (active_entries >= 4);
-    TEST_ASSERT (total_hits >= 4);
+    TEST_ASSERT (total_entries >= 2);
+    TEST_ASSERT (active_entries >= 2);
+    TEST_ASSERT (total_hits >= 2);
     TEST_ASSERT (total_blocked >= 1024);
 
     // Test: JSON export
@@ -230,9 +202,7 @@ run_blacklist_tests (void)
     ipaddr_aton ("10.100.50.25", &test_ip_integration);
 
     // Add to dynamic blacklist
-    const char *integration_entry_id = hev_filter_blacklist_add_entry (
-        HEV_BLACKLIST_ENTRY_IP, &test_ip_integration, 0, NULL,
-        "Integration test IP", HEV_BLACKLIST_SOURCE_MANUAL, 5, 3600);
+    const char *integration_entry_id = hev_filter_blacklist_add_ip (&test_ip_integration);
     TEST_ASSERT (integration_entry_id != NULL);
 
     // Test integrated IP check (should NOT be blocked by ACL rules)
@@ -241,9 +211,7 @@ run_blacklist_tests (void)
 
     // Test: Hostname filtering integration
     const char *integration_hostname = "blocked-integration.com";
-    const char *host_entry_id = hev_filter_blacklist_add_entry (
-        HEV_BLACKLIST_ENTRY_DOMAIN, NULL, 0, integration_hostname,
-        "Integration test hostname", HEV_BLACKLIST_SOURCE_MANUAL, 5, 3600);
+    const char *host_entry_id = hev_filter_blacklist_add_domain (integration_hostname);
     TEST_ASSERT (host_entry_id != NULL);
 
     // Test integrated hostname check (should NOT be blocked by ACL rules)
@@ -251,25 +219,9 @@ run_blacklist_tests (void)
         hev_filter_is_blocked_hostname (integration_hostname);
     TEST_ASSERT (integrated_host_blocked == 0); // 动态黑名单不影响ACL检查
 
-    // Test: Port filtering integration
-    int test_port = 9999;
-    const char *integration_port_entry_id = hev_filter_blacklist_add_entry (
-        HEV_BLACKLIST_ENTRY_PORT, NULL, test_port, NULL,
-        "Integration test port", HEV_BLACKLIST_SOURCE_AUTO, 6, 3600);
-    TEST_ASSERT (integration_port_entry_id != NULL);
-
-    // Test port check (dynamic blacklist should work for ports)
-    int integrated_port_blocked = hev_filter_is_blocked_port (test_port);
-    TEST_ASSERT (integrated_port_blocked == 1);
-
-    // Test: Comprehensive filter check (IP/hostname: ACL only, port: dynamic blacklist)
-    int comprehensive_blocked = hev_filter_check_all_filters (
-        &test_ip_integration, integration_hostname, test_port);
-    TEST_ASSERT (comprehensive_blocked == 1); // 端口会被动态黑名单阻止
-
     // Test: GFW blocking check (routing decision)
     int gfw_blocked = hev_filter_is_gfw_blocked (
-        &test_ip_integration, integration_hostname, test_port);
+        &test_ip_integration, integration_hostname, 0);
     TEST_ASSERT (gfw_blocked == 1); // 应该被动态黑名单检测为GFW封锁
 
     // Test: Clean IP (should not be blocked by ACL)
@@ -297,11 +249,11 @@ run_blacklist_tests (void)
 
     // Verify cleanup worked - test that all checks now return false
     int after_cleanup_acl_blocked = hev_filter_check_all_filters (
-        &test_ip_integration, integration_hostname, test_port);
+        &test_ip_integration, integration_hostname, 0);
     TEST_ASSERT (after_cleanup_acl_blocked == 0); // ACL检查应该为false
 
     int after_cleanup_gfw_blocked = hev_filter_is_gfw_blocked (
-        &test_ip_integration, integration_hostname, test_port);
+        &test_ip_integration, integration_hostname, 0);
     TEST_ASSERT (after_cleanup_gfw_blocked == 0); // GFW检查应该也为false
 
     hev_filter_fini ();
