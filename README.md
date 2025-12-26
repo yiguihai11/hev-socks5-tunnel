@@ -48,10 +48,21 @@
 ### 安装
 
 ```bash
-git clone --depth=1 --recursive https://github.com/yiguihai11/hev-socks5-tunnel.git
+# 克隆代码（包含子模块）
+git clone --recursive https://github.com/yiguihai11/hev-socks5-tunnel.git
 cd hev-socks5-tunnel
+
+# 如果已经克隆但未初始化子模块，运行：
+# git submodule update --init --recursive
+
+# 编译
 make
 ```
+
+**子模块说明**：本项目使用 git submodules 管理第三方依赖：
+- `third-part/hev-task-system` - 协程框架
+- `third-part/yaml` - YAML 配置解析
+- `third-part/lwip` - 轻量级 TCP/IP 协议栈
 
 ### 基础配置
 
