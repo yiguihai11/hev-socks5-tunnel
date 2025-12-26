@@ -57,8 +57,9 @@ UNINSMSG="\e[1;34mUNINS\e[0m %s\n"
 
 ENABLE_DEBUG :=
 ifeq ($(ENABLE_DEBUG),1)
-	CCFLAGS+=-g -O0 -DENABLE_DEBUG
+	CCFLAGS+=-g -O0 -DENABLE_DEBUG -fsanitize=address
 	STRIP=true
+	LDFLAGS+=-fsanitize=address
 endif
 
 ENABLE_STATIC :=
@@ -76,7 +77,10 @@ ifeq ($(V),1)
 	undefine ECHO_PREFIX
 endif
 
-.PHONY: exec static shared clean install uninstall tp-static tp-shared tp-clean
+.PHONY: exec static shared clean install uninstall tp-static tp-shared tp-clean dev
+
+dev:
+	$(MAKE) exec ENABLE_DEBUG=1
 
 exec : $(EXEC_TARGET)
 
