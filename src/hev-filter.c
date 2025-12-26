@@ -10,7 +10,15 @@
 #ifndef _DEFAULT_SOURCE
 #define _DEFAULT_SOURCE
 #endif
+
+/* FreeBSD compatibility */
+#if defined(__FreeBSD__)
 #define __BSD_VISIBLE 1
+#ifndef AF_INET6
+#define AF_INET6 28
+#endif
+#endif
+
 #include <sys/types.h>
 #include <stdio.h>
 #include <stdlib.h>
