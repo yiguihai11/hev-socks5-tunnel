@@ -260,7 +260,7 @@ hev_session_manager_fini (void)
 }
 
 /* ============================================================================
-   Domain-First Routing Task - 先解析域名，再决定路由
+   Domain-First Routing Task - Refactored for Clarity
    ============================================================================ */
 
 static void
@@ -270,16 +270,20 @@ run_domain_first_task (void *data)
     struct tcp_pcb *pcb = self->pcb;
     char src_ip[INET6_ADDRSTRLEN];
     char dst_ip[INET6_ADDRSTRLEN];
-    char http_hostname[256] = { 0 };
-    HevACLAction final_action = HEV_ACL_ACTION_DEFAULT;
-    int hostname_found = 0;
-
-    LOG_D ("%p session: domain-first task entry", self);
 
     ipaddr_ntoa_r (&pcb->remote_ip, src_ip, sizeof (src_ip));
     ipaddr_ntoa_r (&pcb->local_ip, dst_ip, sizeof (dst_ip));
 
-    /* 等待数据到达队列 (最多 1500ms) */
+    LOG_D ("%p session: domain-first task entry", self);
+
+    /*
+     * Phase 1: Data Sniffing
+     * Wait for the client's first data packet (e.g., ClientHello or HTTP GET)
+     * and try to extract the hostname from it.
+     */
+    char http_hostname[256] = { 0 };
+    int hostname_found = 0;
+
     if (!self->queue) {
         LOG_D ("%p session: Waiting for protocol data on port %d...", self,
                pcb->local_port);
@@ -293,7 +297,6 @@ run_domain_first_task (void *data)
         }
     }
 
-    /* 解析 SNI/Host */
     if (self->queue) {
         if (hev_filter_sniff_pcb_hostname (pcb, self->queue, http_hostname,
                                            sizeof (http_hostname)) == 0) {
@@ -304,115 +307,92 @@ run_domain_first_task (void *data)
         }
     }
 
-    /* 统一 ACL 决策: Stage 1 (IP/Port) + Stage 2 (Domain) */
+    /*
+     * Phase 2: Routing Decision
+     * Combine IP/Port (Stage 1) and Domain (Stage 2) ACL results to determine
+     * the final routing action.
+     */
+    typedef enum {
+        NEXT_ACTION_DIRECT,
+        NEXT_ACTION_SOCKS5,
+        NEXT_ACTION_BLOCK,
+    } NextAction;
+    NextAction next_action;
+
     HevACLResult stage1_result =
         hev_acl_match_stage1_connection (&pcb->local_ip, pcb->local_port);
+    HevACLResult stage2_result = { .matched = 0 };
 
     if (hostname_found) {
-        HevACLResult stage2_result =
+        stage2_result =
             hev_acl_match_stage2_domain (http_hostname, pcb->local_port);
-        final_action =
-            hev_acl_check_final_decision (&stage1_result, &stage2_result);
-
-        if (stage2_result.matched) {
-            LOG_D ("%p session: Stage 2 ACL matched: %s %s -> %s", self,
-                   final_action == HEV_ACL_ACTION_ALLOW ? "ALLOW" : "BLOCK",
-                   http_hostname, stage2_result.rule_pattern);
-        }
-    } else {
-        final_action = hev_acl_check_final_decision (&stage1_result, NULL);
     }
 
-    if (stage1_result.matched) {
-        LOG_D ("%p session: Stage 1 ACL matched: %s %s:%d -> %s", self,
-               stage1_result.action == HEV_ACL_ACTION_ALLOW ? "ALLOW" : "BLOCK",
-               dst_ip, pcb->local_port, stage1_result.rule_pattern);
-    }
+    HevACLAction final_action =
+        hev_acl_check_final_decision (&stage1_result, &stage2_result);
 
-    /* 根据最终决策执行相应操作 */
     switch (final_action) {
     case HEV_ACL_ACTION_ALLOW:
         LOG_I ("%p session: Domain-first ACL ALLOW → Direct connect to %s:%d",
                self, dst_ip, pcb->local_port);
-
-        /* 清除 PCB 引用，防止析构函数 abort 它 */
-        LOG_D ("%p session: Clearing PCB reference to prevent abort", self);
-        self->pcb = NULL;
-
-        /* 清理当前 session，启动直接连接 */
-        hev_socks5_tunnel_delete_session (
-            hev_socks5_session_get_node (HEV_SOCKS5_SESSION (self)));
-        hev_object_unref (HEV_OBJECT (self));
-        hev_session_manager_start_direct_tcp (pcb, NULL);
+        next_action = NEXT_ACTION_DIRECT;
         break;
 
     case HEV_ACL_ACTION_BLOCK:
         LOG_W (
             "%p session: Domain-first ACL BLOCK → Reject connection to %s:%d",
             self, dst_ip, pcb->local_port);
-        /* 清理并终止 */
-        hev_socks5_tunnel_delete_session (
-            hev_socks5_session_get_node (HEV_SOCKS5_SESSION (self)));
-        hev_object_unref (HEV_OBJECT (self));
-        tcp_abort (pcb);
+        next_action = NEXT_ACTION_BLOCK;
         break;
 
     case HEV_ACL_ACTION_DEFAULT:
     default:
-        /* ACL returned DEFAULT, check chnroutes for final decision */
         if (hev_filter_is_domestic (&pcb->local_ip)) {
             LOG_I (
                 "%p session: Domain-first ACL DEFAULT + Domestic IP → Direct connect to %s:%d",
                 self, dst_ip, pcb->local_port);
-
-            /* 保存队列数据，因为 unref 会释放 session */
-            struct pbuf *saved_queue = self->queue;
-
-            /* 保存队列引用，防止 unref 时被释放 */
-            if (saved_queue) {
-                LOG_D ("%p session: Preserving %d bytes of queued data", self,
-                       pbuf_clen (saved_queue) > 0 ? saved_queue->tot_len : 0);
-                self->queue = NULL; /* 防止析构函数释放队列 */
-            }
-
-            /* 清除 PCB 引用，防止析构函数 abort 它 */
-            LOG_D ("%p session: Clearing PCB reference to prevent abort", self);
-            self->pcb = NULL;
-
-            /* 清理当前 session，启动直接连接 */
-            hev_socks5_tunnel_delete_session (
-                hev_socks5_session_get_node (HEV_SOCKS5_SESSION (self)));
-            hev_object_unref (HEV_OBJECT (self));
-
-            hev_session_manager_start_direct_tcp (pcb, saved_queue);
+            next_action = NEXT_ACTION_DIRECT;
         } else {
             LOG_I (
                 "%p session: Domain-first ACL DEFAULT + Foreign IP → SOCKS5 proxy to %s:%d",
                 self, dst_ip, pcb->local_port);
-
-            /* 保存队列数据，因为 unref 会释放 session */
-            struct pbuf *saved_queue = self->queue;
-
-            /* 保存队列引用，防止 unref 时被释放 */
-            if (saved_queue) {
-                LOG_D ("%p session: Preserving %d bytes of queued data", self,
-                       pbuf_clen (saved_queue) > 0 ? saved_queue->tot_len : 0);
-                self->queue = NULL; /* 防止析构函数释放队列 */
-            }
-
-            /* 清除 PCB 引用，防止析构函数 abort 它 */
-            LOG_D ("%p session: Clearing PCB reference to prevent abort", self);
-            self->pcb = NULL;
-
-            /* 清理当前 session，启动 SOCKS5 代理 */
-            hev_socks5_tunnel_delete_session (
-                hev_socks5_session_get_node (HEV_SOCKS5_SESSION (self)));
-            hev_object_unref (HEV_OBJECT (self));
-
-            hev_session_manager_start_socks5_tcp (pcb, saved_queue);
+            next_action = NEXT_ACTION_SOCKS5;
         }
         break;
     }
+
+    /*
+     * Phase 3: Session Transition
+     * Based on the decision, either block the connection or clean up the
+     * current session and hand over to the next one (Direct or SOCKS5).
+     */
+    if (next_action == NEXT_ACTION_BLOCK) {
+        tcp_abort (pcb);
+    } else {
+        /* Common logic for both DIRECT and SOCKS5 transitions */
+        struct pbuf *saved_queue = self->queue;
+
+        if (saved_queue) {
+            LOG_D ("%p session: Preserving %d bytes of queued data for next session", self,
+                   saved_queue->tot_len);
+            self->queue = NULL; /* Detach queue to prevent it from being freed */
+        }
+
+        /* Detach PCB to prevent it from being aborted */
+        self->pcb = NULL;
+
+        /* Hand over to the next session manager */
+        if (next_action == NEXT_ACTION_DIRECT) {
+            hev_session_manager_start_direct_tcp (pcb, saved_queue);
+        } else { /* NEXT_ACTION_SOCKS5 */
+            hev_session_manager_start_socks5_tcp (pcb, saved_queue);
+        }
+    }
+
+    /* Finally, clean up the current domain-first session object */
+    hev_socks5_tunnel_delete_session (
+        hev_socks5_session_get_node (HEV_SOCKS5_SESSION (self)));
+    hev_object_unref (HEV_OBJECT (self));
 
     LOG_D ("%p session: domain-first task exit", self);
 }
