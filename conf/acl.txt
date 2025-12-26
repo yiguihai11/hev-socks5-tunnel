@@ -53,8 +53,9 @@ allow domain cdn.example.com
 allow domain api.internal.com
 
 # 允许特定端口直连
-# 注意：全局允许端口 80/443 会导致所有流量直连，包括无法直连的国外 IP
-# 如需特定端口直连，建议使用 allow domain 或 allow cidr 规则
+# 注意：由于架构限制，全局 allow port 80/443 规则可能导致直连失败
+# 原因：test.py 绑定 tun0，而直连 socket 从 eth0 发出，响应路径不对称
+# 建议：使用 allow domain 规则替代，或让流量走 SOCKS5 代理
 # allow port 80
 # allow port 443
 
