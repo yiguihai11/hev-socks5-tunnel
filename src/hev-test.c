@@ -170,7 +170,8 @@ run_blacklist_tests (void)
 
     // Test: Domain blacklist
     printf ("\nTesting domain blacklist...\n");
-    const char *domain_entry_id = hev_filter_blacklist_add_domain ("bad-site.org");
+    const char *domain_entry_id =
+        hev_filter_blacklist_add_domain ("bad-site.org");
 
     TEST_ASSERT (domain_entry_id != NULL);
     int domain_blocked = hev_filter_blacklist_check_entry (
@@ -221,7 +222,8 @@ run_blacklist_tests (void)
     ipaddr_aton ("10.100.50.25", &test_ip_integration);
 
     // Add to dynamic blacklist
-    const char *integration_entry_id = hev_filter_blacklist_add_ip (&test_ip_integration);
+    const char *integration_entry_id =
+        hev_filter_blacklist_add_ip (&test_ip_integration);
     TEST_ASSERT (integration_entry_id != NULL);
 
     // Test integrated IP check (should NOT be blocked by ACL rules)
@@ -230,7 +232,8 @@ run_blacklist_tests (void)
 
     // Test: Hostname filtering integration
     const char *integration_hostname = "blocked-integration.com";
-    const char *host_entry_id = hev_filter_blacklist_add_domain (integration_hostname);
+    const char *host_entry_id =
+        hev_filter_blacklist_add_domain (integration_hostname);
     TEST_ASSERT (host_entry_id != NULL);
 
     // Test integrated hostname check (should NOT be blocked by ACL rules)
@@ -239,8 +242,8 @@ run_blacklist_tests (void)
     TEST_ASSERT (integrated_host_blocked == 0); // 动态黑名单不影响ACL检查
 
     // Test: GFW blocking check (routing decision)
-    int gfw_blocked = hev_filter_is_gfw_blocked (
-        &test_ip_integration, integration_hostname, 0);
+    int gfw_blocked = hev_filter_is_gfw_blocked (&test_ip_integration,
+                                                 integration_hostname, 0);
     TEST_ASSERT (gfw_blocked == 1); // 应该被动态黑名单检测为GFW封锁
 
     // Test: Clean IP (should not be blocked by ACL)
@@ -287,13 +290,11 @@ run_filter_tests (void)
     const char *chn_file = "test_chnroutes.txt";
 
     /* New ACL format with action and type */
-    create_test_file (
-        acl_file,
-        "block ip 8.8.8.8\n"
-        "block ip 2001:db8::1\n"
-        "block domain blocked.example.com\n"
-        "allow domain allowed.example.com\n"
-        "block port 25\n");
+    create_test_file (acl_file, "block ip 8.8.8.8\n"
+                                "block ip 2001:db8::1\n"
+                                "block domain blocked.example.com\n"
+                                "allow domain allowed.example.com\n"
+                                "block port 25\n");
     create_test_file (chn_file, "1.0.1.0/24\n2001:db8:1::/48\n");
 
     // Manually call load functions, skipping init/fini to avoid task system
@@ -326,7 +327,8 @@ run_filter_tests (void)
     // Test: Final decision (Stage 1 takes priority over Stage 2)
     printf ("\nTesting final ACL decision...\n");
     HevACLResult stage1 = hev_acl_match_stage1_connection (&test_ip, 443);
-    HevACLResult stage2 = hev_acl_match_stage2_domain ("allowed.example.com", 443);
+    HevACLResult stage2 =
+        hev_acl_match_stage2_domain ("allowed.example.com", 443);
     HevACLAction final = hev_acl_check_final_decision (&stage1, &stage2);
     /* Stage 1 (IP rule: block 8.8.8.8) should take priority, not Stage 2 */
     TEST_ASSERT (final == HEV_ACL_ACTION_BLOCK);
@@ -412,7 +414,8 @@ run_smart_proxy_tests (void)
     // Simulate response validation logic
     int is_valid_15_bytes = (15 >= 16) ? 1 : 0; // 15 bytes < 16, should fail
     int is_valid_16_bytes = (16 >= 16) ? 1 : 0; // 16 bytes >= 16, should pass
-    int is_valid_100_bytes = (100 >= 16) ? 1 : 0; // 100 bytes >= 16, should pass
+    int is_valid_100_bytes = (100 >= 16) ? 1 :
+                                           0; // 100 bytes >= 16, should pass
 
     TEST_ASSERT (is_valid_15_bytes == 0); // 15 bytes should be invalid
     TEST_ASSERT (is_valid_16_bytes == 1); // 16 bytes should be valid
@@ -423,20 +426,21 @@ run_smart_proxy_tests (void)
     const char *min_http_response = "HTTP/1.1 200 OK\r\n\r\n";
     size_t min_http_len = strlen (min_http_response);
     TEST_ASSERT (min_http_len >= 16); // Minimum HTTP is 17 bytes
-    printf ("  Minimum HTTP response: %zu bytes (>= 16: %s)\n",
-           min_http_len, (min_http_len >= 16) ? "YES" : "NO");
+    printf ("  Minimum HTTP response: %zu bytes (>= 16: %s)\n", min_http_len,
+            (min_http_len >= 16) ? "YES" : "NO");
 
     // Test: Minimum TLS response size
     printf ("\nTesting minimum TLS response size...\n");
     // TLS Record Header (5) + minimum encrypted data (16) = 21 bytes
     size_t min_tls_len = 5 + 16;
     TEST_ASSERT (min_tls_len >= 16); // Minimum TLS is 21 bytes
-    printf ("  Minimum TLS response: %zu bytes (>= 16: %s)\n",
-           min_tls_len, (min_tls_len >= 16) ? "YES" : "NO");
+    printf ("  Minimum TLS response: %zu bytes (>= 16: %s)\n", min_tls_len,
+            (min_tls_len >= 16) ? "YES" : "NO");
 
     // Test: Blacklist expiry time
     printf ("\nTesting blacklist expiry time configuration...\n");
-    int expiry_minutes = hev_config_get_smart_proxy_blocked_ip_expiry_minutes ();
+    int expiry_minutes =
+        hev_config_get_smart_proxy_blocked_ip_expiry_minutes ();
     TEST_ASSERT (expiry_minutes > 0); // Should be configured (1 minute in test)
     printf ("  Configured expiry time: %d minutes\n", expiry_minutes);
 
@@ -445,7 +449,7 @@ run_smart_proxy_tests (void)
     int gfw_blocked = hev_filter_is_gfw_blocked (&test_ip, NULL, 0);
     TEST_ASSERT (gfw_blocked == 1); // IP should be detected as GFW blocked
     printf ("  IP 93.184.216.34 is GFW blocked: %s\n",
-           gfw_blocked ? "YES" : "NO");
+            gfw_blocked ? "YES" : "NO");
 
     // Cleanup
     hev_filter_fini ();
@@ -464,29 +468,32 @@ run_traffic_router_tests (void)
     int is_443_probe = hev_config_is_smart_proxy_probe_port (443);
     int is_8080_probe = hev_config_is_smart_proxy_probe_port (8080);
     int is_8443_probe = hev_config_is_smart_proxy_probe_port (8443);
-    int is_22_probe = hev_config_is_smart_proxy_probe_port (22); // SSH, not a probe port
+    int is_22_probe =
+        hev_config_is_smart_proxy_probe_port (22); // SSH, not a probe port
 
-    TEST_ASSERT (is_80_probe == 1);     // Port 80 should be probe port
-    TEST_ASSERT (is_443_probe == 1);    // Port 443 should be probe port
-    TEST_ASSERT (is_8080_probe == 1);   // Port 8080 should be probe port
-    TEST_ASSERT (is_8443_probe == 1);   // Port 8443 should be probe port
-    TEST_ASSERT (is_22_probe == 0);     // Port 22 should NOT be probe port
+    TEST_ASSERT (is_80_probe == 1); // Port 80 should be probe port
+    TEST_ASSERT (is_443_probe == 1); // Port 443 should be probe port
+    TEST_ASSERT (is_8080_probe == 1); // Port 8080 should be probe port
+    TEST_ASSERT (is_8443_probe == 1); // Port 8443 should be probe port
+    TEST_ASSERT (is_22_probe == 0); // Port 22 should NOT be probe port
 
     printf ("  Probe ports: 80=%s, 443=%s, 8080=%s, 8443=%s, 22(SSH)=%s\n",
-           is_80_probe ? "YES" : "NO", is_443_probe ? "YES" : "NO",
-           is_8080_probe ? "YES" : "NO", is_8443_probe ? "YES" : "NO",
-           is_22_probe ? "YES" : "NO");
+            is_80_probe ? "YES" : "NO", is_443_probe ? "YES" : "NO",
+            is_8080_probe ? "YES" : "NO", is_8443_probe ? "YES" : "NO",
+            is_22_probe ? "YES" : "NO");
 
     // Test: Smart-proxy config values
     printf ("\nTesting smart-proxy configuration values...\n");
 
     int timeout_ms = hev_config_get_smart_proxy_timeout_ms ();
-    int expiry_minutes = hev_config_get_smart_proxy_blocked_ip_expiry_minutes ();
+    int expiry_minutes =
+        hev_config_get_smart_proxy_blocked_ip_expiry_minutes ();
 
-    TEST_ASSERT (timeout_ms > 0);      // Should have timeout configured
-    TEST_ASSERT (expiry_minutes > 0);   // Should have expiry configured
+    TEST_ASSERT (timeout_ms > 0); // Should have timeout configured
+    TEST_ASSERT (expiry_minutes > 0); // Should have expiry configured
 
-    printf ("  Timeout: %d ms, Expiry: %d minutes\n", timeout_ms, expiry_minutes);
+    printf ("  Timeout: %d ms, Expiry: %d minutes\n", timeout_ms,
+            expiry_minutes);
 
     // Test: DNS forwarder configuration
     printf ("\nTesting DNS forwarder configuration...\n");
@@ -495,8 +502,10 @@ run_traffic_router_tests (void)
     const char *dns_target4 = hev_config_get_dns_forwarder_target_ip4 ();
 
     // These may be NULL if not configured, just verify the functions work
-    printf ("  DNS Virtual IP4: %s\n", dns_vip4 ? dns_vip4 : "(not configured)");
-    printf ("  DNS Target IP4: %s\n", dns_target4 ? dns_target4 : "(not configured)");
+    printf ("  DNS Virtual IP4: %s\n",
+            dns_vip4 ? dns_vip4 : "(not configured)");
+    printf ("  DNS Target IP4: %s\n",
+            dns_target4 ? dns_target4 : "(not configured)");
 
     // Test: Routing priority order validation
     printf ("\nTesting routing priority order...\n");
@@ -528,7 +537,8 @@ run_performance_optimizer_tests (void)
 
     int udp_size = hev_memory_pool_get_udp_size ();
     TEST_ASSERT (udp_size > 0); // Should have positive size
-    TEST_ASSERT (udp_size >= 128 && udp_size <= 2048); // Should be in valid range
+    TEST_ASSERT (udp_size >= 128 &&
+                 udp_size <= 2048); // Should be in valid range
 
     printf ("  Initial UDP pool size: %d frames\n", udp_size);
 
@@ -597,8 +607,8 @@ run_performance_optimizer_tests (void)
     TEST_ASSERT (medium_pool > small_pool);
     TEST_ASSERT (large_pool > medium_pool);
 
-    printf ("  Typical pool sizes: small=%d, medium=%d, large=%d\n",
-           small_pool, medium_pool, large_pool);
+    printf ("  Typical pool sizes: small=%d, medium=%d, large=%d\n", small_pool,
+            medium_pool, large_pool);
 
     // Test: Memory pool adaptive size calculation
     printf ("\nTesting memory pool adaptive size logic...\n");
@@ -618,8 +628,8 @@ run_performance_optimizer_tests (void)
     int needs_shrinkage = (usage_ratio < 0.3);
     TEST_ASSERT (needs_shrinkage == 0); // 78% > 30%, no shrinkage needed
 
-    printf ("  Usage ratio: %.1f%% (%d/%d)\n", usage_ratio * 100,
-           current_usage, pool_size);
+    printf ("  Usage ratio: %.1f%% (%d/%d)\n", usage_ratio * 100, current_usage,
+            pool_size);
     printf ("  Expansion needed: %s\n", needs_expansion ? "YES" : "NO");
     printf ("  Shrinkage needed: %s\n", needs_shrinkage ? "YES" : "NO");
 }
@@ -658,8 +668,10 @@ run_session_manager_tests (void)
     printf ("  Available routing modes:\n");
     printf ("    - SOCKS5 routing: %s\n", has_socks5_route ? "YES" : "NO");
     printf ("    - Direct routing: %s\n", has_direct_route ? "YES" : "NO");
-    printf ("    - Smart-proxy routing: %s\n", has_smart_proxy_route ? "YES" : "NO");
-    printf ("    - Domain-first routing: %s\n", has_domain_first_route ? "YES" : "NO");
+    printf ("    - Smart-proxy routing: %s\n",
+            has_smart_proxy_route ? "YES" : "NO");
+    printf ("    - Domain-first routing: %s\n",
+            has_domain_first_route ? "YES" : "NO");
 
     // Test: TCP session types
     printf ("\nTesting TCP session types...\n");
@@ -709,7 +721,7 @@ run_config_tests (void)
     printf ("  Task stack size: %d bytes\n", task_stack_size);
     printf ("  TCP buffer size: %d bytes\n", tcp_buffer_size);
     printf ("  Max session count: %d%s\n", max_session_count,
-           max_session_count == 0 ? " (default)" : "");
+            max_session_count == 0 ? " (default)" : "");
     printf ("  Connect timeout: %d ms\n", connect_timeout);
     printf ("  Read/Write timeout: %d ms\n", rw_timeout);
 
@@ -728,7 +740,8 @@ run_config_tests (void)
     printf ("\nTesting smart-proxy configuration...\n");
 
     int smart_proxy_timeout = hev_config_get_smart_proxy_timeout_ms ();
-    int smart_proxy_expiry = hev_config_get_smart_proxy_blocked_ip_expiry_minutes ();
+    int smart_proxy_expiry =
+        hev_config_get_smart_proxy_blocked_ip_expiry_minutes ();
 
     TEST_ASSERT (smart_proxy_timeout > 0);
     TEST_ASSERT (smart_proxy_expiry > 0);
@@ -750,17 +763,21 @@ run_config_tests (void)
     TEST_ASSERT (is_port_8443 == 1);
 
     printf ("  Probe ports configured: 80=%s, 443=%s, 8080=%s, 8443=%s\n",
-           is_port_80 ? "YES" : "NO", is_port_443 ? "YES" : "NO",
-           is_port_8080 ? "YES" : "NO", is_port_8443 ? "YES" : "NO");
+            is_port_80 ? "YES" : "NO", is_port_443 ? "YES" : "NO",
+            is_port_8080 ? "YES" : "NO", is_port_8443 ? "YES" : "NO");
 
     // Test: Configuration value ranges
     printf ("\nTesting configuration value ranges...\n");
 
     // Verify reasonable ranges
-    TEST_ASSERT (task_stack_size >= 8192 && task_stack_size <= 1048576); // 8KB - 1MB
-    TEST_ASSERT (tcp_buffer_size >= 4096 && tcp_buffer_size <= 65536); // 4KB - 64KB
-    TEST_ASSERT (max_session_count >= 0 && max_session_count <= 10000); // 0 means default
-    TEST_ASSERT (connect_timeout >= 1000 && connect_timeout <= 60000); // 1s - 60s
+    TEST_ASSERT (task_stack_size >= 8192 &&
+                 task_stack_size <= 1048576); // 8KB - 1MB
+    TEST_ASSERT (tcp_buffer_size >= 4096 &&
+                 tcp_buffer_size <= 65536); // 4KB - 64KB
+    TEST_ASSERT (max_session_count >= 0 &&
+                 max_session_count <= 10000); // 0 means default
+    TEST_ASSERT (connect_timeout >= 1000 &&
+                 connect_timeout <= 60000); // 1s - 60s
     TEST_ASSERT (tunnel_mtu >= 1280 && tunnel_mtu <= 9000); // 1280 - 9000 bytes
 
     printf ("  All configuration values within valid ranges\n");
@@ -771,8 +788,10 @@ run_config_tests (void)
     const char *dns_vip4 = hev_config_get_dns_forwarder_virtual_ip4 ();
     const char *dns_target4 = hev_config_get_dns_forwarder_target_ip4 ();
 
-    printf ("  DNS virtual IP4: %s\n", dns_vip4 ? dns_vip4 : "(not configured)");
-    printf ("  DNS target IP4: %s\n", dns_target4 ? dns_target4 : "(not configured)");
+    printf ("  DNS virtual IP4: %s\n",
+            dns_vip4 ? dns_vip4 : "(not configured)");
+    printf ("  DNS target IP4: %s\n",
+            dns_target4 ? dns_target4 : "(not configured)");
 
     // Test: ACL and chnroutes configuration
     printf ("\nTesting ACL and chnroutes configuration...\n");
@@ -781,7 +800,8 @@ run_config_tests (void)
     const char *chnroutes_file = hev_config_get_chnroutes_file_path ();
 
     printf ("  ACL file: %s\n", acl_file ? acl_file : "(not configured)");
-    printf ("  chnroutes file: %s\n", chnroutes_file ? chnroutes_file : "(not configured)");
+    printf ("  chnroutes file: %s\n",
+            chnroutes_file ? chnroutes_file : "(not configured)");
 }
 
 int
@@ -789,7 +809,8 @@ hev_test_run (void)
 {
     g_is_test_mode = 1; // Set test mode flag
 
-    const char *test_config = "smart-proxy:\n  timeout-ms: 2000\n  blocked-ip-expiry-minutes: 1\n  probe-ports:\n    - 80\n    - 443\n    - 8080\n    - 8443\n";
+    const char *test_config =
+        "smart-proxy:\n  timeout-ms: 2000\n  blocked-ip-expiry-minutes: 1\n  probe-ports:\n    - 80\n    - 443\n    - 8080\n    - 8443\n";
     hev_config_init_from_str ((const unsigned char *)test_config,
                               strlen (test_config));
     printf ("======== Running Built-in Tests =========\n");

@@ -480,7 +480,8 @@ hev_config_parse_smart_proxy (yaml_document_t *doc, yaml_node_t *base)
         } else if (0 == strcmp (key, "blocked-ip-expiry-minutes")) {
             if (node && YAML_SCALAR_NODE == node->type) {
                 const char *value = (const char *)node->data.scalar.value;
-                smart_proxy_blocked_ip_expiry_minutes = strtoul (value, NULL, 10);
+                smart_proxy_blocked_ip_expiry_minutes =
+                    strtoul (value, NULL, 10);
             }
         } else if (0 == strcmp (key, "probe-ports")) {
             /* Parse port list (YAML sequence) */

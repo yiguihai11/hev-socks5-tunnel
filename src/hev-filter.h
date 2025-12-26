@@ -33,30 +33,34 @@
    ============================================================================ */
 
 /* ACL Action Types */
-typedef enum {
-    HEV_ACL_ACTION_ALLOW,   /* Allow direct connection */
-    HEV_ACL_ACTION_BLOCK,    /* Block connection */
-    HEV_ACL_ACTION_DEFAULT   /* Use default behavior */
+typedef enum
+{
+    HEV_ACL_ACTION_ALLOW, /* Allow direct connection */
+    HEV_ACL_ACTION_BLOCK, /* Block connection */
+    HEV_ACL_ACTION_DEFAULT /* Use default behavior */
 } HevACLAction;
 
 /* ACL Rule Types */
-typedef enum {
-    HEV_ACL_TYPE_IP,        /* Single IP address */
-    HEV_ACL_TYPE_CIDR,      /* CIDR range */
-    HEV_ACL_TYPE_PORT,      /* Port number */
-    HEV_ACL_TYPE_DOMAIN     /* Domain name */
+typedef enum
+{
+    HEV_ACL_TYPE_IP, /* Single IP address */
+    HEV_ACL_TYPE_CIDR, /* CIDR range */
+    HEV_ACL_TYPE_PORT, /* Port number */
+    HEV_ACL_TYPE_DOMAIN /* Domain name */
 } HevACLType;
 
 /* ACL Rule Structure */
-typedef struct _HevACLRule {
+typedef struct _HevACLRule
+{
     HevACLAction action;
     HevACLType type;
-    char pattern[256];      /* IP, CIDR, domain, or port */
+    char pattern[256]; /* IP, CIDR, domain, or port */
     struct _HevACLRule *next;
 } HevACLRule;
 
 /* ACL Match Result */
-typedef struct _HevACLResult {
+typedef struct _HevACLResult
+{
     int matched;
     HevACLAction action;
     const char *rule_pattern;

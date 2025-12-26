@@ -163,9 +163,9 @@ static HevACLRule *acl_ip_rules = NULL;
 static HevACLRule *acl_cidr_rules = NULL;
 
 /* Domain rules with three hash tables */
-static HevACLRule *acl_domain_exact[1024] = { NULL };    /* exact match */
-static HevACLRule *acl_domain_wildcard[1024] = { NULL };  /* *.example.com */
-static HevACLRule *acl_domain_suffix[1024] = { NULL };    /* .example.com */
+static HevACLRule *acl_domain_exact[1024] = { NULL }; /* exact match */
+static HevACLRule *acl_domain_wildcard[1024] = { NULL }; /* *.example.com */
+static HevACLRule *acl_domain_suffix[1024] = { NULL }; /* .example.com */
 
 /* ============================================================================ */
 
@@ -195,7 +195,7 @@ radix_tree_insert_ipv4 (uint32_t ip, uint8_t prefix)
     (*current)->blocked = 1;
 }
 
-static void __attribute__((unused))
+static void __attribute__ ((unused))
 radix_tree_insert_ipv6 (const uint8_t *ip, uint8_t prefix)
 {
     RadixNode **current = &acl_ipv6_tree;
@@ -429,7 +429,7 @@ hostname_hash (const char *hostname)
            (HOSTNAME_HASH_SIZE - 1); /* Faster than modulo for power of 2 */
 }
 
-static void __attribute__((unused))
+static void __attribute__ ((unused))
 hostname_table_insert (const char *hostname)
 {
     uint32_t hash = hostname_hash (hostname);
@@ -661,7 +661,8 @@ hev_filter_parse_tls (void *log_data, const unsigned char *data, size_t len,
     /* ⭐ Borrowed from SmartProxy: validate TLS version
      * SSL 3.0 (0x0300) or TLS 1.0+ (>= 0x0301) */
     if (tls_version < 0x0301 && tls_version != 0x0300) {
-        LOG_D ("%p filter: Invalid TLS version (0x%04x)", log_data, tls_version);
+        LOG_D ("%p filter: Invalid TLS version (0x%04x)", log_data,
+               tls_version);
         return -1;
     }
 
@@ -767,7 +768,8 @@ hev_filter_parse_tls (void *log_data, const unsigned char *data, size_t len,
     hello->detected = 1;
 
     if (hello->hostname[0]) {
-        LOG_I ("%p filter: Detected TLS hostname: %s", log_data, hello->hostname);
+        LOG_I ("%p filter: Detected TLS hostname: %s", log_data,
+               hello->hostname);
         stats.tls_parsed++;
     }
 
@@ -976,10 +978,13 @@ hev_filter_load_acl (const char *file_path)
         char type_str[16];
         char value_str[256];
 
-        int parse_result = sscanf (trim, "%15s %15s %255s", action_str, type_str, value_str);
+        int parse_result =
+            sscanf (trim, "%15s %15s %255s", action_str, type_str, value_str);
         if (parse_result != 3) {
             /* Try old format (just IP or hostname) - treat as block */
-            LOG_D ("filter: Legacy ACL format detected, treating as block: %s (parse_result=%d)", trim, parse_result);
+            LOG_D (
+                "filter: Legacy ACL format detected, treating as block: %s (parse_result=%d)",
+                trim, parse_result);
             strcpy (action_str, "block");
 
             /* Detect if it's an IP or hostname */
@@ -1003,7 +1008,8 @@ hev_filter_load_acl (const char *file_path)
             action = HEV_ACL_ACTION_BLOCK;
             block_count++;
         } else {
-            LOG_W ("filter: Unknown action '%s' in ACL line: %s", action_str, trim);
+            LOG_W ("filter: Unknown action '%s' in ACL line: %s", action_str,
+                   trim);
             continue;
         }
 
@@ -1024,8 +1030,8 @@ hev_filter_load_acl (const char *file_path)
                 port_count++;
 
                 LOG_D ("filter: Added port rule: %s %d (%s)",
-                       action == HEV_ACL_ACTION_ALLOW ? "ALLOW" : "BLOCK",
-                       port, value_str);
+                       action == HEV_ACL_ACTION_ALLOW ? "ALLOW" : "BLOCK", port,
+                       value_str);
             }
         } else if (strcasecmp (type_str, "ip") == 0) {
             /* Single IP rule */
@@ -1035,7 +1041,8 @@ hev_filter_load_acl (const char *file_path)
                 HevACLRule *rule = hev_malloc (sizeof (HevACLRule));
                 rule->action = action;
                 rule->type = HEV_ACL_TYPE_IP;
-                snprintf (rule->pattern, sizeof (rule->pattern), "%s", value_str);
+                snprintf (rule->pattern, sizeof (rule->pattern), "%s",
+                          value_str);
                 rule->next = acl_ip_rules;
                 acl_ip_rules = rule;
                 ip_count++;
@@ -1061,7 +1068,8 @@ hev_filter_load_acl (const char *file_path)
                     HevACLRule *rule = hev_malloc (sizeof (HevACLRule));
                     rule->action = action;
                     rule->type = HEV_ACL_TYPE_CIDR;
-                    snprintf (rule->pattern, sizeof (rule->pattern), "%s", value_str);
+                    snprintf (rule->pattern, sizeof (rule->pattern), "%s",
+                              value_str);
                     rule->next = acl_cidr_rules;
                     acl_cidr_rules = rule;
                     cidr_count++;
@@ -1115,8 +1123,8 @@ hev_filter_load_acl (const char *file_path)
     fclose (fp);
     LOG_I ("filter: Loaded ACL rules (total:%d, allow:%d, block:%d) "
            "[ip:%d, cidr:%d, port:%d, domain:%d]",
-           allow_count + block_count, allow_count, block_count,
-           ip_count, cidr_count, port_count, domain_count);
+           allow_count + block_count, allow_count, block_count, ip_count,
+           cidr_count, port_count, domain_count);
     return 0;
 }
 
@@ -1413,9 +1421,8 @@ hev_filter_reset_stats (void)
 
 /* Internal helper: add blacklist entry with common logic */
 static const char *
-blacklist_add_internal (HevBlacklistEntryType type,
-                       const ip_addr_t *ip_addr,
-                       const char *hostname)
+blacklist_add_internal (HevBlacklistEntryType type, const ip_addr_t *ip_addr,
+                        const char *hostname)
 {
     HevBlacklistEntry *entry;
     unsigned int hash;
@@ -1425,7 +1432,8 @@ blacklist_add_internal (HevBlacklistEntryType type,
     const char *source_str = "Auto";
 
     /* 获取配置的TTL */
-    int ttl_seconds = hev_config_get_smart_proxy_blocked_ip_expiry_minutes () * 60;
+    int ttl_seconds =
+        hev_config_get_smart_proxy_blocked_ip_expiry_minutes () * 60;
     if (ttl_seconds <= 0) {
         ttl_seconds = 3600; /* 默认1小时 */
     }
@@ -1480,10 +1488,12 @@ blacklist_add_internal (HevBlacklistEntryType type,
 
     /* 初始化元数据 */
     safe_str_copy (entry->reason, reason, sizeof (entry->reason));
-    snprintf (entry->source_info, sizeof (entry->source_info), "%s", source_str);
+    snprintf (entry->source_info, sizeof (entry->source_info), "%s",
+              source_str);
 
     /* 生成唯一ID */
-    generate_entry_id (entry->id, sizeof (entry->id), type, ip_addr, 0, hostname);
+    generate_entry_id (entry->id, sizeof (entry->id), type, ip_addr, 0,
+                       hostname);
 
     /* 计算哈希值并插入 */
     hash = blacklist_hash_multi (type, ip_addr, 0, hostname);
@@ -1497,8 +1507,8 @@ blacklist_add_internal (HevBlacklistEntryType type,
 
     /* 记录日志 */
     if (type == HEV_BLACKLIST_ENTRY_IP) {
-        LOG_I ("filter: Added IP %s to blacklist (id=%s, ttl=%dm)",
-               ip_str, entry->id, ttl_seconds / 60);
+        LOG_I ("filter: Added IP %s to blacklist (id=%s, ttl=%dm)", ip_str,
+               entry->id, ttl_seconds / 60);
     } else {
         LOG_I ("filter: Added domain '%s' to blacklist (id=%s, ttl=%dm)",
                hostname, entry->id, ttl_seconds / 60);
@@ -1923,8 +1933,8 @@ hev_acl_match_stage1_connection (const ip_addr_t *ip, int port)
             result.matched = 1;
             result.action = rule->action;
             result.rule_pattern = rule->pattern;
-            LOG_D ("ACL Stage1: Port %d matched rule '%s' -> action=%d",
-                   port, rule->pattern, rule->action);
+            LOG_D ("ACL Stage1: Port %d matched rule '%s' -> action=%d", port,
+                   rule->pattern, rule->action);
             return result;
         }
     }
@@ -1950,7 +1960,8 @@ hev_acl_match_stage1_connection (const ip_addr_t *ip, int port)
                     uint32_t ip2 = ip_2_ip4 (&rule_ip)->addr;
                     match = (ip1 == ip2);
                 } else if (IP_IS_V6 (ip) && IP_IS_V6 (&rule_ip)) {
-                    match = (memcmp (ip_2_ip6 (ip)->addr, ip_2_ip6 (&rule_ip)->addr, 16) == 0);
+                    match = (memcmp (ip_2_ip6 (ip)->addr,
+                                     ip_2_ip6 (&rule_ip)->addr, 16) == 0);
                 }
 
                 if (match) { /* Match */
@@ -1977,14 +1988,15 @@ hev_acl_match_stage1_connection (const ip_addr_t *ip, int port)
                 if (IP_IS_V4 (ip) && IP_IS_V4 (&rule_ip)) {
                     uint32_t ip_addr = ntohl (ip_2_ip4 (ip)->addr);
                     uint32_t rule_addr = ntohl (ip_2_ip4 (&rule_ip)->addr);
-                    uint32_t mask = prefix_len > 0 ?
-                            (0xFFFFFFFF << (32 - prefix_len)) : 0;
+                    uint32_t mask =
+                        prefix_len > 0 ? (0xFFFFFFFF << (32 - prefix_len)) : 0;
                     if ((ip_addr & mask) == (rule_addr & mask)) {
                         result.matched = 1;
                         result.action = rule->action;
                         result.rule_pattern = rule->pattern;
-                        LOG_D ("ACL Stage1: IP %s matched CIDR rule '%s' -> action=%d",
-                               ipaddr_ntoa (ip), rule->pattern, rule->action);
+                        LOG_D (
+                            "ACL Stage1: IP %s matched CIDR rule '%s' -> action=%d",
+                            ipaddr_ntoa (ip), rule->pattern, rule->action);
                         return result;
                     }
                 }
@@ -2019,8 +2031,9 @@ hev_acl_match_stage2_domain (const char *hostname, int port)
             result.matched = 1;
             result.action = rule->action;
             result.rule_pattern = rule->pattern;
-            LOG_D ("ACL Stage2: Domain '%s' matched exact rule '%s' -> action=%d",
-                   hostname, rule->pattern, rule->action);
+            LOG_D (
+                "ACL Stage2: Domain '%s' matched exact rule '%s' -> action=%d",
+                hostname, rule->pattern, rule->action);
             return result;
         }
         rule = rule->next;
@@ -2033,8 +2046,9 @@ hev_acl_match_stage2_domain (const char *hostname, int port)
             result.matched = 1;
             result.action = rule->action;
             result.rule_pattern = rule->pattern;
-            LOG_D ("ACL Stage2: Domain '%s' matched wildcard rule '%s' -> action=%d",
-                   hostname, rule->pattern, rule->action);
+            LOG_D (
+                "ACL Stage2: Domain '%s' matched wildcard rule '%s' -> action=%d",
+                hostname, rule->pattern, rule->action);
             return result;
         }
         rule = rule->next;
@@ -2047,8 +2061,9 @@ hev_acl_match_stage2_domain (const char *hostname, int port)
             result.matched = 1;
             result.action = rule->action;
             result.rule_pattern = rule->pattern;
-            LOG_D ("ACL Stage2: Domain '%s' matched suffix rule '%s' -> action=%d",
-                   hostname, rule->pattern, rule->action);
+            LOG_D (
+                "ACL Stage2: Domain '%s' matched suffix rule '%s' -> action=%d",
+                hostname, rule->pattern, rule->action);
             return result;
         }
         rule = rule->next;
@@ -2060,7 +2075,7 @@ hev_acl_match_stage2_domain (const char *hostname, int port)
 /* Combine both stages to get final decision */
 HevACLAction
 hev_acl_check_final_decision (HevACLResult *stage1_result,
-                               HevACLResult *stage2_result)
+                              HevACLResult *stage2_result)
 {
     /* Stage 1 (IP/Port/CIDR) is checked first */
     if (stage1_result && stage1_result->matched) {
