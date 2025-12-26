@@ -348,8 +348,9 @@ hev_socks5_session_tcp_construct (HevSocks5SessionTCP *self,
 
     /* 在 lwIP 隧道模式下，local_ip/local_port 存储的是目标服务器地址 */
     ipaddr_ntoa_r (&pcb->local_ip, dst_ip, sizeof (dst_ip));
-    LOG_D ("%p socks5 session tcp construct: pcb->local_ip=%s, pcb->local_port=%d",
-           self, dst_ip, pcb->local_port);
+    LOG_D (
+        "%p socks5 session tcp construct: pcb->local_ip=%s, pcb->local_port=%d",
+        self, dst_ip, pcb->local_port);
 
     res = hev_socks5_addr_from_lwip (&addr, &pcb->local_ip, pcb->local_port);
     if (res < 0) {
