@@ -102,6 +102,7 @@ memmem_compat (const void *haystack, size_t haystacklen, const void *needle,
 /* ⬇️ 现在包含 hev 项目的头文件(包括 lwIP) */
 #include <hev-task.h>
 #include <hev-task-system.h>
+#include <hev-task-io.h>
 #include <hev-task-io-socket.h>
 #include <hev-memory-allocator.h>
 #include <hev-object.h>
