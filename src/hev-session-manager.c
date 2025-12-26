@@ -1287,8 +1287,8 @@ run_smart_proxy_task (void *data)
             int iovc = hev_ring_buffer_reading (self->buffer, iov);
             int is_valid_response = 0;
 
-            if (iovc > 0 && iov[0].iov_len > 0) {
-                /* 🔍 简化验证:收到任意数据即视为成功 */
+            /* 🔍 验证:至少16字节才视为有效响应（过滤TCP控制包） */
+            if (iovc > 0 && iov[0].iov_len >= 16) {
                 LOG_I (
                     "%p session: ✅ Smart proxy SUCCESS for port %d: "
                     "Received %zu bytes from %s (data received in %ld ms)",

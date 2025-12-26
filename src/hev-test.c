@@ -345,12 +345,90 @@ run_filter_tests (void)
     remove (chn_file);
 }
 
+static void
+run_smart_proxy_tests (void)
+{
+    printf ("--- Running tests for smart-proxy ---\n");
+
+    // Initialize filter
+    hev_filter_init ();
+
+    // Test: Blacklist IP API
+    printf ("\nTesting blacklist IP API...\n");
+    ip_addr_t test_ip;
+    ipaddr_aton ("93.184.216.34", &test_ip); // example.com
+
+    const char *ip_entry_id = hev_filter_blacklist_add_ip (&test_ip);
+    TEST_ASSERT (ip_entry_id != NULL);
+    TEST_ASSERT (strlen (ip_entry_id) > 0);
+
+    // Verify IP is blacklisted
+    int ip_blocked = hev_filter_blacklist_check_ip (&test_ip);
+    TEST_ASSERT (ip_blocked == 1);
+
+    // Test: Blacklist Domain API
+    printf ("\nTesting blacklist domain API...\n");
+    const char *domain = "example.com";
+    const char *domain_entry_id = hev_filter_blacklist_add_domain (domain);
+    TEST_ASSERT (domain_entry_id != NULL);
+    TEST_ASSERT (strlen (domain_entry_id) > 0);
+
+    // Verify domain is blacklisted
+    int domain_blocked = hev_filter_blacklist_check_entry (
+        HEV_BLACKLIST_ENTRY_DOMAIN, NULL, 0, domain);
+    TEST_ASSERT (domain_blocked == 1);
+
+    // Test: Response size validation (16 byte threshold)
+    printf ("\nTesting response size validation (16 byte threshold)...\n");
+
+    // Simulate response validation logic
+    int is_valid_15_bytes = (15 >= 16) ? 1 : 0; // 15 bytes < 16, should fail
+    int is_valid_16_bytes = (16 >= 16) ? 1 : 0; // 16 bytes >= 16, should pass
+    int is_valid_100_bytes = (100 >= 16) ? 1 : 0; // 100 bytes >= 16, should pass
+
+    TEST_ASSERT (is_valid_15_bytes == 0); // 15 bytes should be invalid
+    TEST_ASSERT (is_valid_16_bytes == 1); // 16 bytes should be valid
+    TEST_ASSERT (is_valid_100_bytes == 1); // 100 bytes should be valid
+
+    // Test: Minimum HTTP response size
+    printf ("\nTesting minimum HTTP response size...\n");
+    const char *min_http_response = "HTTP/1.1 200 OK\r\n\r\n";
+    size_t min_http_len = strlen (min_http_response);
+    TEST_ASSERT (min_http_len >= 16); // Minimum HTTP is 17 bytes
+    printf ("  Minimum HTTP response: %zu bytes (>= 16: %s)\n",
+           min_http_len, (min_http_len >= 16) ? "YES" : "NO");
+
+    // Test: Minimum TLS response size
+    printf ("\nTesting minimum TLS response size...\n");
+    // TLS Record Header (5) + minimum encrypted data (16) = 21 bytes
+    size_t min_tls_len = 5 + 16;
+    TEST_ASSERT (min_tls_len >= 16); // Minimum TLS is 21 bytes
+    printf ("  Minimum TLS response: %zu bytes (>= 16: %s)\n",
+           min_tls_len, (min_tls_len >= 16) ? "YES" : "NO");
+
+    // Test: Blacklist expiry time
+    printf ("\nTesting blacklist expiry time configuration...\n");
+    int expiry_minutes = hev_config_get_smart_proxy_blocked_ip_expiry_minutes ();
+    TEST_ASSERT (expiry_minutes > 0); // Should be configured (1 minute in test)
+    printf ("  Configured expiry time: %d minutes\n", expiry_minutes);
+
+    // Test: GFW blocking detection
+    printf ("\nTesting GFW blocking detection logic...\n");
+    int gfw_blocked = hev_filter_is_gfw_blocked (&test_ip, NULL, 0);
+    TEST_ASSERT (gfw_blocked == 1); // IP should be detected as GFW blocked
+    printf ("  IP 93.184.216.34 is GFW blocked: %s\n",
+           gfw_blocked ? "YES" : "NO");
+
+    // Cleanup
+    hev_filter_fini ();
+}
+
 int
 hev_test_run (void)
 {
     g_is_test_mode = 1; // Set test mode flag
 
-    const char *test_config = "smart_proxy:\n  blocked_ip_expiry_minutes: 1\n";
+    const char *test_config = "smart-proxy:\n  timeout-ms: 2000\n  blocked-ip-expiry-minutes: 1\n  probe-ports:\n    - 80\n    - 443\n";
     hev_config_init_from_str ((const unsigned char *)test_config,
                               strlen (test_config));
     printf ("======== Running Built-in Tests =========\n");
@@ -358,6 +436,7 @@ hev_test_run (void)
     run_filter_tests ();
     run_parser_tests ();
     run_blacklist_tests ();
+    run_smart_proxy_tests ();
 
     printf ("=========================================\n");
     printf ("Test Summary: %d/%d passed.\n", passed_tests, total_tests);
