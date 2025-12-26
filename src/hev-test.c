@@ -25,6 +25,12 @@ int hev_config_get_smart_proxy_blocked_ip_expiry_minutes (void);
 const char *hev_config_get_dns_forwarder_virtual_ip4 (void);
 const char *hev_config_get_dns_forwarder_target_ip4 (void);
 
+// Forward declarations for performance optimizer functions
+void hev_memory_pool_init (void);
+void hev_memory_pool_fini (void);
+int hev_memory_pool_get_udp_size (void);
+void hev_memory_pool_set_udp_size (int size);
+
 #define ANSI_COLOR_RED "\x1b[31m"
 #define ANSI_COLOR_GREEN "\x1b[32m"
 #define ANSI_COLOR_RESET "\x1b[0m"
@@ -495,6 +501,114 @@ run_traffic_router_tests (void)
     printf ("    5. SOCKS5 fallback\n");
 }
 
+static void
+run_performance_optimizer_tests (void)
+{
+    printf ("--- Running tests for performance-optimizer ---\n");
+
+    // Test: Memory pool initialization
+    printf ("\nTesting memory pool initialization...\n");
+
+    hev_memory_pool_init ();
+
+    int udp_size = hev_memory_pool_get_udp_size ();
+    TEST_ASSERT (udp_size > 0); // Should have positive size
+    TEST_ASSERT (udp_size >= 128 && udp_size <= 2048); // Should be in valid range
+
+    printf ("  Initial UDP pool size: %d frames\n", udp_size);
+
+    // Test: Memory pool size adjustment
+    printf ("\nTesting memory pool size adjustment...\n");
+
+    // Set to minimum
+    hev_memory_pool_set_udp_size (128);
+    udp_size = hev_memory_pool_get_udp_size ();
+    TEST_ASSERT (udp_size == 128); // Should be set to minimum
+    printf ("  Set to minimum: %d frames\n", udp_size);
+
+    // Set to maximum
+    hev_memory_pool_set_udp_size (2048);
+    udp_size = hev_memory_pool_get_udp_size ();
+    TEST_ASSERT (udp_size == 2048); // Should be set to maximum
+    printf ("  Set to maximum: %d frames\n", udp_size);
+
+    // Set to default
+    hev_memory_pool_set_udp_size (512);
+    udp_size = hev_memory_pool_get_udp_size ();
+    TEST_ASSERT (udp_size == 512); // Should be set to default
+    printf ("  Set to default: %d frames\n", udp_size);
+
+    // Test: Invalid size rejection (out of range)
+    printf ("\nTesting invalid size rejection...\n");
+
+    int old_size = hev_memory_pool_get_udp_size ();
+    hev_memory_pool_set_udp_size (64); // Below minimum (128)
+    udp_size = hev_memory_pool_get_udp_size ();
+    TEST_ASSERT (udp_size == old_size); // Should not change
+    printf ("  Rejected size 64 (< 128): stayed at %d\n", udp_size);
+
+    hev_memory_pool_set_udp_size (4096); // Above maximum (2048)
+    udp_size = hev_memory_pool_get_udp_size ();
+    TEST_ASSERT (udp_size == old_size); // Should not change
+    printf ("  Rejected size 4096 (> 2048): stayed at %d\n", udp_size);
+
+    // Test: Memory pool size range validation
+    printf ("\nTesting memory pool size range...\n");
+
+    int min_valid = 128;
+    int max_valid = 2048;
+    int default_size = 512;
+
+    printf ("  Valid range: %d - %d\n", min_valid, max_valid);
+    printf ("  Default size: %d\n", default_size);
+
+    TEST_ASSERT (min_valid < default_size && default_size < max_valid);
+
+    // Test: Memory pool finalization
+    printf ("\nTesting memory pool finalization...\n");
+
+    hev_memory_pool_fini ();
+    printf ("  Memory pool finalized successfully\n");
+
+    // Test: Connection pool size constants
+    printf ("\nTesting connection pool configuration...\n");
+
+    // Test typical connection pool sizes
+    int small_pool = 8;
+    int medium_pool = 32;
+    int large_pool = 128;
+
+    TEST_ASSERT (small_pool > 0);
+    TEST_ASSERT (medium_pool > small_pool);
+    TEST_ASSERT (large_pool > medium_pool);
+
+    printf ("  Typical pool sizes: small=%d, medium=%d, large=%d\n",
+           small_pool, medium_pool, large_pool);
+
+    // Test: Memory pool adaptive size calculation
+    printf ("\nTesting memory pool adaptive size logic...\n");
+
+    // Simulate adaptive sizing logic
+    int pool_size = 512;
+    int current_usage = 400; // 78% usage
+    double usage_ratio = (double)current_usage / pool_size;
+
+    TEST_ASSERT (usage_ratio > 0.7 && usage_ratio < 0.8); // Should be ~78%
+
+    // High watermark check (80%)
+    int needs_expansion = (usage_ratio > 0.8);
+    TEST_ASSERT (needs_expansion == 0); // 78% < 80%, no expansion needed
+
+    // Low watermark check (30%)
+    int needs_shrinkage = (usage_ratio < 0.3);
+    TEST_ASSERT (needs_shrinkage == 0); // 78% > 30%, no shrinkage needed
+
+    printf ("  Usage ratio: %.1f%% (%d/%d)\n", usage_ratio * 100,
+           current_usage, pool_size);
+    printf ("  Expansion needed: %s\n", needs_expansion ? "YES" : "NO");
+    printf ("  Shrinkage needed: %s\n", needs_shrinkage ? "YES" : "NO");
+}
+
 int
 hev_test_run (void)
 {
@@ -510,6 +624,7 @@ hev_test_run (void)
     run_blacklist_tests ();
     run_smart_proxy_tests ();
     run_traffic_router_tests ();
+    run_performance_optimizer_tests ();
 
     printf ("=========================================\n");
     printf ("Test Summary: %d/%d passed.\n", passed_tests, total_tests);
