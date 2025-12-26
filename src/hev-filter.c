@@ -12,6 +12,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <errno.h>
+#include <netinet/in.h>
 #include <arpa/inet.h>
 #include <time.h>
 #include <lwip/ip_addr.h>
