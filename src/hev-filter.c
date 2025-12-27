@@ -1014,8 +1014,9 @@ hev_filter_load_acl (const char *file_path)
         if (parse_result == 2) {
             /* Format: [allow|block] <value>
              * Move value from type_str to value_str, auto-detect type */
-            LOG_D ("filter: ACL format with 2 tokens detected: %s (parse_result=%d)",
-                   trim, parse_result);
+            LOG_D (
+                "filter: ACL format with 2 tokens detected: %s (parse_result=%d)",
+                trim, parse_result);
 
             /* Copy value from type_str to value_str */
             strncpy (value_str, type_str, sizeof (value_str) - 1);
@@ -1056,8 +1057,9 @@ hev_filter_load_acl (const char *file_path)
 
         if (parse_result != 3) {
             /* Invalid format - skip this line */
-            LOG_W ("filter: Invalid ACL line format: %s (expected: <action> <type> <value>)",
-                   trim);
+            LOG_W (
+                "filter: Invalid ACL line format: %s (expected: <action> <type> <value>)",
+                trim);
             continue;
         }
 
@@ -1078,7 +1080,8 @@ hev_filter_load_acl (const char *file_path)
             /* Port rule */
             int port = atoi (value_str);
             if (port >= 0 && port < 65536) {
-                HevACLRule *rule = create_acl_rule (action, HEV_ACL_TYPE_PORT, value_str);
+                HevACLRule *rule =
+                    create_acl_rule (action, HEV_ACL_TYPE_PORT, value_str);
                 rule->next = acl_port_rules[port];
                 acl_port_rules[port] = rule;
                 port_count++;
@@ -1092,7 +1095,8 @@ hev_filter_load_acl (const char *file_path)
             ip_addr_t ip_test;
             if (ipaddr_aton (value_str, &ip_test)) {
                 /* Add to new ACL system (two-stage matching) */
-                HevACLRule *rule = create_acl_rule (action, HEV_ACL_TYPE_IP, value_str);
+                HevACLRule *rule =
+                    create_acl_rule (action, HEV_ACL_TYPE_IP, value_str);
                 rule->next = acl_ip_rules;
                 acl_ip_rules = rule;
                 ip_count++;
@@ -1115,7 +1119,8 @@ hev_filter_load_acl (const char *file_path)
                 ip_addr_t ip_test;
                 if (ipaddr_aton (ip_str, &ip_test)) {
                     /* Add to new ACL system (two-stage matching) */
-                    HevACLRule *rule = create_acl_rule (action, HEV_ACL_TYPE_CIDR, value_str);
+                    HevACLRule *rule =
+                        create_acl_rule (action, HEV_ACL_TYPE_CIDR, value_str);
                     rule->next = acl_cidr_rules;
                     acl_cidr_rules = rule;
                     cidr_count++;
@@ -1133,7 +1138,8 @@ hev_filter_load_acl (const char *file_path)
             }
         } else if (strcasecmp (type_str, "domain") == 0) {
             /* Domain rule */
-            HevACLRule *rule = create_acl_rule (action, HEV_ACL_TYPE_DOMAIN, value_str);
+            HevACLRule *rule =
+                create_acl_rule (action, HEV_ACL_TYPE_DOMAIN, value_str);
             rule->next = NULL;
 
             /* Determine which hash table to use */
@@ -1196,9 +1202,11 @@ hev_filter_load_chnroutes (const char *file_path)
     chnroutes_ipv6 = malloc (sizeof (CIDRRange6) * ipv6_capacity);
     if (!chnroutes_ipv4 || !chnroutes_ipv6) {
         LOG_E ("filter: Failed to pre-allocate memory for chnroutes");
-        if (chnroutes_ipv4) free(chnroutes_ipv4);
-        if (chnroutes_ipv6) free(chnroutes_ipv6);
-        fclose(fp);
+        if (chnroutes_ipv4)
+            free (chnroutes_ipv4);
+        if (chnroutes_ipv6)
+            free (chnroutes_ipv6);
+        fclose (fp);
         return -1;
     }
 
@@ -1213,9 +1221,11 @@ hev_filter_load_chnroutes (const char *file_path)
             /* IPv6 */
             if (chnroutes_ipv6_count >= ipv6_capacity) {
                 ipv6_capacity *= 2;
-                CIDRRange6 *new_ptr = realloc (chnroutes_ipv6, sizeof (CIDRRange6) * ipv6_capacity);
+                CIDRRange6 *new_ptr = realloc (
+                    chnroutes_ipv6, sizeof (CIDRRange6) * ipv6_capacity);
                 if (!new_ptr) {
-                    LOG_E ("filter: Failed to re-allocate memory for IPv6 chnroutes");
+                    LOG_E (
+                        "filter: Failed to re-allocate memory for IPv6 chnroutes");
                     break;
                 }
                 chnroutes_ipv6 = new_ptr;
@@ -1232,7 +1242,7 @@ hev_filter_load_chnroutes (const char *file_path)
             int i = 15;
             while (bits_to_mask > 0 && i >= 0) {
                 int bits_in_byte = (bits_to_mask > 8) ? 8 : bits_to_mask;
-                uint8_t mask = (uint8_t) (0xFF >> bits_in_byte);
+                uint8_t mask = (uint8_t)(0xFF >> bits_in_byte);
                 range->start[i] &= ~mask;
                 range->end[i] |= mask;
                 bits_to_mask -= bits_in_byte;
@@ -1242,9 +1252,11 @@ hev_filter_load_chnroutes (const char *file_path)
             /* IPv4 */
             if (chnroutes_ipv4_count >= ipv4_capacity) {
                 ipv4_capacity *= 2;
-                CIDRRange4 *new_ptr = realloc (chnroutes_ipv4, sizeof (CIDRRange4) * ipv4_capacity);
+                CIDRRange4 *new_ptr = realloc (
+                    chnroutes_ipv4, sizeof (CIDRRange4) * ipv4_capacity);
                 if (!new_ptr) {
-                    LOG_E ("filter: Failed to re-allocate memory for IPv4 chnroutes");
+                    LOG_E (
+                        "filter: Failed to re-allocate memory for IPv4 chnroutes");
                     break;
                 }
                 chnroutes_ipv4 = new_ptr;

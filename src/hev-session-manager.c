@@ -183,8 +183,7 @@ get_current_time_seconds (void)
    辅助函数: 创建并运行会话任务
    ============================================================================ */
 static int
-create_and_run_session_task (HevSocks5SessionTCP *tcp,
-                             HevTaskEntry task_entry,
+create_and_run_session_task (HevSocks5SessionTCP *tcp, HevTaskEntry task_entry,
                              const char *session_type)
 {
     HevTask *task;
@@ -550,7 +549,8 @@ hev_session_manager_start_direct_tcp (struct tcp_pcb *pcb, struct pbuf *queue)
     LOG_I ("%p session: Direct connect started %s:%d -> %s:%d", tcp, src_ip,
            pcb->remote_port, dst_ip, pcb->local_port);
 
-    if (create_and_run_session_task (tcp, run_direct_connect_task, "direct") < 0)
+    if (create_and_run_session_task (tcp, run_direct_connect_task, "direct") <
+        0)
         return;
 }
 
@@ -572,7 +572,8 @@ hev_session_manager_start_smart_proxy (struct tcp_pcb *pcb)
     LOG_I ("%p session: Smart proxy started %s:%d -> %s:%d", tcp, src_ip,
            pcb->remote_port, dst_ip, pcb->local_port);
 
-    if (create_and_run_session_task (tcp, run_smart_proxy_task, "smart-proxy") < 0)
+    if (create_and_run_session_task (tcp, run_smart_proxy_task, "smart-proxy") <
+        0)
         return;
 }
 
@@ -594,7 +595,8 @@ hev_session_manager_start_domain_first_tcp (struct tcp_pcb *pcb)
     LOG_I ("%p session: Domain-first routing started %s:%d -> %s:%d", tcp,
            src_ip, pcb->remote_port, dst_ip, pcb->local_port);
 
-    if (create_and_run_session_task (tcp, run_domain_first_task, "domain-first") < 0)
+    if (create_and_run_session_task (tcp, run_domain_first_task,
+                                     "domain-first") < 0)
         return;
 }
 

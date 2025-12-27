@@ -19,10 +19,10 @@
 #include "hev-config-const.h"
 
 /* YAML 辅助宏 */
-#define CHECK_YAML_MAPPING(base) \
-    do { \
+#define CHECK_YAML_MAPPING(base)                          \
+    do {                                                  \
         if (!(base) || YAML_MAPPING_NODE != (base)->type) \
-            return -1; \
+            return -1;                                    \
     } while (0)
 
 static char tun_name[64];
