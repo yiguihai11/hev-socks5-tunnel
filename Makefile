@@ -57,9 +57,8 @@ UNINSMSG="\e[1;34mUNINS\e[0m %s\n"
 
 ENABLE_DEBUG :=
 ifeq ($(ENABLE_DEBUG),1)
-	CCFLAGS+=-g -O0 -DENABLE_DEBUG -fsanitize=address
+	CCFLAGS+=-g -O0 -DENABLE_DEBUG
 	STRIP=true
-	LDFLAGS+=-fsanitize=address
 endif
 
 ENABLE_STATIC :=
