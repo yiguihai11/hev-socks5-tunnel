@@ -40,7 +40,7 @@ allow *.example.org
 block 1.2.3.4
 
 # 允许某个特定的 IP 地址直连 (即使它可能是国外 IP)
-allow 8.8.8.8
+allow 8.8.9.9
 
 
 # --- CIDR 网段规则 ---

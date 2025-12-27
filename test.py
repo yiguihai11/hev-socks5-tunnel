@@ -35,7 +35,7 @@ TCP_TEST_CONFIGS = [                             # TCP测试配置（可增删�
     },
     {
         "target_domain": "wifi.vivo.com.cn",
-        "target_ip": "39.136.191.59",
+        "target_ip": "112.90.223.30",
         "ports": [80, 443],
         "timeout": 3
     }

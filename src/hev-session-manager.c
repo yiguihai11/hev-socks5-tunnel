@@ -180,6 +180,34 @@ get_current_time_seconds (void)
 /* static int check_smart_proxy_timeout_ms (time_t start_time_ms, int timeout_ms); */
 
 /* ============================================================================
+   辅助函数: 创建并运行会话任务
+   ============================================================================ */
+static int
+create_and_run_session_task (HevSocks5SessionTCP *tcp,
+                             HevTaskEntry task_entry,
+                             const char *session_type)
+{
+    HevTask *task;
+    HevListNode *node;
+    int stack_size;
+
+    stack_size = hev_config_get_misc_task_stack_size ();
+    task = hev_task_new (stack_size);
+    if (!task) {
+        LOG_E ("%p session: failed to create %s task", tcp, session_type);
+        hev_object_unref (HEV_OBJECT (tcp));
+        return -1;
+    }
+
+    hev_socks5_session_set_task (HEV_SOCKS5_SESSION (tcp), task);
+    node = hev_socks5_session_get_node (HEV_SOCKS5_SESSION (tcp));
+    hev_socks5_tunnel_insert_session (node);
+    hev_task_run (task, task_entry, tcp);
+
+    return 0;
+}
+
+/* ============================================================================
    辅助函数:设置 TCP Keep-Alive
    ⬇️ 使用我们保存的 HEV_TCP_KEEPIDLE 等宏
    ============================================================================ */
@@ -460,9 +488,6 @@ void
 hev_session_manager_start_socks5_tcp (struct tcp_pcb *pcb, struct pbuf *queue)
 {
     HevSocks5SessionTCP *tcp;
-    HevListNode *node;
-    int stack_size;
-    HevTask *task;
     char src_ip[INET6_ADDRSTRLEN];
     char dst_ip[INET6_ADDRSTRLEN];
 
@@ -492,27 +517,15 @@ hev_session_manager_start_socks5_tcp (struct tcp_pcb *pcb, struct pbuf *queue)
     LOG_I ("%p session: SOCKS5 proxy started %s:%d -> %s:%d", tcp, src_ip,
            pcb->remote_port, dst_ip, pcb->local_port);
 
-    stack_size = hev_config_get_misc_task_stack_size ();
-    task = hev_task_new (stack_size);
-    if (!task) {
-        LOG_E ("%p session: failed to create SOCKS5 task", tcp);
-        hev_object_unref (HEV_OBJECT (tcp));
+    if (create_and_run_session_task (tcp, hev_socks5_session_task_entry,
+                                     "SOCKS5") < 0)
         return;
-    }
-
-    hev_socks5_session_set_task (HEV_SOCKS5_SESSION (tcp), task);
-    node = hev_socks5_session_get_node (HEV_SOCKS5_SESSION (tcp));
-    hev_socks5_tunnel_insert_session (node);
-    hev_task_run (task, hev_socks5_session_task_entry, tcp);
 }
 
 void
 hev_session_manager_start_direct_tcp (struct tcp_pcb *pcb, struct pbuf *queue)
 {
     HevSocks5SessionTCP *tcp;
-    HevListNode *node;
-    int stack_size;
-    HevTask *task;
     char src_ip[INET6_ADDRSTRLEN];
     char dst_ip[INET6_ADDRSTRLEN];
 
@@ -537,27 +550,14 @@ hev_session_manager_start_direct_tcp (struct tcp_pcb *pcb, struct pbuf *queue)
     LOG_I ("%p session: Direct connect started %s:%d -> %s:%d", tcp, src_ip,
            pcb->remote_port, dst_ip, pcb->local_port);
 
-    stack_size = hev_config_get_misc_task_stack_size ();
-    task = hev_task_new (stack_size);
-    if (!task) {
-        LOG_E ("%p session: failed to create direct connect task", tcp);
-        hev_object_unref (HEV_OBJECT (tcp));
+    if (create_and_run_session_task (tcp, run_direct_connect_task, "direct") < 0)
         return;
-    }
-
-    hev_socks5_session_set_task (HEV_SOCKS5_SESSION (tcp), task);
-    node = hev_socks5_session_get_node (HEV_SOCKS5_SESSION (tcp));
-    hev_socks5_tunnel_insert_session (node);
-    hev_task_run (task, run_direct_connect_task, tcp);
 }
 
 void
 hev_session_manager_start_smart_proxy (struct tcp_pcb *pcb)
 {
     HevSocks5SessionTCP *tcp;
-    HevListNode *node;
-    int stack_size;
-    HevTask *task;
     char src_ip[INET6_ADDRSTRLEN];
     char dst_ip[INET6_ADDRSTRLEN];
 
@@ -572,27 +572,14 @@ hev_session_manager_start_smart_proxy (struct tcp_pcb *pcb)
     LOG_I ("%p session: Smart proxy started %s:%d -> %s:%d", tcp, src_ip,
            pcb->remote_port, dst_ip, pcb->local_port);
 
-    stack_size = hev_config_get_misc_task_stack_size ();
-    task = hev_task_new (stack_size);
-    if (!task) {
-        LOG_E ("%p session: failed to create smart proxy task", tcp);
-        hev_object_unref (HEV_OBJECT (tcp));
+    if (create_and_run_session_task (tcp, run_smart_proxy_task, "smart-proxy") < 0)
         return;
-    }
-
-    hev_socks5_session_set_task (HEV_SOCKS5_SESSION (tcp), task);
-    node = hev_socks5_session_get_node (HEV_SOCKS5_SESSION (tcp));
-    hev_socks5_tunnel_insert_session (node);
-    hev_task_run (task, run_smart_proxy_task, tcp);
 }
 
 void
 hev_session_manager_start_domain_first_tcp (struct tcp_pcb *pcb)
 {
     HevSocks5SessionTCP *tcp;
-    HevListNode *node;
-    int stack_size;
-    HevTask *task;
     char src_ip[INET6_ADDRSTRLEN];
     char dst_ip[INET6_ADDRSTRLEN];
 
@@ -607,18 +594,8 @@ hev_session_manager_start_domain_first_tcp (struct tcp_pcb *pcb)
     LOG_I ("%p session: Domain-first routing started %s:%d -> %s:%d", tcp,
            src_ip, pcb->remote_port, dst_ip, pcb->local_port);
 
-    stack_size = hev_config_get_misc_task_stack_size ();
-    task = hev_task_new (stack_size);
-    if (!task) {
-        LOG_E ("%p session: failed to create domain-first task", tcp);
-        hev_object_unref (HEV_OBJECT (tcp));
+    if (create_and_run_session_task (tcp, run_domain_first_task, "domain-first") < 0)
         return;
-    }
-
-    hev_socks5_session_set_task (HEV_SOCKS5_SESSION (tcp), task);
-    node = hev_socks5_session_get_node (HEV_SOCKS5_SESSION (tcp));
-    hev_socks5_tunnel_insert_session (node);
-    hev_task_run (task, run_domain_first_task, tcp);
 }
 
 /* ============================================================================
@@ -1480,7 +1457,7 @@ fallback_socks5:
         if (detected_hostname[0]) {
             hev_filter_blacklist_add_domain (detected_hostname);
         } else {
-            hev_filter_blacklist_add (&pcb->local_ip);
+            hev_filter_blacklist_add_ip (&pcb->local_ip);
         }
     }
 

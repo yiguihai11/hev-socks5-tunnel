@@ -18,6 +18,13 @@
 #include "hev-config.h"
 #include "hev-config-const.h"
 
+/* YAML 辅助宏 */
+#define CHECK_YAML_MAPPING(base) \
+    do { \
+        if (!(base) || YAML_MAPPING_NODE != (base)->type) \
+            return -1; \
+    } while (0)
+
 static char tun_name[64];
 static unsigned int tun_mtu = 8500;
 static int multi_queue;
@@ -43,9 +50,7 @@ hev_config_parse_socks5_tcp (yaml_document_t *doc, yaml_node_t *base)
 {
     yaml_node_pair_t *pair;
 
-    if (!base || base->type != YAML_MAPPING_NODE)
-        return -1;
-
+    CHECK_YAML_MAPPING (base);
     for (pair = base->data.mapping.pairs.start;
          pair < base->data.mapping.pairs.top; pair++) {
         yaml_node_t *node_key = yaml_document_get_node (doc, pair->key);
@@ -81,9 +86,7 @@ hev_config_parse_socks5_udp (yaml_document_t *doc, yaml_node_t *base)
 {
     yaml_node_pair_t *pair;
 
-    if (!base || base->type != YAML_MAPPING_NODE)
-        return -1;
-
+    CHECK_YAML_MAPPING (base);
     for (pair = base->data.mapping.pairs.start;
          pair < base->data.mapping.pairs.top; pair++) {
         yaml_node_t *node_key = yaml_document_get_node (doc, pair->key);
@@ -119,9 +122,7 @@ hev_config_parse_socks5 (yaml_document_t *doc, yaml_node_t *base)
 {
     yaml_node_pair_t *pair;
 
-    if (!base || base->type != YAML_MAPPING_NODE)
-        return -1;
-
+    CHECK_YAML_MAPPING (base);
     for (pair = base->data.mapping.pairs.start;
          pair < base->data.mapping.pairs.top; pair++) {
         yaml_node_t *node_key = yaml_document_get_node (doc, pair->key);
@@ -155,6 +156,7 @@ static char pid_file[1024];
 static int max_session_count;
 static int task_stack_size = 86016;
 static int tcp_buffer_size = 65536;
+static int udp_copy_buffer_nums = 10;
 static int connect_timeout = 10000;
 static int read_write_timeout = 300000;
 static int limit_nofile = 65535;
@@ -201,9 +203,7 @@ hev_config_parse_tunnel_ipv4 (yaml_document_t *doc, yaml_node_t *base)
 {
     yaml_node_pair_t *pair;
 
-    if (!base || YAML_MAPPING_NODE != base->type)
-        return -1;
-
+    CHECK_YAML_MAPPING (base);
     for (pair = base->data.mapping.pairs.start;
          pair < base->data.mapping.pairs.top; pair++) {
         yaml_node_t *node;
@@ -234,9 +234,7 @@ hev_config_parse_tunnel_ipv6 (yaml_document_t *doc, yaml_node_t *base)
 {
     yaml_node_pair_t *pair;
 
-    if (!base || YAML_MAPPING_NODE != base->type)
-        return -1;
-
+    CHECK_YAML_MAPPING (base);
     for (pair = base->data.mapping.pairs.start;
          pair < base->data.mapping.pairs.top; pair++) {
         yaml_node_t *node;
@@ -267,9 +265,7 @@ hev_config_parse_tunnel (yaml_document_t *doc, yaml_node_t *base)
 {
     yaml_node_pair_t *pair;
 
-    if (!base || YAML_MAPPING_NODE != base->type)
-        return -1;
-
+    CHECK_YAML_MAPPING (base);
     for (pair = base->data.mapping.pairs.start;
          pair < base->data.mapping.pairs.top; pair++) {
         yaml_node_t *node;
@@ -320,9 +316,7 @@ hev_config_parse_mapdns (yaml_document_t *doc, yaml_node_t *base)
 {
     yaml_node_pair_t *pair;
 
-    if (!base || YAML_MAPPING_NODE != base->type)
-        return -1;
-
+    CHECK_YAML_MAPPING (base);
     for (pair = base->data.mapping.pairs.start;
          pair < base->data.mapping.pairs.top; pair++) {
         yaml_node_t *node;
@@ -377,9 +371,7 @@ hev_config_parse_dns_forwarder (yaml_document_t *doc, yaml_node_t *base)
 {
     yaml_node_pair_t *pair;
 
-    if (!base || YAML_MAPPING_NODE != base->type)
-        return -1;
-
+    CHECK_YAML_MAPPING (base);
     for (pair = base->data.mapping.pairs.start;
          pair < base->data.mapping.pairs.top; pair++) {
         yaml_node_t *node;
@@ -420,9 +412,7 @@ hev_config_parse_chnroutes (yaml_document_t *doc, yaml_node_t *base)
 {
     yaml_node_pair_t *pair;
 
-    if (!base || YAML_MAPPING_NODE != base->type)
-        return -1;
-
+    CHECK_YAML_MAPPING (base);
     for (pair = base->data.mapping.pairs.start;
          pair < base->data.mapping.pairs.top; pair++) {
         yaml_node_t *node;
@@ -454,9 +444,7 @@ hev_config_parse_smart_proxy (yaml_document_t *doc, yaml_node_t *base)
 {
     yaml_node_pair_t *pair;
 
-    if (!base || YAML_MAPPING_NODE != base->type)
-        return -1;
-
+    CHECK_YAML_MAPPING (base);
     for (pair = base->data.mapping.pairs.start;
          pair < base->data.mapping.pairs.top; pair++) {
         yaml_node_t *node;
@@ -530,9 +518,7 @@ hev_config_parse_acl (yaml_document_t *doc, yaml_node_t *base)
 {
     yaml_node_pair_t *pair;
 
-    if (!base || YAML_MAPPING_NODE != base->type)
-        return -1;
-
+    CHECK_YAML_MAPPING (base);
     for (pair = base->data.mapping.pairs.start;
          pair < base->data.mapping.pairs.top; pair++) {
         yaml_node_t *node;
@@ -563,9 +549,7 @@ hev_config_parse_misc (yaml_document_t *doc, yaml_node_t *base)
 {
     yaml_node_pair_t *pair;
 
-    if (!base || YAML_MAPPING_NODE != base->type)
-        return -1;
-
+    CHECK_YAML_MAPPING (base);
     for (pair = base->data.mapping.pairs.start;
          pair < base->data.mapping.pairs.top; pair++) {
         yaml_node_t *node;
@@ -829,6 +813,12 @@ int
 hev_config_get_misc_tcp_buffer_size (void)
 {
     return tcp_buffer_size;
+}
+
+int
+hev_config_get_misc_udp_copy_buffer_nums (void)
+{
+    return udp_copy_buffer_nums;
 }
 
 int

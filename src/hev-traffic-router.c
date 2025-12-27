@@ -179,7 +179,7 @@ hev_traffic_router_handle_tcp (struct tcp_pcb *pcb)
     // --- Priority 4: Smart proxy for foreign IPs ---
     if (hev_config_get_smart_proxy_timeout_ms () > 0 &&
         hev_config_get_smart_proxy_blocked_ip_expiry_minutes () > 0 &&
-        !hev_filter_blacklist_check (local_ip)) {
+        !hev_filter_blacklist_check_ip (local_ip)) {
         LOG_I (
             "%p router: TCP routing %s:%d -> %s:%d via SMART_PROXY (foreign IP, non-probe port, trying direct first)",
             pcb, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
@@ -188,7 +188,7 @@ hev_traffic_router_handle_tcp (struct tcp_pcb *pcb)
     }
 
     // --- Priority 5: Fallback to SOCKS5 ---
-    if (hev_filter_blacklist_check (local_ip)) {
+    if (hev_filter_blacklist_check_ip (local_ip)) {
         LOG_I (
             "%p router: TCP routing %s:%d -> %s:%d via SOCKS5 (IP is blacklisted)",
             pcb, src_ip, pcb->remote_port, dst_ip, pcb->local_port);

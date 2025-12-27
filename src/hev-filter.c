@@ -311,6 +311,36 @@ get_current_time_seconds (void)
 }
 
 /* ============================================================================
+   ACL Helper Functions
+   ============================================================================ */
+
+/* 解析 action 字符串为枚举 */
+static int
+parse_acl_action (const char *action_str, HevACLAction *action_out)
+{
+    if (strcasecmp (action_str, "allow") == 0) {
+        *action_out = HEV_ACL_ACTION_ALLOW;
+        return 1;
+    } else if (strcasecmp (action_str, "block") == 0) {
+        *action_out = HEV_ACL_ACTION_BLOCK;
+        return 1;
+    }
+    return 0;
+}
+
+/* 创建 ACL 规则 */
+static HevACLRule *
+create_acl_rule (HevACLAction action, HevACLType type, const char *pattern)
+{
+    HevACLRule *rule = hev_malloc (sizeof (HevACLRule));
+    rule->action = action;
+    rule->type = type;
+    strncpy (rule->pattern, pattern, sizeof (rule->pattern) - 1);
+    rule->pattern[sizeof (rule->pattern) - 1] = '\0';
+    return rule;
+}
+
+/* ============================================================================
    Enhanced Blacklist Helper Functions
    ============================================================================ */
 
@@ -975,56 +1005,80 @@ hev_filter_load_acl (const char *file_path)
 
         /* Parse new format: [allow|block] [ip|cidr|port|domain] [value] */
         char action_str[16];
-        char type_str[16];
+        char type_str[64];
         char value_str[256];
 
         int parse_result =
-            sscanf (trim, "%15s %15s %255s", action_str, type_str, value_str);
-        if (parse_result != 3) {
-            /* Try old format (just IP or hostname) - treat as block */
-            LOG_D (
-                "filter: Legacy ACL format detected, treating as block: %s (parse_result=%d)",
-                trim, parse_result);
-            strcpy (action_str, "block");
+            sscanf (trim, "%15s %63s %255s", action_str, type_str, value_str);
 
-            /* Detect if it's an IP or hostname */
-            ip_addr_t ip_test;
-            if (ipaddr_aton (trim, &ip_test)) {
-                strcpy (type_str, "ip");
-                strncpy (value_str, trim, sizeof (value_str) - 1);
-            } else {
-                strcpy (type_str, "domain");
-                strncpy (value_str, trim, sizeof (value_str) - 1);
-            }
+        if (parse_result == 2) {
+            /* Format: [allow|block] <value>
+             * Move value from type_str to value_str, auto-detect type */
+            LOG_D ("filter: ACL format with 2 tokens detected: %s (parse_result=%d)",
+                   trim, parse_result);
+
+            /* Copy value from type_str to value_str */
+            strncpy (value_str, type_str, sizeof (value_str) - 1);
             value_str[sizeof (value_str) - 1] = '\0';
+
+            /* Auto-detect type from value format */
+            if (strchr (value_str, '/') != NULL) {
+                /* CIDR notation: 192.168.1.0/24 */
+                strcpy (type_str, "cidr");
+            } else if (strchr (value_str, '.') != NULL &&
+                       !strchr (value_str, '*')) {
+                /* Single IP: 1.2.3.4 (no wildcard, no slash) */
+                ip_addr_t ip_test;
+                if (ipaddr_aton (value_str, &ip_test)) {
+                    strcpy (type_str, "ip");
+                } else {
+                    strcpy (type_str, "domain");
+                }
+            } else if (atoi (value_str) > 0 && atoi (value_str) < 65536 &&
+                       !strchr (value_str, '.')) {
+                /* Port number: 80, 443 */
+                strcpy (type_str, "port");
+            } else {
+                /* Default to domain (handles wildcards like *.example.com) */
+                strcpy (type_str, "domain");
+            }
+
+            /* Verify action is valid, default to block if not */
+            if (strcasecmp (action_str, "allow") != 0 &&
+                strcasecmp (action_str, "block") != 0) {
+                LOG_W ("filter: Invalid action '%s', defaulting to block: %s",
+                       action_str, trim);
+                strcpy (action_str, "block");
+            }
+
+            parse_result = 3; /* Now we have all three parts */
+        }
+
+        if (parse_result != 3) {
+            /* Invalid format - skip this line */
+            LOG_W ("filter: Invalid ACL line format: %s (expected: <action> <type> <value>)",
+                   trim);
+            continue;
         }
 
         /* Convert action string to enum */
-        HevACLAction action = HEV_ACL_ACTION_DEFAULT;
-        if (strcasecmp (action_str, "allow") == 0) {
-            action = HEV_ACL_ACTION_ALLOW;
-            allow_count++;
-        } else if (strcasecmp (action_str, "block") == 0) {
-            action = HEV_ACL_ACTION_BLOCK;
-            block_count++;
-        } else {
+        HevACLAction action;
+        if (!parse_acl_action (action_str, &action)) {
             LOG_W ("filter: Unknown action '%s' in ACL line: %s", action_str,
                    trim);
             continue;
         }
+        if (action == HEV_ACL_ACTION_ALLOW)
+            allow_count++;
+        else
+            block_count++;
 
         /* Process by type */
         if (strcasecmp (type_str, "port") == 0) {
             /* Port rule */
             int port = atoi (value_str);
             if (port >= 0 && port < 65536) {
-                HevACLRule *rule = hev_malloc (sizeof (HevACLRule));
-                rule->action = action;
-                rule->type = HEV_ACL_TYPE_PORT;
-                strncpy (rule->pattern, value_str, sizeof (rule->pattern) - 1);
-                rule->pattern[sizeof (rule->pattern) - 1] = '\0';
-
-                /* Add to port rules array */
+                HevACLRule *rule = create_acl_rule (action, HEV_ACL_TYPE_PORT, value_str);
                 rule->next = acl_port_rules[port];
                 acl_port_rules[port] = rule;
                 port_count++;
@@ -1038,11 +1092,7 @@ hev_filter_load_acl (const char *file_path)
             ip_addr_t ip_test;
             if (ipaddr_aton (value_str, &ip_test)) {
                 /* Add to new ACL system (two-stage matching) */
-                HevACLRule *rule = hev_malloc (sizeof (HevACLRule));
-                rule->action = action;
-                rule->type = HEV_ACL_TYPE_IP;
-                snprintf (rule->pattern, sizeof (rule->pattern), "%s",
-                          value_str);
+                HevACLRule *rule = create_acl_rule (action, HEV_ACL_TYPE_IP, value_str);
                 rule->next = acl_ip_rules;
                 acl_ip_rules = rule;
                 ip_count++;
@@ -1065,11 +1115,7 @@ hev_filter_load_acl (const char *file_path)
                 ip_addr_t ip_test;
                 if (ipaddr_aton (ip_str, &ip_test)) {
                     /* Add to new ACL system (two-stage matching) */
-                    HevACLRule *rule = hev_malloc (sizeof (HevACLRule));
-                    rule->action = action;
-                    rule->type = HEV_ACL_TYPE_CIDR;
-                    snprintf (rule->pattern, sizeof (rule->pattern), "%s",
-                              value_str);
+                    HevACLRule *rule = create_acl_rule (action, HEV_ACL_TYPE_CIDR, value_str);
                     rule->next = acl_cidr_rules;
                     acl_cidr_rules = rule;
                     cidr_count++;
@@ -1087,11 +1133,7 @@ hev_filter_load_acl (const char *file_path)
             }
         } else if (strcasecmp (type_str, "domain") == 0) {
             /* Domain rule */
-            HevACLRule *rule = hev_malloc (sizeof (HevACLRule));
-            rule->action = action;
-            rule->type = HEV_ACL_TYPE_DOMAIN;
-            strncpy (rule->pattern, value_str, sizeof (rule->pattern) - 1);
-            rule->pattern[sizeof (rule->pattern) - 1] = '\0';
+            HevACLRule *rule = create_acl_rule (action, HEV_ACL_TYPE_DOMAIN, value_str);
             rule->next = NULL;
 
             /* Determine which hash table to use */
@@ -1133,6 +1175,8 @@ hev_filter_load_chnroutes (const char *file_path)
 {
     FILE *fp;
     char line[128];
+    uint32_t ipv4_capacity = 20000;
+    uint32_t ipv6_capacity = 5000;
 
     if (!file_path) {
         LOG_D ("filter: chnroutes file not configured");
@@ -1147,6 +1191,17 @@ hev_filter_load_chnroutes (const char *file_path)
 
     LOG_I ("filter: Loading chnroutes from %s", file_path);
 
+    /* Pre-allocate memory */
+    chnroutes_ipv4 = malloc (sizeof (CIDRRange4) * ipv4_capacity);
+    chnroutes_ipv6 = malloc (sizeof (CIDRRange6) * ipv6_capacity);
+    if (!chnroutes_ipv4 || !chnroutes_ipv6) {
+        LOG_E ("filter: Failed to pre-allocate memory for chnroutes");
+        if (chnroutes_ipv4) free(chnroutes_ipv4);
+        if (chnroutes_ipv6) free(chnroutes_ipv6);
+        fclose(fp);
+        return -1;
+    }
+
     while (fgets (line, sizeof (line), fp)) {
         char ip_str[128];
         int prefix_len;
@@ -1156,14 +1211,20 @@ hev_filter_load_chnroutes (const char *file_path)
 
         if (strchr (ip_str, ':')) {
             /* IPv6 */
-            chnroutes_ipv6_count++;
-            chnroutes_ipv6 = realloc (chnroutes_ipv6, sizeof (CIDRRange6) *
-                                                          chnroutes_ipv6_count);
+            if (chnroutes_ipv6_count >= ipv6_capacity) {
+                ipv6_capacity *= 2;
+                CIDRRange6 *new_ptr = realloc (chnroutes_ipv6, sizeof (CIDRRange6) * ipv6_capacity);
+                if (!new_ptr) {
+                    LOG_E ("filter: Failed to re-allocate memory for IPv6 chnroutes");
+                    break;
+                }
+                chnroutes_ipv6 = new_ptr;
+            }
 
             struct in6_addr addr;
             inet_pton (AF_INET6, ip_str, &addr);
 
-            CIDRRange6 *range = &chnroutes_ipv6[chnroutes_ipv6_count - 1];
+            CIDRRange6 *range = &chnroutes_ipv6[chnroutes_ipv6_count++];
             memcpy (range->start, &addr, 16);
             memcpy (range->end, &addr, 16);
 
@@ -1171,17 +1232,23 @@ hev_filter_load_chnroutes (const char *file_path)
             int i = 15;
             while (bits_to_mask > 0 && i >= 0) {
                 int bits_in_byte = (bits_to_mask > 8) ? 8 : bits_to_mask;
-                uint8_t mask = (0xFF >> bits_in_byte);
-                range->start[i] &= mask;
-                range->end[i] |= ~mask;
+                uint8_t mask = (uint8_t) (0xFF >> bits_in_byte);
+                range->start[i] &= ~mask;
+                range->end[i] |= mask;
                 bits_to_mask -= bits_in_byte;
                 i--;
             }
         } else {
             /* IPv4 */
-            chnroutes_ipv4_count++;
-            chnroutes_ipv4 = realloc (chnroutes_ipv4, sizeof (CIDRRange4) *
-                                                          chnroutes_ipv4_count);
+            if (chnroutes_ipv4_count >= ipv4_capacity) {
+                ipv4_capacity *= 2;
+                CIDRRange4 *new_ptr = realloc (chnroutes_ipv4, sizeof (CIDRRange4) * ipv4_capacity);
+                if (!new_ptr) {
+                    LOG_E ("filter: Failed to re-allocate memory for IPv4 chnroutes");
+                    break;
+                }
+                chnroutes_ipv4 = new_ptr;
+            }
 
             struct in_addr addr;
             inet_aton (ip_str, &addr);
@@ -1191,8 +1258,9 @@ hev_filter_load_chnroutes (const char *file_path)
             uint32_t start_host = addr_host & mask_host;
             uint32_t end_host = start_host | (~mask_host);
 
-            chnroutes_ipv4[chnroutes_ipv4_count - 1].start = start_host;
-            chnroutes_ipv4[chnroutes_ipv4_count - 1].end = end_host;
+            chnroutes_ipv4[chnroutes_ipv4_count].start = start_host;
+            chnroutes_ipv4[chnroutes_ipv4_count].end = end_host;
+            chnroutes_ipv4_count++;
         }
     }
 
@@ -1863,24 +1931,6 @@ hev_filter_blacklist_get_stats (size_t *total_entries, size_t *active_entries,
         *total_hits_out = total_hits;
     if (total_blocked_out)
         *total_blocked_out = total_blocked_bytes;
-}
-
-/* ============================================================================
-   Compatibility Functions - 保持向后兼容
-   ============================================================================ */
-
-void
-hev_filter_blacklist_add (const ip_addr_t *addr)
-{
-    if (addr) {
-        hev_filter_blacklist_add_ip (addr);
-    }
-}
-
-int
-hev_filter_blacklist_check (const ip_addr_t *addr)
-{
-    return hev_filter_blacklist_check_ip (addr);
 }
 
 /* ============================================================================

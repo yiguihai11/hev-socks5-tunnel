@@ -25,7 +25,6 @@
 #include "hev-logger.h"
 #include "hev-compiler.h"
 #include "hev-config-const.h"
-#include "hev-performance-optimizer.h"
 #include "hev-socks5-tunnel.h"
 
 #include "hev-socks5-session-udp.h"
@@ -37,9 +36,6 @@ struct _HevSocks5UDPFrame
     HevListNode node;
     HevSocks5Addr addr;
     struct pbuf *data;
-    /* 零拷贝优化：缓存数据指针，避免重复计算 */
-    void *payload_cache;
-    size_t payload_len;
 };
 
 static int
@@ -69,199 +65,107 @@ task_io_yielder (HevTaskYieldType type, void *data)
     return res;
 }
 
-/* 零拷贝优化：创建UDP帧并缓存关键信息 */
-static HevSocks5UDPFrame *
-hev_socks5_session_udp_frame_new (struct pbuf *p, struct udp_pcb *pcb)
-{
-    HevSocks5UDPFrame *frame;
-
-    frame = hev_malloc (sizeof (HevSocks5UDPFrame));
-    if (!frame) {
-        LOG_E ("socks5 session udp: failed to allocate frame");
-        return NULL;
-    }
-
-    /* 初始化帧结构 */
-    frame->data = p;
-    frame->payload_cache = p->payload; /* 缓存payload指针 */
-    frame->payload_len = p->len; /* 缓存长度信息 */
-
-    /* 初始化链表节点 */
-    memset (&frame->node, 0, sizeof (frame->node));
-
-    /* 设置地址信息 */
-    hev_socks5_addr_from_lwip (&frame->addr, &pcb->local_ip, pcb->local_port);
-
-    LOG_D ("socks5 session udp: created frame with cached payload (len=%d)",
-           frame->payload_len);
-
-    return frame;
-}
-
-/* 零拷贝优化：直接发送数据，避免额外的内存拷贝 */
 static int
-hev_socks5_session_udp_send_direct (HevSocks5UDPFrame *frame, HevSocks5UDP *udp)
+hev_socks5_session_udp_fwd_f (HevSocks5SessionUDP *self, unsigned int num)
 {
-    int res;
-
-    LOG_D ("socks5 session udp: direct send %d bytes (cached)",
-           frame->payload_len);
-
-    /* 直接使用缓存的指针，避免从pbuf重新获取 */
-    res = hev_socks5_udp_sendto (udp, frame->payload_cache, frame->payload_len,
-                                 &frame->addr);
-
-    if (res > 0) {
-        LOG_D ("socks5 session udp: direct send succeeded %d bytes", res);
-    } else {
-        LOG_D ("socks5 session udp: direct send failed (res=%d)", res);
-    }
-
-    return res;
-}
-
-static int
-hev_socks5_session_udp_fwd_f (HevSocks5SessionUDP *self)
-{
+    HevSocks5UDPMsg msgv[num];
     HevSocks5UDPFrame *frame;
     HevListNode *node;
-    HevSocks5UDP *udp;
     struct pbuf *buf;
-    int res;
+    int i, res;
 
-    for (;;) {
-        node = hev_list_first (&self->frame_list);
-        if (node)
-            break;
+    res = self->frames;
+    if (res <= 0)
+        return 0;
 
-        res = task_io_yielder (HEV_TASK_WAITIO, self);
-        if (res < 0) {
-            self->alive &= ~HEV_SOCKS5_SESSION_UDP_ALIVE_F;
-            if (self->alive && hev_socks5_get_timeout (HEV_SOCKS5 (self))) {
-                LOG_D ("%p socks5 session udp fwd f: timeout but still alive",
-                       self);
-                return 0;
-            }
-            LOG_D ("%p socks5 session udp fwd f: yielder error, closing", self);
-            return -1;
-        }
+    res = (res > num) ? num : res;
+    node = hev_list_first (&self->frame_list);
+    for (i = 0; i < res; i++) {
+        frame = container_of (node, HevSocks5UDPFrame, node);
+        node = hev_list_node_next (node);
+        buf = frame->data;
+
+        msgv[i].buf = buf->payload;
+        msgv[i].len = buf->len;
+        msgv[i].addr = &frame->addr;
     }
 
-    frame = container_of (node, HevSocks5UDPFrame, node);
-
-    /* 使用零拷贝优化发送 */
-    udp = HEV_SOCKS5_UDP (self);
-    res = hev_socks5_session_udp_send_direct (frame, udp);
-
-    /* 清理资源 */
-    hev_list_del (&self->frame_list, node);
-    buf = frame->data;
-    hev_free (frame);
-    pbuf_free (buf);
-    self->frames--;
-
+    res = hev_socks5_udp_sendmmsg (HEV_SOCKS5_UDP (self), msgv, res);
     if (res <= 0) {
-        if (res < -1) {
-            self->alive &= ~HEV_SOCKS5_SESSION_UDP_ALIVE_F;
-            if (self->alive && hev_socks5_get_timeout (HEV_SOCKS5 (self))) {
-                LOG_W (
-                    "%p socks5 session udp fwd f: send error but still alive",
-                    self);
-                return 0;
-            }
-        }
-        if (HEV_SOCKS5 (self)->type == HEV_SOCKS5_TYPE_UDP_IN_TCP)
-            hev_socks5_set_timeout (HEV_SOCKS5 (self), 0);
-        LOG_E ("%p socks5 session udp fwd f: send failed (res=%d)", self, res);
-        res = -1;
-    } else {
-        LOG_D ("%p socks5 session udp fwd f: sent %d bytes successfully", self,
-               res);
+        LOG_D ("%p socks5 session udp fwd f send", self);
+        return -1;
     }
 
-    self->alive |= HEV_SOCKS5_SESSION_UDP_ALIVE_F;
+    for (i = 0; i < res; i++) {
+        node = hev_list_first (&self->frame_list);
+        frame = container_of (node, HevSocks5UDPFrame, node);
+        buf = frame->data;
 
-    return 0;
+        hev_list_del (&self->frame_list, node);
+        hev_free (frame);
+        pbuf_free (buf);
+        self->frames--;
+    }
+
+    return 1;
 }
 
 static int
-hev_socks5_session_udp_fwd_b (HevSocks5SessionUDP *self)
+hev_socks5_session_udp_fwd_b (HevSocks5SessionUDP *self, unsigned int num)
 {
-    HevSocks5UDP *udp = HEV_SOCKS5_UDP (self);
-    HevSocks5Addr addr;
-    err_t err = ERR_OK;
-    struct pbuf *buf;
-    ip_addr_t saddr;
-    uint16_t port;
-    char dst_ip[INET6_ADDRSTRLEN];
-    int res;
+    char buf[UDP_BUF_SIZE * num];
+    HevSocks5UDPMsg msgv[num];
+    int i, res;
 
-    buf = pbuf_alloc (PBUF_TRANSPORT, UDP_BUF_SIZE, PBUF_RAM);
-    if (!buf) {
-        LOG_E ("%p socks5 session udp fwd b: failed to allocate pbuf", self);
+    for (i = 0; i < num; i++) {
+        msgv[i].buf = buf + UDP_BUF_SIZE * i;
+        msgv[i].len = UDP_BUF_SIZE;
+    }
+
+    res = hev_socks5_udp_recvmmsg (HEV_SOCKS5_UDP (self), msgv, num, 1);
+    if (res <= 0) {
+        if (res == -1 && errno == EAGAIN)
+            return 0;
+        LOG_D ("%p socks5 session udp fwd b recv", self);
         return -1;
     }
 
-    res = hev_socks5_udp_recvfrom (udp, buf->payload, buf->len, &addr);
-    if (res <= 0) {
-        if (res < -1) {
-            self->alive &= ~HEV_SOCKS5_SESSION_UDP_ALIVE_B;
-            if (self->alive && hev_socks5_get_timeout (HEV_SOCKS5 (self))) {
-                LOG_D (
-                    "%p socks5 session udp fwd b: recv error but still alive",
-                    self);
-                pbuf_free (buf);
-                return 0;
+    for (i = 0; i < res; i++) {
+        ip_addr_t saddr;
+        struct pbuf *b;
+        uint16_t port;
+        err_t err;
+        int ret;
+
+        if (self->addr && self->port) {
+            ip_2_ip4 (&saddr)->addr = self->addr;
+            port = self->port;
+        } else {
+            ret = hev_socks5_addr_into_lwip (msgv[i].addr, &saddr, &port);
+            if (ret < 0) {
+                LOG_D ("%p socks5 session udp fwd b addr", self);
+                return -1;
             }
         }
-        if (HEV_SOCKS5 (self)->type == HEV_SOCKS5_TYPE_UDP_IN_TCP)
-            hev_socks5_set_timeout (HEV_SOCKS5 (self), 0);
-        LOG_E ("%p socks5 session udp fwd b: recv failed (res=%d)", self, res);
-        pbuf_free (buf);
-        return -1;
-    }
 
-    buf->len = res;
-    buf->tot_len = res;
+        b = pbuf_alloc_reference (msgv[i].buf, msgv[i].len, PBUF_REF);
+        if (!b) {
+            LOG_D ("%p socks5 session udp fwd b buf", self);
+            return -1;
+        }
 
-    LOG_D ("%p socks5 session udp fwd b: received %d bytes", self, res);
+        hev_task_mutex_lock (self->mutex);
+        err = udp_sendfrom (self->pcb, b, &saddr, port);
+        hev_task_mutex_unlock (self->mutex);
 
-    if (self->addr && self->port) {
-        ip_2_ip4 (&saddr)->addr = self->addr;
-        port = self->port;
-    } else {
-        res = hev_socks5_addr_into_lwip (&addr, &saddr, &port);
-        if (res < 0) {
-            LOG_E ("%p socks5 session udp fwd b: failed to convert address",
-                   self);
-            pbuf_free (buf);
+        pbuf_free (b);
+        if (err != ERR_OK) {
+            LOG_D ("%p socks5 session udp fwd b send", self);
             return -1;
         }
     }
 
-    ipaddr_ntoa_r (&saddr, dst_ip, sizeof (dst_ip));
-    LOG_D ("%p socks5 session udp fwd b: forwarding to %s:%d", self, dst_ip,
-           port);
-
-    hev_task_mutex_lock (self->mutex);
-    if (self->pcb) {
-        err = udp_sendfrom (self->pcb, buf, &saddr, port);
-    } else {
-        LOG_W ("%p socks5 session udp fwd b: pcb is NULL", self);
-        err = ERR_CONN;
-    }
-    hev_task_mutex_unlock (self->mutex);
-    pbuf_free (buf);
-
-    if (err != ERR_OK) {
-        LOG_E ("%p socks5 session udp fwd b: udp_sendfrom failed (err=%d)",
-               self, err);
-        return -1;
-    }
-
-    self->alive |= HEV_SOCKS5_SESSION_UDP_ALIVE_B;
-
-    return 0;
+    return 1;
 }
 
 static void
@@ -270,60 +174,34 @@ udp_recv_handler (void *arg, struct udp_pcb *pcb, struct pbuf *p,
 {
     HevSocks5SessionUDP *self = arg;
     HevSocks5UDPFrame *frame;
-    char src_ip[INET6_ADDRSTRLEN];
 
     if (!p) {
-        LOG_D ("%p socks5 session udp: recv_handler got NULL pbuf, terminating",
-               self);
         hev_socks5_session_terminate (HEV_SOCKS5_SESSION (self));
         return;
     }
 
-    ipaddr_ntoa_r (addr, src_ip, sizeof (src_ip));
-    LOG_D ("%p socks5 session udp: received %d bytes from %s:%d", self,
-           p->tot_len, src_ip, port);
-
-    /* 使用动态UDP池大小，并在接近满载时尝试调整 */
-    int current_pool_size = hev_memory_pool_get_udp_size ();
-    if (self->frames >= current_pool_size) {
-        LOG_W (
-            "%p socks5 session udp: frame pool full (%d/%d frames), dropping packet",
-            self, self->frames, current_pool_size);
-
-        /* 尝试动态调整池大小 */
-        int new_size =
-            hev_memory_pool_adjust_udp_size (self->frames, current_pool_size);
-        if (new_size > current_pool_size) {
-            LOG_I ("%p socks5 session udp: pool expanded to %d, retrying", self,
-                   new_size);
-        } else {
-            LOG_D ("%p socks5 session udp: pool cannot expand further", self);
-        }
-
+    if (self->frames > UDP_POOL_SIZE_MAX) {
         pbuf_free (p);
         return;
     }
 
-    /* 使用零拷贝优化的帧创建函数 */
-    frame = hev_socks5_session_udp_frame_new (p, pcb);
+    frame = hev_malloc (sizeof (HevSocks5UDPFrame));
     if (!frame) {
         pbuf_free (p);
         return;
     }
 
+    frame->data = p;
+    memset (&frame->node, 0, sizeof (frame->node));
+    hev_socks5_addr_from_lwip (&frame->addr, &pcb->local_ip, pcb->local_port);
+
     if (frame->addr.atype == HEV_SOCKS5_ADDR_TYPE_NAME) {
         self->addr = ip_2_ip4 (&pcb->local_ip)->addr;
         self->port = pcb->local_port;
-        LOG_D ("%p socks5 session udp: using domain name address, caching IP",
-               self);
     }
 
     self->frames++;
     hev_list_add_tail (&self->frame_list, &frame->node);
-
-    LOG_D ("%p socks5 session udp: queued frame (%d frames total)", self,
-           self->frames);
-
     hev_task_wakeup (self->data.task);
 }
 
@@ -416,88 +294,40 @@ hev_socks5_session_udp_set_upstream_addr (HevSocks5Client *base,
     return ckptr->set_upstream_addr (base, addr);
 }
 
-static void
-splice_task_entry (void *data)
-{
-    HevTask *task = hev_task_self ();
-    HevSocks5SessionUDP *self = data;
-    int fd;
-    size_t total_received = 0;
-
-    LOG_D ("%p socks5 session udp: backward splice task start", self);
-
-    fd = hev_task_io_dup (hev_socks5_udp_get_fd (HEV_SOCKS5_UDP (self)));
-    if (fd < 0) {
-        LOG_E ("%p socks5 session udp: failed to dup fd for backward task",
-               self);
-        return;
-    }
-
-    if (hev_task_add_fd (task, fd, POLLIN) < 0)
-        hev_task_mod_fd (task, fd, POLLIN);
-
-    for (;;) {
-        if (hev_socks5_session_udp_fwd_b (self) < 0)
-            break;
-        total_received++;
-    }
-
-    self->alive &= ~HEV_SOCKS5_SESSION_UDP_ALIVE_B;
-    hev_task_del_fd (task, fd);
-    close (fd);
-
-    LOG_D (
-        "%p socks5 session udp: backward splice task end (received %zu packets)",
-        self, total_received);
-}
-
 static int
 hev_socks5_session_udp_splice (HevSocks5Session *base)
 {
     HevSocks5SessionUDP *self = HEV_SOCKS5_SESSION_UDP (base);
     HevTask *task = hev_task_self ();
-    int stack_size;
+    int res_f = 1, res_b = 1;
+    int num;
     int fd;
-    size_t total_sent = 0;
 
     LOG_D ("%p socks5 session udp splice", self);
 
-    self->alive = HEV_SOCKS5_SESSION_UDP_ALIVE_F |
-                  HEV_SOCKS5_SESSION_UDP_ALIVE_B;
-
+    num = hev_config_get_misc_udp_copy_buffer_nums ();
     fd = hev_socks5_udp_get_fd (HEV_SOCKS5_UDP (self));
-    if (hev_task_mod_fd (task, fd, POLLOUT) < 0)
-        hev_task_add_fd (task, fd, POLLOUT);
-
-    stack_size = hev_config_get_misc_task_stack_size ();
-    task = hev_task_new (stack_size);
-    if (!task) {
-        LOG_E ("%p socks5 session udp splice: failed to create backward task",
-               self);
-        return -1;
-    }
-
-    hev_task_ref (task);
-    hev_task_run (task, splice_task_entry, self);
-
-    LOG_D ("%p socks5 session udp splice: starting forward loop", self);
+    if (hev_task_mod_fd (task, fd, POLLIN | POLLOUT) < 0)
+        hev_task_add_fd (task, fd, POLLIN | POLLOUT);
 
     for (;;) {
-        if (hev_socks5_session_udp_fwd_f (self) < 0)
+        HevTaskYieldType type;
+
+        if (res_f >= 0)
+            res_f = hev_socks5_session_udp_fwd_f (self, num);
+        if (res_b >= 0)
+            res_b = hev_socks5_session_udp_fwd_b (self, num);
+
+        if (res_f > 0 || res_b > 0)
+            type = HEV_TASK_YIELD;
+        else if ((res_f & res_b) == 0)
+            type = HEV_TASK_WAITIO;
+        else
             break;
-        total_sent++;
+
+        if (task_io_yielder (type, self))
+            break;
     }
-
-    self->alive &= ~HEV_SOCKS5_SESSION_UDP_ALIVE_F;
-
-    LOG_D (
-        "%p socks5 session udp splice: waiting for backward task (sent %zu packets)",
-        self, total_sent);
-
-    hev_task_join (task);
-    hev_task_unref (task);
-
-    LOG_D ("%p socks5 session udp splice: completed", self);
 
     return 0;
 }

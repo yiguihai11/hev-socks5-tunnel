@@ -25,7 +25,6 @@
 #include "hev-traffic-router.h"
 #include "hev-session-manager.h"
 #include "hev-filter.h"
-#include "hev-performance-optimizer.h"
 #include "hev-test.h"
 #include "hev-socks5-misc.h"
 
@@ -82,36 +81,6 @@ hev_socks5_tunnel_main_inner (int tun_fd)
 
     hev_session_manager_init ();
 
-    /* 初始化动态内存池管理器 */
-    hev_memory_pool_init ();
-
-    /* 初始化智能缓冲区管理器 */
-    hev_socks5_init_smart_buffer ();
-
-    /* 初始化SOCKS5连接池 */
-    hev_connection_pool_init (32, 300, 1800); // 最大32个连接，空闲5-30分钟
-
-    /* 初始化任务调度器优化器 */
-    HevTaskOptimizerConfig task_config = { .batch_wakeup_enabled = 1,
-                                           .max_batch_size = 16,
-                                           .priority_boost_enabled = 1,
-                                           .boost_threshold_us = 1000.0,
-                                           .load_balance_enabled = 1,
-                                           .stats_enabled = 1 };
-    hev_task_optimizer_init (&task_config);
-
-    /* 初始化批量处理器 */
-    HevBatchProcessorConfig batch_config = { .network_io_enabled = 1,
-                                             .packet_forward_enabled = 1,
-                                             .session_mgmt_enabled = 1,
-                                             .buffer_ops_enabled = 1,
-                                             .max_network_io_batch = 32,
-                                             .max_packet_batch = 64,
-                                             .max_session_batch = 16,
-                                             .max_buffer_batch = 128,
-                                             .batch_timeout_us = 1000.0 };
-    hev_batch_processor_init (&batch_config);
-
     nofile = hev_config_get_misc_limit_nofile ();
     res = set_limit_nofile (nofile);
     if (res < 0)
@@ -167,23 +136,11 @@ hev_socks5_tunnel_main_inner (int tun_fd)
     // 6. 清理过滤器 (最早加载数据的组件)
     hev_filter_fini ();
 
-    // 7. 清理内存池管理器
-    hev_memory_pool_fini ();
-
-    // 8. 清理SOCKS5连接池
-    hev_connection_pool_fini ();
-
-    // 9. 清理任务调度器优化器
-    hev_task_optimizer_fini ();
-
-    // 10. 清理批量处理器
-    hev_batch_processor_fini ();
-
-    // 11. 清理日志系统
+    // 7. 清理日志系统
     hev_socks5_logger_fini ();
     hev_logger_fini ();
 
-    // 12. 配置清理由调用者负责（在 main_from_file/main_from_str 中）
+    // 8. 配置清理由调用者负责（在 main_from_file/main_from_str 中）
     // 注意：hev_config_fini() 不在这里调用，因为配置可能来自不同源
 
     LOG_D ("main: Cleanup sequence completed");

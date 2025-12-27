@@ -475,8 +475,4 @@ void hev_filter_blacklist_get_stats (size_t *total_entries,
                                      uint64_t *total_hits,
                                      uint64_t *total_blocked);
 
-/* 兼容性函数 - 保持向后兼容 */
-void hev_filter_blacklist_add (const ip_addr_t *addr);
-int hev_filter_blacklist_check (const ip_addr_t *addr);
-
 #endif /* __HEV_FILTER_H__ */

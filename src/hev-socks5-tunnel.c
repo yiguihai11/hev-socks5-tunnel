@@ -355,12 +355,18 @@ event_task_entry (void *data)
 
     /* 统计并终止所有会话 */
     node = hev_list_first (&session_set);
-    for (; node; node = hev_list_node_next (node)) {
+    while (node) {
         HevSocks5SessionData *sd;
 
-        sd = container_of (node, HevSocks5SessionData, node);
-        hev_socks5_session_terminate (sd->self);
+        hev_list_del (&session_set, node);
         session_count++;
+
+        sd = container_of (node, HevSocks5SessionData, node);
+        if (sd && sd->self) {
+            hev_socks5_session_terminate (sd->self);
+        }
+
+        node = hev_list_first (&session_set);
     }
 
     LOG_I ("socks5 tunnel: Terminated %d active sessions", session_count);
@@ -823,6 +829,7 @@ hev_socks5_tunnel_stop (void)
 {
     int res;
     int fd;
+    char sig = 1;
 
     LOG_I ("socks5 tunnel: Stop requested");
 
@@ -834,7 +841,7 @@ hev_socks5_tunnel_stop (void)
         usleep (100 * 1000);
     }
 
-    res = write (fd, &res, 1);
+    res = write (fd, &sig, 1);
     assert (res > 0 && "socks5 tunnel write event");
 
     LOG_D ("socks5 tunnel: Stop signal sent");

@@ -110,8 +110,6 @@ smart-proxy:
   probe-ports:
     - 80
     - 443
-    - 8080
-    - 8443
 
 acl:
   # Path to the ACL file containing IP addresses and hostnames/SNI to block.
