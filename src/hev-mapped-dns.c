@@ -19,6 +19,10 @@
 
 #include "hev-mapped-dns.h"
 
+/* DNS 记录类型 */
+#define DNS_TYPE_A    1   /* IPv4 地址 */
+#define DNS_TYPE_AAAA 28  /* IPv6 地址 */
+
 static HevMappedDNS *singleton;
 
 typedef struct _DNSHdr DNSHdr;
@@ -171,6 +175,12 @@ write_u32 (uint8_t *p, uint32_t v)
     p[3] = v;
 }
 
+static inline void
+write_u128 (uint8_t *p, const uint8_t *v)
+{
+    memcpy (p, v, 16);
+}
+
 int
 hev_mapped_dns_handle (HevMappedDNS *self, void *req, int qlen, void *res,
                        int slen)
@@ -179,8 +189,11 @@ hev_mapped_dns_handle (HevMappedDNS *self, void *req, int qlen, void *res,
     DNSHdr *shdr = res;
     uint8_t *rb = req;
     uint8_t *sb = res;
-    int ips[32];
-    int ipo[32];
+    struct {
+        int type;  /* DNS_TYPE_A 或 DNS_TYPE_AAAA */
+        int idx;   /* 索引值 */
+        int off;   /* 名称偏移量 */
+    } ips[64];
     int ipn = 0;
     int off;
     int i;
@@ -199,7 +212,9 @@ hev_mapped_dns_handle (HevMappedDNS *self, void *req, int qlen, void *res,
 
     off = sizeof (DNSHdr);
     for (i = 0; i < qhdr->qd; i++) {
-        ipo[ipn] = off;
+        int name_off = off;
+        int qtype;
+        int qclass;
 
         while (rb[off]) {
             int poff = off;
@@ -212,35 +227,69 @@ hev_mapped_dns_handle (HevMappedDNS *self, void *req, int qlen, void *res,
         }
 
         off++;
-        if ((off + 3) >= qlen)
+        if ((off + 4) > qlen)
             return -1;
 
-        if ((read_u16 (&rb[off + 0]) == 1) && (read_u16 (&rb[off + 2]) == 1)) {
+        qtype = read_u16 (&rb[off + 0]);
+        qclass = read_u16 (&rb[off + 2]);
+        off += 4;
+
+        /* 只处理 IN 类的 A 或 AAAA 查询 */
+        if (qclass != 1)
+            continue;
+
+        if (qtype == DNS_TYPE_A || qtype == DNS_TYPE_AAAA) {
             int idx;
 
-            idx = hev_mapped_dns_find (self, (char *)&rb[ipo[ipn] + 1]);
+            idx = hev_mapped_dns_find (self, (char *)&rb[name_off + 1]);
             if (idx >= 0) {
-                ips[ipn] = self->net | idx;
+                ips[ipn].type = qtype;
+                ips[ipn].idx = idx;
+                ips[ipn].off = name_off;
                 ipn++;
             }
         }
-
-        off += 4;
     }
 
+    /* 构建响应 */
+    off = qlen;
     for (i = 0; i < ipn; i++) {
-        if ((off + 15) >= slen)
-            return -1;
+        if (ips[i].type == DNS_TYPE_A) {
+            /* A 记录响应 (IPv4) */
+            if ((off + 16) > slen)
+                return -1;
 
-        sb[off + 0] = 0xc0;
-        sb[off + 1] = ipo[i];
-        write_u16 (&sb[off + 2], 1);
-        write_u16 (&sb[off + 4], 1);
-        write_u32 (&sb[off + 6], 1);
-        write_u16 (&sb[off + 10], 4);
-        write_u32 (&sb[off + 12], ips[i]);
+            sb[off + 0] = 0xc0;
+            sb[off + 1] = ips[i].off;
+            write_u16 (&sb[off + 2], DNS_TYPE_A);
+            write_u16 (&sb[off + 4], 1);
+            write_u32 (&sb[off + 6], 1);
+            write_u16 (&sb[off + 10], 4);
+            write_u32 (&sb[off + 12], self->net | ips[i].idx);
 
-        off += 16;
+            off += 16;
+        } else if (ips[i].type == DNS_TYPE_AAAA) {
+            /* AAAA 记录响应 (IPv6) */
+            if ((off + 28) > slen)
+                return -1;
+
+            sb[off + 0] = 0xc0;
+            sb[off + 1] = ips[i].off;
+            write_u16 (&sb[off + 2], DNS_TYPE_AAAA);
+            write_u16 (&sb[off + 4], 1);
+            write_u32 (&sb[off + 6], 1);
+            write_u16 (&sb[off + 10], 16);
+
+            /* 构建 IPv6 地址: fd00::xxxx (前12字节是前缀，后4字节是索引) */
+            write_u128 (&sb[off + 12], self->net6);
+            /* 将索引写入最后 4 字节 (小端序) */
+            sb[off + 27] = (ips[i].idx >> 24) & 0xff;
+            sb[off + 26] = (ips[i].idx >> 16) & 0xff;
+            sb[off + 25] = (ips[i].idx >> 8) & 0xff;
+            sb[off + 24] = ips[i].idx & 0xff;
+
+            off += 28;
+        }
     }
 
     shdr->fl = htons (shdr->fl | 0x8000 | ((shdr->fl & 0x100) >> 1));
@@ -273,6 +322,7 @@ int
 hev_mapped_dns_construct (HevMappedDNS *self, int net, int mask, int max)
 {
     int res;
+    int i;
 
     res = hev_object_construct (&self->base);
     if (res < 0)
@@ -288,6 +338,13 @@ hev_mapped_dns_construct (HevMappedDNS *self, int net, int mask, int max)
     self->max = max;
     self->net = net;
     self->mask = mask;
+
+    /* 初始化 IPv6 前缀为 fd00::/96 (fd00:0000:0000:0000:0000:0000:0000:0000) */
+    for (i = 0; i < 16; i++) {
+        self->net6[i] = 0;
+    }
+    self->net6[0] = 0xfd;
+    self->net6[1] = 0x00;
 
     return 0;
 }
