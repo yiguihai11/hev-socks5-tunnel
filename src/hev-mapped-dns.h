@@ -35,7 +35,7 @@ struct _HevMappedDNS
     int net;
     int mask;
     /* IPv6: fd00::/96 (高96位固定，低32位存储索引) */
-    uint8_t net6[16];  /* IPv6 网络前缀 */
+    uint8_t net6[16]; /* IPv6 网络前缀 */
 
     HevList list;
     HevRBTree tree;

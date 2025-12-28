@@ -20,8 +20,8 @@
 #include "hev-mapped-dns.h"
 
 /* DNS 记录类型 */
-#define DNS_TYPE_A    1   /* IPv4 地址 */
-#define DNS_TYPE_AAAA 28  /* IPv6 地址 */
+#define DNS_TYPE_A 1 /* IPv4 地址 */
+#define DNS_TYPE_AAAA 28 /* IPv6 地址 */
 
 static HevMappedDNS *singleton;
 
@@ -189,10 +189,11 @@ hev_mapped_dns_handle (HevMappedDNS *self, void *req, int qlen, void *res,
     DNSHdr *shdr = res;
     uint8_t *rb = req;
     uint8_t *sb = res;
-    struct {
-        int type;  /* DNS_TYPE_A 或 DNS_TYPE_AAAA */
-        int idx;   /* 索引值 */
-        int off;   /* 名称偏移量 */
+    struct
+    {
+        int type; /* DNS_TYPE_A 或 DNS_TYPE_AAAA */
+        int idx; /* 索引值 */
+        int off; /* 名称偏移量 */
     } ips[64];
     int ipn = 0;
     int off;
