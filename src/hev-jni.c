@@ -53,14 +53,12 @@ static void native_start_service (JNIEnv *env, jobject thiz, jstring conig_path,
                                   jint fd);
 static void native_stop_service (JNIEnv *env, jobject thiz);
 static jlongArray native_get_stats (JNIEnv *env, jobject thiz);
-static jstring native_get_logs (JNIEnv *env, jobject thiz, jint max_lines);
 
 static JNINativeMethod native_methods[] = {
     { "TProxyStartService", "(Ljava/lang/String;I)V",
       (void *)native_start_service },
     { "TProxyStopService", "()V", (void *)native_stop_service },
     { "TProxyGetStats", "()[J", (void *)native_get_stats },
-    { "TProxyGetLogs", "(I)Ljava/lang/String;", (void *)native_get_logs },
 };
 
 static void
@@ -181,22 +179,6 @@ native_get_stats (JNIEnv *env, jobject thiz)
     (*env)->SetLongArrayRegion (env, res, 0, 4, array);
 
     return res;
-}
-
-static jstring
-native_get_logs (JNIEnv *env, jobject thiz, jint max_lines)
-{
-    char *logs = hev_logger_get_logs (max_lines);
-    jstring result;
-
-    if (!logs) {
-        return (*env)->NewStringUTF (env, "Failed to get logs");
-    }
-
-    result = (*env)->NewStringUTF (env, logs);
-    free (logs);
-
-    return result;
 }
 
 #endif /* ANDROID */
