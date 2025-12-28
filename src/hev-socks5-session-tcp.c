@@ -34,6 +34,12 @@ task_io_yielder (HevTaskYieldType type, void *data)
     HevListNode *node;
     int res;
 
+    /* 检查全局run标志，如果tunnel已停止则立即退出 */
+    if (!hev_socks5_tunnel_is_running ()) {
+        LOG_D ("%p socks5 session tcp: tunnel stopped, exiting", self);
+        return -1;
+    }
+
     res = hev_socks5_task_io_yielder (type, data);
     node = hev_socks5_session_get_node (self);
     hev_socks5_tunnel_update_session (node);

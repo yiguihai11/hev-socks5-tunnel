@@ -62,6 +62,12 @@ static HevTask *task_lwip_io;
 static HevTask *task_lwip_timer;
 static HevList session_set;
 
+int
+hev_socks5_tunnel_is_running (void)
+{
+    return run;
+}
+
 static int
 task_io_yielder (HevTaskYieldType type, void *data)
 {
@@ -341,48 +347,49 @@ event_task_entry (void *data)
 {
     HevListNode *node;
     int val;
-    int session_count = 0;
+    ssize_t s;
 
     LOG_D ("socks5 tunnel event task run");
 
     hev_task_add_fd (task_event, event_fds[0], POLLIN);
 
-    hev_task_io_read (event_fds[0], &val, sizeof (val), NULL, NULL);
-
-    LOG_I ("socks5 tunnel: Received stop signal, shutting down...");
+    LOG_D ("socks5 tunnel: waiting for stop signal on event_fd");
+    s = hev_task_io_read (event_fds[0], &val, sizeof (val), NULL, NULL);
+    LOG_D ("socks5 tunnel: received stop signal (bytes=%zd)", s);
 
     run = 0;
+    LOG_I ("socks5 tunnel: shutdown initiated, terminating sessions");
 
-    /* 统计并终止所有会话 */
+    /* 终止所有会话 */
     node = hev_list_first (&session_set);
-    while (node) {
+    int session_count = 0;
+    for (; node; node = hev_list_node_next (node)) {
         HevSocks5SessionData *sd;
-
-        hev_list_del (&session_set, node);
-        session_count++;
-
         sd = container_of (node, HevSocks5SessionData, node);
-        if (sd && sd->self) {
-            hev_socks5_session_terminate (sd->self);
-        }
-
-        node = hev_list_first (&session_set);
+        LOG_D ("socks5 tunnel: terminating session %d (self=%p)", session_count, sd->self);
+        hev_socks5_session_terminate (sd->self);
     }
+    LOG_I ("socks5 tunnel: terminated %d sessions", session_count);
 
-    LOG_I ("socks5 tunnel: Terminated %d active sessions", session_count);
+    /* 不要等待会话退出，直接继续关闭其他任务
+     * 会话任务会在自然退出时清理自己 */
 
+    LOG_D ("socks5 tunnel: joining lwip_io task");
     hev_task_join (task_lwip_io);
-    hev_task_join (task_lwip_timer);
-    hev_task_del_fd (task_event, event_fds[0]);
+    LOG_D ("socks5 tunnel: lwip_io task joined");
 
-    LOG_I ("socks5 tunnel: Event task completed");
+    LOG_D ("socks5 tunnel: joining lwip_timer task");
+    hev_task_join (task_lwip_timer);
+    LOG_D ("socks5 tunnel: lwip_timer task joined");
+
+    hev_task_del_fd (task_event, event_fds[0]);
+    LOG_D ("socks5 tunnel: event task cleanup complete");
 }
 
 static void
 lwip_io_task_entry (void *data)
 {
     const unsigned int mtu = hev_config_get_tunnel_mtu ();
-    size_t packet_count = 0;
 
     LOG_D ("socks5 tunnel lwip task run");
 
@@ -397,33 +404,22 @@ lwip_io_task_entry (void *data)
 
         stat_tx_packets++;
         stat_tx_bytes += buf->tot_len;
-        packet_count++;
-
-        if (packet_count % 1000 == 0) {
-            LOG_D (
-                "socks5 tunnel: Processed %zu packets (tx_packets=%zu, tx_bytes=%zu)",
-                packet_count, stat_tx_packets, stat_tx_bytes);
-        }
 
         hev_task_mutex_lock (&mutex);
-        if (netif.input (buf, &netif) != ERR_OK) {
-            LOG_W ("socks5 tunnel: Failed to input packet to netif");
+        if (netif.input (buf, &netif) != ERR_OK)
             pbuf_free (buf);
-        }
         hev_task_mutex_unlock (&mutex);
     }
 
+    LOG_D ("socks5 tunnel: lwip_io task exiting loop");
     hev_tunnel_del_task (tun_fd, task_lwip_io);
-
-    LOG_I ("socks5 tunnel: lwip IO task completed (processed %zu packets)",
-           packet_count);
+    LOG_D ("socks5 tunnel: lwip_io task exited");
 }
 
 static void
 lwip_timer_task_entry (void *data)
 {
     unsigned int i;
-    unsigned int timer_count = 0;
 
     LOG_D ("socks5 tunnel timer task run");
 
@@ -444,18 +440,9 @@ lwip_timer_task_entry (void *data)
         }
         hev_task_mutex_unlock (&mutex);
 
-        timer_count++;
-
-        if (timer_count % 1000 == 0) {
-            HevListNode *node = hev_list_first (&session_set);
-            int active_sessions = 0;
-            while (node) {
-                active_sessions++;
-                node = hev_list_node_next (node);
-            }
-            LOG_D ("socks5 tunnel: Timer tick %u (active_sessions=%d)",
-                   timer_count, active_sessions);
-        }
+        /* 检查run标志，如果已设置则立即退出 */
+        if (!run)
+            break;
 
         if (hev_list_first (&session_set))
             hev_task_sleep (TCP_TMR_INTERVAL);
@@ -463,7 +450,7 @@ lwip_timer_task_entry (void *data)
             hev_task_yield (HEV_TASK_WAITIO);
     }
 
-    LOG_I ("socks5 tunnel: Timer task completed (%u ticks)", timer_count);
+    LOG_D ("socks5 tunnel: lwip_timer task exiting loop");
 }
 
 static int
@@ -831,8 +818,12 @@ hev_socks5_tunnel_stop (void)
     int fd;
     char sig = 1;
 
-    LOG_I ("socks5 tunnel: Stop requested");
+    LOG_I ("socks5 tunnel: SIGINT received, initiating shutdown");
 
+    /* 直接设置run=0，让所有任务在下次yield时退出 */
+    run = 0;
+
+    /* 同时通过event_fd唤醒event_task，确保它也能退出 */
     for (;;) {
         fd = READ_ONCE (event_fds[1]);
         if (fd >= 0)
@@ -841,10 +832,10 @@ hev_socks5_tunnel_stop (void)
         usleep (100 * 1000);
     }
 
+    LOG_D ("socks5 tunnel: writing stop signal to event_fd=%d", fd);
     res = write (fd, &sig, 1);
-    assert (res > 0 && "socks5 tunnel write event");
-
-    LOG_D ("socks5 tunnel: Stop signal sent");
+    LOG_D ("socks5 tunnel: write result: %d (errno=%d)", res, errno);
+    (void)res;
 }
 
 void

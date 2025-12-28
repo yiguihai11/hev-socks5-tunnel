@@ -60,7 +60,7 @@ def auto_terminate_tunnel():
     # 第一步：发送SIGINT（信号2）
     print(f"1. 发送 SIGINT(2) → 隧道（模拟Ctrl+C中断）...")
     os.kill(pid, signal.SIGINT)
-    time.sleep(1)  # 等待1秒，给隧道执行清理（如关闭连接、释放内存）
+    time.sleep(3)  # 等待3秒，给隧道执行清理（会话终止、任务退出、资源释放）
     if tunnel_process.poll() is not None:
         print(f"✅ 成功：隧道被 SIGINT(2) 终止（退出码：{tunnel_process.returncode}）")
         return
@@ -229,6 +229,7 @@ def run_test_workflow(iface=DEFAULT_IFACE, start_tunnel=True):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     tunnel_exe = os.path.join(script_dir, TUNNEL_EXE_REL_PATH)
     tunnel_conf = os.path.join(script_dir, TUNNEL_CONF_REL_PATH)
+    tunnel_log_file = None
 
     try:
         # 第一步：启动隧道（仅当参数允许且程序存在）
@@ -236,14 +237,16 @@ def run_test_workflow(iface=DEFAULT_IFACE, start_tunnel=True):
             # 检查隧道程序是否存在
             if not os.path.exists(tunnel_exe):
                 raise FileNotFoundError(f"隧道程序不存在：{tunnel_exe}（请检查TUNNEL_EXE_REL_PATH配置）")
-            # 启动隧道进程（stdout/stderr重定向，便于后续查看输出）
+            # 启动隧道进程（日志输出到文件避免PIPE阻塞）
             print(f"=== 启动 hev-socks5-tunnel（配置：{tunnel_conf}）===")
+            log_file_path = os.path.join(script_dir, "tunnel.log")
+            tunnel_log_file = open(log_file_path, "w")
             tunnel_process = subprocess.Popen(
                 args=[tunnel_exe, tunnel_conf],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,  # 合并stderr到stdout，统一读取
-                text=True,                 # 输出按字符串处理（而非字节）
-                cwd=script_dir             # 以脚本目录为工作目录
+                stdout=tunnel_log_file,
+                stderr=subprocess.STDOUT,  # 合并stderr到stdout
+                text=True,
+                cwd=script_dir
             )
             # 等待1秒，确保隧道进程启动完成（避免测试时隧道未就绪）
             time.sleep(1)
@@ -280,14 +283,24 @@ def run_test_workflow(iface=DEFAULT_IFACE, start_tunnel=True):
         else:
             print(f"\n=== 未启动隧道，无需终止 ===")
 
+        # 关闭日志文件
+        if tunnel_log_file:
+            tunnel_log_file.close()
+
         # 读取并打印隧道运行日志（若有）
         if start_tunnel and tunnel_process:
-            tunnel_log = tunnel_process.stdout.read()
-            if tunnel_log:
-                print(f"\n=== 隧道运行日志 ===")
-                print(tunnel_log)
-            else:
-                print(f"\n=== 隧道无额外运行日志 ===")
+            try:
+                with open(log_file_path, "r") as f:
+                    tunnel_log = f.read()
+                if tunnel_log:
+                    print(f"\n=== 隧道运行日志（最后100行）===")
+                    lines = tunnel_log.splitlines()
+                    for line in lines[-100:]:
+                        print(line)
+                else:
+                    print(f"\n=== 隧道无运行日志 ===")
+            except Exception as e:
+                print(f"\n=== 读取日志文件失败：{e} ===")
 
 # ---------------------- 命令行参数解析+程序入口 ----------------------
 if __name__ == "__main__":

@@ -26,6 +26,7 @@
 #include "hev-compiler.h"
 #include "hev-config-const.h"
 #include "hev-socks5-tunnel.h"
+#include "hev-object-pool.h"
 
 #include "hev-socks5-session-udp.h"
 
@@ -45,6 +46,12 @@ task_io_yielder (HevTaskYieldType type, void *data)
     HevListNode *node;
     int res;
 
+    /* 检查全局run标志，如果tunnel已停止则立即退出 */
+    if (!hev_socks5_tunnel_is_running ()) {
+        LOG_D ("%p socks5 session udp: tunnel stopped, exiting", self);
+        return -1;
+    }
+
     if (self->type == HEV_SOCKS5_TYPE_UDP_IN_UDP) {
         ssize_t res;
         char buf;
@@ -63,6 +70,27 @@ task_io_yielder (HevTaskYieldType type, void *data)
     hev_socks5_tunnel_update_session (node);
 
     return res;
+}
+
+static pthread_once_t frame_pool_once = PTHREAD_ONCE_INIT;
+static HevObjectPool *frame_pool;
+
+static void
+frame_pool_init (void)
+{
+    HevObjectPoolConfig config = {
+        .obj_size = sizeof (HevSocks5UDPFrame),
+        .init_capacity = 64,
+        .max_capacity = 4096,
+    };
+    frame_pool = hev_object_pool_new (&config);
+}
+
+static HevObjectPool *
+get_frame_pool (void)
+{
+    pthread_once (&frame_pool_once, frame_pool_init);
+    return frame_pool;
 }
 
 static int
@@ -102,7 +130,7 @@ hev_socks5_session_udp_fwd_f (HevSocks5SessionUDP *self, unsigned int num)
         buf = frame->data;
 
         hev_list_del (&self->frame_list, node);
-        hev_free (frame);
+        hev_object_pool_put (get_frame_pool (), frame);
         pbuf_free (buf);
         self->frames--;
     }
@@ -168,6 +196,8 @@ hev_socks5_session_udp_fwd_b (HevSocks5SessionUDP *self, unsigned int num)
     return 1;
 }
 
+
+
 static void
 udp_recv_handler (void *arg, struct udp_pcb *pcb, struct pbuf *p,
                   const ip_addr_t *addr, u16_t port)
@@ -185,7 +215,7 @@ udp_recv_handler (void *arg, struct udp_pcb *pcb, struct pbuf *p,
         return;
     }
 
-    frame = hev_malloc (sizeof (HevSocks5UDPFrame));
+    frame = hev_object_pool_get (get_frame_pool ());
     if (!frame) {
         pbuf_free (p);
         return;
@@ -411,7 +441,7 @@ hev_socks5_session_udp_destruct (HevObject *base)
         frame = container_of (node, HevSocks5UDPFrame, node);
         node = hev_list_node_next (node);
         pbuf_free (frame->data);
-        hev_free (frame);
+        hev_object_pool_put (get_frame_pool (), frame);
         dropped_frames++;
     }
 

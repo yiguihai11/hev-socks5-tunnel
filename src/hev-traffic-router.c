@@ -26,70 +26,75 @@
 /* Blacklist functionality moved to hev-filter.c for unified management */
 
 static int
+parse_target_ip_port (const char *target, int is_ipv6, ip_addr_t *ip,
+                      u16_t *port)
+{
+    char buf[128];
+    strncpy (buf, target, sizeof (buf) - 1);
+
+    if (is_ipv6) {
+        /* [IPv6]:port format */
+        char *bracket_end = strrchr (buf, ']');
+        if (bracket_end && bracket_end[1] == ':') {
+            *port = atoi (bracket_end + 2);
+            *bracket_end = '\0';
+            return ipaddr_aton (buf + 1, ip);
+        }
+        /* plain IPv6 without port */
+        *port = 53;
+        return ipaddr_aton (buf, ip);
+    } else {
+        /* IPv4:port format */
+        char *colon = strchr (buf, ':');
+        if (colon) {
+            *colon = '\0';
+            *port = atoi (colon + 1);
+        } else {
+            *port = 53;
+        }
+        return ipaddr_aton (buf, ip);
+    }
+}
+
+static int
+check_and_hijack (const ip_addr_t *addr, const char *virtual_ip_str,
+                  const char *target_str, ip_addr_t *target_ip,
+                  u16_t *target_port, int is_ipv6, const char *log_ver)
+{
+    ip_addr_t virtual_ip;
+
+    if (!ipaddr_aton (virtual_ip_str, &virtual_ip))
+        return 0;
+    if (!ip_addr_cmp (addr, &virtual_ip))
+        return 0;
+    if (!parse_target_ip_port (target_str, is_ipv6, target_ip, target_port))
+        return 0;
+
+    LOG_D ("router: DNS forward %s hijack detected", log_ver);
+    return 1;
+}
+
+static int
 handle_dns_forward_hijack (const ip_addr_t *addr, u16_t port,
                            ip_addr_t *target_ip, u16_t *target_port)
 {
-    const char *dns_fwd_virtual_ip4 =
-        hev_config_get_dns_forwarder_virtual_ip4 ();
-    const char *dns_fwd_virtual_ip6 =
-        hev_config_get_dns_forwarder_virtual_ip6 ();
-    const char *dns_fwd_target_ip4 = hev_config_get_dns_forwarder_target_ip4 ();
-    const char *dns_fwd_target_ip6 = hev_config_get_dns_forwarder_target_ip6 ();
-
     if (port != 53)
         return 0;
 
-    /* IPv4 hijack check */
-    if (dns_fwd_virtual_ip4 && dns_fwd_target_ip4 && IP_IS_V4 (addr)) {
-        ip_addr_t virtual_ip4;
-        if (ipaddr_aton (dns_fwd_virtual_ip4, &virtual_ip4)) {
-            if (ip_addr_cmp (addr, &virtual_ip4)) {
-                char target_buf[128];
-                strncpy (target_buf, dns_fwd_target_ip4,
-                         sizeof (target_buf) - 1);
-
-                char *colon = strchr (target_buf, ':');
-                if (colon) {
-                    *colon = '\0';
-                    *target_port = atoi (colon + 1);
-                } else {
-                    *target_port = 53;
-                }
-
-                if (ipaddr_aton (target_buf, target_ip)) {
-                    LOG_D ("router: DNS forward IPv4 hijack detected");
-                    return 1;
-                }
-            }
-        }
+    if (IP_IS_V4 (addr)) {
+        const char *virtual_ip = hev_config_get_dns_forwarder_virtual_ip4 ();
+        const char *target = hev_config_get_dns_forwarder_target_ip4 ();
+        if (virtual_ip && target)
+            return check_and_hijack (addr, virtual_ip, target, target_ip,
+                                     target_port, 0, "IPv4");
     }
 
-    /* IPv6 hijack check */
-    if (dns_fwd_virtual_ip6 && dns_fwd_target_ip6 && IP_IS_V6 (addr)) {
-        ip_addr_t virtual_ip6;
-        if (ipaddr_aton (dns_fwd_virtual_ip6, &virtual_ip6)) {
-            if (ip_addr_cmp (addr, &virtual_ip6)) {
-                char target_buf[128];
-                strncpy (target_buf, dns_fwd_target_ip6,
-                         sizeof (target_buf) - 1);
-
-                char *bracket_end = strrchr (target_buf, ']');
-                if (bracket_end && *(bracket_end + 1) == ':') {
-                    *target_port = atoi (bracket_end + 2);
-                    *bracket_end = '\0';
-                    if (ipaddr_aton (target_buf + 1, target_ip)) {
-                        LOG_D ("router: DNS forward IPv6 hijack detected");
-                        return 1;
-                    }
-                } else {
-                    *target_port = 53;
-                    if (ipaddr_aton (target_buf, target_ip)) {
-                        LOG_D ("router: DNS forward IPv6 hijack detected");
-                        return 1;
-                    }
-                }
-            }
-        }
+    if (IP_IS_V6 (addr)) {
+        const char *virtual_ip = hev_config_get_dns_forwarder_virtual_ip6 ();
+        const char *target = hev_config_get_dns_forwarder_target_ip6 ();
+        if (virtual_ip && target)
+            return check_and_hijack (addr, virtual_ip, target, target_ip,
+                                     target_port, 1, "IPv6");
     }
 
     return 0;
