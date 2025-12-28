@@ -189,6 +189,11 @@ hev_config_get_socks5_tcp_server (void)
 HevConfigSocks5Server *
 hev_config_get_socks5_udp_server (void)
 {
+    /* 如果 UDP 配置为空（端口为 0 或地址为空），回退到 TCP 配置 */
+    if (socks5_config.udp.port == 0 || socks5_config.udp.addr[0] == '\0') {
+        LOG_I ("config: UDP socks5 server not configured, falling back to TCP config");
+        return &socks5_config.tcp;
+    }
     return &socks5_config.udp;
 }
 
