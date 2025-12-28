@@ -22,20 +22,20 @@ typedef struct _HevObjectPool HevObjectPool;
  */
 struct _HevObjectPool
 {
-    void **free_list;      /* 空闲对象列表 */
-    size_t free_count;     /* 空闲对象数量 */
-    size_t capacity;       /* 池容量 */
-    size_t obj_size;       /* 单个对象大小 */
-    pthread_mutex_t lock;  /* 线程安全锁 */
+    void **free_list; /* 空闲对象列表 */
+    size_t free_count; /* 空闲对象数量 */
+    size_t capacity; /* 池容量 */
+    size_t obj_size; /* 单个对象大小 */
+    pthread_mutex_t lock; /* 线程安全锁 */
 };
 
 typedef struct _HevObjectPoolConfig HevObjectPoolConfig;
 
 struct _HevObjectPoolConfig
 {
-    size_t obj_size;       /* 对象大小 */
-    size_t init_capacity;  /* 初始容量 */
-    size_t max_capacity;   /* 最大容量 (0 = 无限制) */
+    size_t obj_size; /* 对象大小 */
+    size_t init_capacity; /* 初始容量 */
+    size_t max_capacity; /* 最大容量 (0 = 无限制) */
 };
 
 /**

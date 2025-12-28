@@ -27,8 +27,7 @@ hev_object_pool_new (const HevObjectPoolConfig *config)
     if (!pool)
         return NULL;
 
-    pool->free_list =
-        hev_malloc0 (sizeof (void *) * config->init_capacity);
+    pool->free_list = hev_malloc0 (sizeof (void *) * config->init_capacity);
     if (!pool->free_list) {
         hev_free (pool);
         return NULL;
@@ -86,7 +85,8 @@ hev_object_pool_get (HevObjectPool *pool)
         /* 池为空，分配新对象 */
         obj = hev_malloc0 (pool->obj_size);
         if (obj) {
-            LOG_D ("Object pool: allocate new object (size=%zu)", pool->obj_size);
+            LOG_D ("Object pool: allocate new object (size=%zu)",
+                   pool->obj_size);
         }
     }
 
