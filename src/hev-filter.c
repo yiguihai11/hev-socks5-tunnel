@@ -1247,7 +1247,8 @@ hev_filter_load_chnroutes (const char *file_path)
             int i = 15;
             while (bits_to_mask > 0 && i >= 0) {
                 int bits_in_byte = (bits_to_mask > 8) ? 8 : bits_to_mask;
-                uint8_t mask = (bits_in_byte == 8) ? 0xFF : (0xFF >> (8 - bits_in_byte));
+                uint8_t mask =
+                    (bits_in_byte == 8) ? 0xFF : (0xFF >> (8 - bits_in_byte));
                 range->start[i] &= ~mask;
                 range->end[i] |= mask;
                 bits_to_mask -= bits_in_byte;
@@ -1429,7 +1430,8 @@ hev_filter_is_domestic (const ip_addr_t *ip)
         stats.foreign_hits++;
     } else if (IP_IS_V6 (ip)) {
         if (!chnroutes_ipv6) {
-            LOG_D ("filter: IPv6 domestic check failed - no IPv6 routes loaded");
+            LOG_D (
+                "filter: IPv6 domestic check failed - no IPv6 routes loaded");
             return 0;
         }
 
