@@ -16,6 +16,7 @@
 #include <hev-memory-allocator.h>
 
 #include "hev-logger.h"
+#include "hev-config.h"
 
 #include "hev-mapped-dns.h"
 
@@ -323,7 +324,7 @@ int
 hev_mapped_dns_construct (HevMappedDNS *self, int net, int mask, int max)
 {
     int res;
-    int i;
+    const unsigned char *net6;
 
     res = hev_object_construct (&self->base);
     if (res < 0)
@@ -340,12 +341,22 @@ hev_mapped_dns_construct (HevMappedDNS *self, int net, int mask, int max)
     self->net = net;
     self->mask = mask;
 
-    /* 初始化 IPv6 前缀为 fd00::/96 (fd00:0000:0000:0000:0000:0000:0000:0000) */
-    for (i = 0; i < 16; i++) {
-        self->net6[i] = 0;
+    /* 从配置读取 IPv6 前缀，如果未配置则使用默认值 fd00::/96 */
+    net6 = hev_config_get_mapdns_network6 ();
+    if (net6[0] == 0 && net6[1] == 0) {
+        /* 未配置，使用默认值 fd00::/96 */
+        int i;
+        for (i = 0; i < 16; i++) {
+            self->net6[i] = 0;
+        }
+        self->net6[0] = 0xfd;
+        self->net6[1] = 0x00;
+        LOG_I ("mapped dns: using default IPv6 prefix fd00::/96");
+    } else {
+        /* 使用配置的值 */
+        memcpy (self->net6, net6, 16);
+        LOG_I ("mapped dns: using configured IPv6 prefix");
     }
-    self->net6[0] = 0xfd;
-    self->net6[1] = 0x00;
 
     return 0;
 }

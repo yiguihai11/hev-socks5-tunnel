@@ -150,6 +150,7 @@ static int mapdns_port;
 static int mapdns_network;
 static int mapdns_netmask;
 static int mapdns_cache_size;
+static unsigned char mapdns_network6[16];  /* IPv6 映射前缀 */
 
 static char log_file[1024];
 static char pid_file[1024];
@@ -349,6 +350,8 @@ hev_config_parse_mapdns (yaml_document_t *doc, yaml_node_t *base)
             inet_pton (AF_INET, value, &mapdns_network);
         else if (0 == strcmp (key, "netmask"))
             inet_pton (AF_INET, value, &mapdns_netmask);
+        else if (0 == strcmp (key, "network6"))
+            inet_pton (AF_INET6, value, mapdns_network6);
         else if (0 == strcmp (key, "cache-size"))
             mapdns_cache_size = strtoul (value, NULL, 10);
     }
@@ -801,6 +804,12 @@ int
 hev_config_get_mapdns_netmask (void)
 {
     return mapdns_netmask;
+}
+
+const unsigned char *
+hev_config_get_mapdns_network6 (void)
+{
+    return mapdns_network6;
 }
 
 int

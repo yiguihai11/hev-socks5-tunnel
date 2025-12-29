@@ -126,9 +126,10 @@ socks5:
 # network: 240.0.0.0
   # Mapped IP network mask (IPv4)
 # netmask: 240.0.0.0
+  # Mapped IP network prefix (IPv6, optional, default: fd00::)
+# network6: fd00::
   # Mapped DNS cache size
 # cache-size: 10000
-  # Note: IPv6 AAAA queries are automatically mapped to fd00::/96
 
 misc:
   # task stack size (bytes)
