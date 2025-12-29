@@ -150,8 +150,8 @@ static int mapdns_port;
 static int mapdns_network;
 static int mapdns_netmask;
 static int mapdns_cache_size;
-static unsigned char mapdns_network6[16];  /* IPv6 映射前缀 */
-static int mapdns_prefixlen = 96;           /* IPv6 前缀长度，默认 /96 */
+static unsigned char mapdns_network6[16]; /* IPv6 映射前缀 */
+static int mapdns_prefixlen = 96; /* IPv6 前缀长度，默认 /96 */
 
 static char log_file[1024];
 static char pid_file[1024];

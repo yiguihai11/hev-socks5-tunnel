@@ -272,8 +272,8 @@ hev_mapped_dns_handle (HevMappedDNS *self, void *req, int qlen, void *res,
             off += 16;
         } else if (ips[i].type == DNS_TYPE_AAAA) {
             /* AAAA 记录响应 (IPv6) */
-            int start_byte;    /* 索引起始字节位置 */
-            int idx_bytes;     /* 索引字节数 */
+            int start_byte; /* 索引起始字节位置 */
+            int idx_bytes; /* 索引字节数 */
             int j;
 
             if ((off + 28) > slen)
@@ -287,8 +287,8 @@ hev_mapped_dns_handle (HevMappedDNS *self, void *req, int qlen, void *res,
             write_u16 (&sb[off + 10], 16);
 
             /* 根据 prefixlen 计算索引位置 */
-            start_byte = self->prefixlen / 8;  /* /96 → 12, /112 → 14 */
-            idx_bytes = 16 - start_byte;       /* /96 → 4, /112 → 2 */
+            start_byte = self->prefixlen / 8; /* /96 → 12, /112 → 14 */
+            idx_bytes = 16 - start_byte; /* /96 → 4, /112 → 2 */
 
             /* 先复制网络前缀 */
             write_u128 (&sb[off + 12], self->net6);

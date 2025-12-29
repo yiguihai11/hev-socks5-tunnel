@@ -36,7 +36,7 @@ struct _HevMappedDNS
     int mask;
     /* IPv6 网络前缀和前缀长度 */
     uint8_t net6[16]; /* IPv6 网络前缀 */
-    int prefixlen;    /* IPv6 前缀长度 (如 /96, /112 等) */
+    int prefixlen; /* IPv6 前缀长度 (如 /96, /112 等) */
 
     HevList list;
     HevRBTree tree;
