@@ -561,14 +561,18 @@ cidr_lookup_ipv6 (const uint8_t *ip)
     int left = 0;
     int right = chnroutes_ipv6_count - 1;
 
+    printf ("DEBUG IPv6 lookup: count=%u\n", chnroutes_ipv6_count);
     while (left <= right) {
         int mid = left + (right - left) / 2;
 
-        if (memcmp (ip, chnroutes_ipv6[mid].start, 16) >= 0 &&
-            memcmp (ip, chnroutes_ipv6[mid].end, 16) <= 0)
+        int cmp_start = memcmp (ip, chnroutes_ipv6[mid].start, 16);
+        int cmp_end = memcmp (ip, chnroutes_ipv6[mid].end, 16);
+        printf ("  mid=%d cmp_start=%d cmp_end=%d\n", mid, cmp_start, cmp_end);
+
+        if (cmp_start >= 0 && cmp_end <= 0)
             return 1;
 
-        if (memcmp (ip, chnroutes_ipv6[mid].start, 16) < 0)
+        if (cmp_start < 0)
             right = mid - 1;
         else
             left = mid + 1;
@@ -1219,6 +1223,7 @@ hev_filter_load_chnroutes (const char *file_path)
 
         if (strchr (ip_str, ':')) {
             /* IPv6 */
+            LOG_D ("filter: Parsing IPv6 CIDR: %s/%d", ip_str, prefix_len);
             if (chnroutes_ipv6_count >= ipv6_capacity) {
                 ipv6_capacity *= 2;
                 CIDRRange6 *new_ptr = realloc (
@@ -1242,7 +1247,7 @@ hev_filter_load_chnroutes (const char *file_path)
             int i = 15;
             while (bits_to_mask > 0 && i >= 0) {
                 int bits_in_byte = (bits_to_mask > 8) ? 8 : bits_to_mask;
-                uint8_t mask = (uint8_t)(0xFF >> bits_in_byte);
+                uint8_t mask = (bits_in_byte == 8) ? 0xFF : (0xFF >> (8 - bits_in_byte));
                 range->start[i] &= ~mask;
                 range->end[i] |= mask;
                 bits_to_mask -= bits_in_byte;
@@ -1287,6 +1292,7 @@ hev_filter_load_chnroutes (const char *file_path)
 
     LOG_I ("filter: Loaded chnroutes (IPv4:%u, IPv6:%u)", chnroutes_ipv4_count,
            chnroutes_ipv6_count);
+    LOG_D ("filter: IPv6 routes count = %u", chnroutes_ipv6_count);
     return 0;
 }
 
@@ -1422,8 +1428,10 @@ hev_filter_is_domestic (const ip_addr_t *ip)
         }
         stats.foreign_hits++;
     } else if (IP_IS_V6 (ip)) {
-        if (!chnroutes_ipv6)
+        if (!chnroutes_ipv6) {
+            LOG_D ("filter: IPv6 domestic check failed - no IPv6 routes loaded");
             return 0;
+        }
 
         if (cidr_lookup_ipv6 ((const uint8_t *)ip_2_ip6 (ip)->addr)) {
             stats.domestic_hits++;
