@@ -300,15 +300,31 @@ udp_recv_handler (void *arg, struct udp_pcb *pcb, struct pbuf *p,
 
     /* 检查是否是 mapped DNS */
     dns = hev_mapped_dns_get ();
-    if (dns && addr->type == IPADDR_TYPE_V4) {
-        int faddr = hev_config_get_mapdns_address ();
+    if (dns) {
         int fport = hev_config_get_mapdns_port ();
-        if (fport == port && faddr == ip_2_ip4 (addr)->addr) {
-            LOG_I (
-                "%p socks5 tunnel: UDP packet is mapped DNS query from %s:%d",
-                pcb, src_ip, pcb->remote_port);
-            udp_recv (pcb, dns_recv_handler, dns);
-            return;
+        if (fport == port) {
+            if (addr->type == IPADDR_TYPE_V4) {
+                int faddr = hev_config_get_mapdns_address ();
+                if (faddr == ip_2_ip4 (addr)->addr) {
+                    LOG_I (
+                        "%p socks5 tunnel: UDP packet is mapped DNS query (IPv4) from %s:%d",
+                        pcb, src_ip, pcb->remote_port);
+                    udp_recv (pcb, dns_recv_handler, dns);
+                    return;
+                }
+            } else if (addr->type == IPADDR_TYPE_V6) {
+                const unsigned char *faddr6 = hev_config_get_mapdns_address6 ();
+                if (faddr6[0] != 0 || faddr6[1] != 0) {
+                    /* 检查 IPv6 地址是否匹配 */
+                    if (!memcmp (faddr6, ip_2_ip6 (addr)->addr, 16)) {
+                        LOG_I (
+                            "%p socks5 tunnel: UDP packet is mapped DNS query (IPv6) from %s:%d",
+                            pcb, src_ip, pcb->remote_port);
+                        udp_recv (pcb, dns_recv_handler, dns);
+                        return;
+                    }
+                }
+            }
         }
     }
 

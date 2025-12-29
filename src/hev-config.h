@@ -53,6 +53,7 @@ HevConfigSocks5Server *hev_config_get_socks5_tcp_server (void);
 HevConfigSocks5Server *hev_config_get_socks5_udp_server (void);
 
 int hev_config_get_mapdns_address (void);
+const unsigned char *hev_config_get_mapdns_address6 (void);
 int hev_config_get_mapdns_port (void);
 int hev_config_get_mapdns_network (void);
 int hev_config_get_mapdns_netmask (void);

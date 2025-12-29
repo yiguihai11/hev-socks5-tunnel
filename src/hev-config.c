@@ -150,8 +150,9 @@ static int mapdns_port;
 static int mapdns_network;
 static int mapdns_netmask;
 static int mapdns_cache_size;
-static unsigned char mapdns_network6[16]; /* IPv6 映射前缀 */
-static int mapdns_prefixlen = 96; /* IPv6 前缀长度，默认 /96 */
+static unsigned char mapdns_address6[16];  /* IPv6 监听地址 */
+static unsigned char mapdns_network6[16];  /* IPv6 映射前缀 */
+static int mapdns_prefixlen = 96;           /* IPv6 前缀长度，默认 /96 */
 
 static char log_file[1024];
 static char pid_file[1024];
@@ -345,6 +346,8 @@ hev_config_parse_mapdns (yaml_document_t *doc, yaml_node_t *base)
 
         if (0 == strcmp (key, "address"))
             inet_pton (AF_INET, value, &mapdns_address);
+        else if (0 == strcmp (key, "address6"))
+            inet_pton (AF_INET6, value, mapdns_address6);
         else if (0 == strcmp (key, "port"))
             mapdns_port = strtoul (value, NULL, 10);
         else if (0 == strcmp (key, "network"))
@@ -789,6 +792,12 @@ int
 hev_config_get_mapdns_address (void)
 {
     return mapdns_address;
+}
+
+const unsigned char *
+hev_config_get_mapdns_address6 (void)
+{
+    return mapdns_address6;
 }
 
 int

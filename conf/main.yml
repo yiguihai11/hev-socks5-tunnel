@@ -118,8 +118,10 @@ socks5:
 #  file-path: "conf/acl.txt"
 
 #mapdns:
-  # Mapped DNS address
+  # Mapped DNS listen address (IPv4, optional)
 # address: 198.18.0.2
+  # Mapped DNS listen address (IPv6, optional, for pure IPv6 environment)
+# address6: fd00::1
   # Mapped DNS port
 # port: 53
   # Mapped IP network base (IPv4)
