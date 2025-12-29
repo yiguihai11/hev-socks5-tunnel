@@ -128,6 +128,11 @@ socks5:
 # netmask: 240.0.0.0
   # Mapped IP network prefix (IPv6, optional, default: fd00::)
 # network6: fd00::
+  # IPv6 prefix length (optional, default: 96)
+  # /96 = 32-bit index (4.2B entries)
+  # /112 = 16-bit index (65K entries)
+  # /120 = 8-bit index (256 entries)
+# prefixlen: 96
   # Mapped DNS cache size
 # cache-size: 10000
 

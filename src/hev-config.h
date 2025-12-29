@@ -57,6 +57,7 @@ int hev_config_get_mapdns_port (void);
 int hev_config_get_mapdns_network (void);
 int hev_config_get_mapdns_netmask (void);
 const unsigned char *hev_config_get_mapdns_network6 (void);
+int hev_config_get_mapdns_prefixlen (void);
 int hev_config_get_mapdns_cache_size (void);
 
 int hev_config_get_misc_task_stack_size (void);

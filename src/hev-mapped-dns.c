@@ -272,6 +272,10 @@ hev_mapped_dns_handle (HevMappedDNS *self, void *req, int qlen, void *res,
             off += 16;
         } else if (ips[i].type == DNS_TYPE_AAAA) {
             /* AAAA 记录响应 (IPv6) */
+            int start_byte;    /* 索引起始字节位置 */
+            int idx_bytes;     /* 索引字节数 */
+            int j;
+
             if ((off + 28) > slen)
                 return -1;
 
@@ -282,13 +286,18 @@ hev_mapped_dns_handle (HevMappedDNS *self, void *req, int qlen, void *res,
             write_u32 (&sb[off + 6], 1);
             write_u16 (&sb[off + 10], 16);
 
-            /* 构建 IPv6 地址: fd00::xxxx (前12字节是前缀，后4字节是索引) */
+            /* 根据 prefixlen 计算索引位置 */
+            start_byte = self->prefixlen / 8;  /* /96 → 12, /112 → 14 */
+            idx_bytes = 16 - start_byte;       /* /96 → 4, /112 → 2 */
+
+            /* 先复制网络前缀 */
             write_u128 (&sb[off + 12], self->net6);
-            /* 将索引写入最后 4 字节 (小端序) */
-            sb[off + 27] = (ips[i].idx >> 24) & 0xff;
-            sb[off + 26] = (ips[i].idx >> 16) & 0xff;
-            sb[off + 25] = (ips[i].idx >> 8) & 0xff;
-            sb[off + 24] = ips[i].idx & 0xff;
+
+            /* 将索引写入对应位置（大端序，网络字节序） */
+            for (j = 0; j < idx_bytes; j++) {
+                int shift = (idx_bytes - 1 - j) * 8;
+                sb[off + 12 + start_byte + j] = (ips[i].idx >> shift) & 0xff;
+            }
 
             off += 28;
         }
@@ -325,6 +334,7 @@ hev_mapped_dns_construct (HevMappedDNS *self, int net, int mask, int max)
 {
     int res;
     const unsigned char *net6;
+    int prefixlen;
 
     res = hev_object_construct (&self->base);
     if (res < 0)
@@ -341,8 +351,10 @@ hev_mapped_dns_construct (HevMappedDNS *self, int net, int mask, int max)
     self->net = net;
     self->mask = mask;
 
-    /* 从配置读取 IPv6 前缀，如果未配置则使用默认值 fd00::/96 */
+    /* 从配置读取 IPv6 前缀和前缀长度 */
     net6 = hev_config_get_mapdns_network6 ();
+    prefixlen = hev_config_get_mapdns_prefixlen ();
+
     if (net6[0] == 0 && net6[1] == 0) {
         /* 未配置，使用默认值 fd00::/96 */
         int i;
@@ -351,11 +363,13 @@ hev_mapped_dns_construct (HevMappedDNS *self, int net, int mask, int max)
         }
         self->net6[0] = 0xfd;
         self->net6[1] = 0x00;
+        self->prefixlen = 96;
         LOG_I ("mapped dns: using default IPv6 prefix fd00::/96");
     } else {
         /* 使用配置的值 */
         memcpy (self->net6, net6, 16);
-        LOG_I ("mapped dns: using configured IPv6 prefix");
+        self->prefixlen = prefixlen;
+        LOG_I ("mapped dns: using configured IPv6 prefix /%d", prefixlen);
     }
 
     return 0;
