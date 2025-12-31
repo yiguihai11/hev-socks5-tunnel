@@ -22,6 +22,7 @@
 #include "hev-session-manager.h"
 #include "hev-traffic-router.h"
 #include "hev-filter.h"
+#include "hev-dns-cache.h"
 
 /* Blacklist functionality moved to hev-filter.c for unified management */
 
@@ -32,6 +33,12 @@ parse_target_ip_port (const char *target, int is_ipv6, ip_addr_t *ip,
     char buf[128];
     char *ip_str;
     char *port_str = NULL;
+    int parsed_port;
+
+    if (!target || !ip || !port) {
+        LOG_E ("router: parse_target_ip_port: invalid parameters");
+        return 0;
+    }
 
     strncpy (buf, target, sizeof (buf) - 1);
     buf[sizeof (buf) - 1] = '\0';
@@ -47,6 +54,11 @@ parse_target_ip_port (const char *target, int is_ipv6, ip_addr_t *ip,
             *bracket_end = '\0';
             ip_str = buf + 1;
         }
+        /* Validate IPv6 brackets */
+        if (buf[0] != '[') {
+            LOG_W ("router: Invalid IPv6 format (missing '['): %s", target);
+            return 0;
+        }
     } else {
         ip_str = buf;
         /* IPv4:port format */
@@ -57,10 +69,27 @@ parse_target_ip_port (const char *target, int is_ipv6, ip_addr_t *ip,
         }
     }
 
-    if (port_str)
-        *port = atoi (port_str);
+    /* Parse and validate port */
+    if (port_str && port_str[0] != '\0') {
+        parsed_port = atoi (port_str);
+        if (parsed_port <= 0 || parsed_port > 65535) {
+            LOG_W ("router: Invalid port number '%s' in target: %s", port_str,
+                   target);
+            return 0;
+        }
+        *port = (u16_t)parsed_port;
+    }
 
-    return ipaddr_aton (ip_str, ip);
+    /* Parse IP address */
+    if (!ipaddr_aton (ip_str, ip)) {
+        LOG_W ("router: Invalid IP address '%s' in target: %s", ip_str,
+               target);
+        return 0;
+    }
+
+    LOG_D ("router: Parsed target: %s -> %s:%d", target,
+           ipaddr_ntoa (ip), *port);
+    return 1;
 }
 
 static int
@@ -70,14 +99,28 @@ check_and_hijack (const ip_addr_t *addr, const char *virtual_ip_str,
 {
     ip_addr_t virtual_ip;
 
-    if (!ipaddr_aton (virtual_ip_str, &virtual_ip))
+    if (!addr || !virtual_ip_str || !target_str || !target_ip || !target_port) {
+        LOG_E ("router: check_and_hijack: invalid parameters");
         return 0;
+    }
+
+    if (!ipaddr_aton (virtual_ip_str, &virtual_ip)) {
+        LOG_W ("router: Invalid virtual IP '%s' for %s hijack", virtual_ip_str,
+               log_ver);
+        return 0;
+    }
+
     if (!ip_addr_cmp (addr, &virtual_ip))
         return 0;
-    if (!parse_target_ip_port (target_str, is_ipv6, target_ip, target_port))
-        return 0;
 
-    LOG_D ("router: DNS forward %s hijack detected", log_ver);
+    if (!parse_target_ip_port (target_str, is_ipv6, target_ip, target_port)) {
+        LOG_W ("router: Failed to parse target '%s' for %s hijack", target_str,
+               log_ver);
+        return 0;
+    }
+
+    LOG_I ("router: DNS forward %s hijack detected: %s -> %s:%d", log_ver,
+           ipaddr_ntoa (addr), ipaddr_ntoa (target_ip), *target_port);
     return 1;
 }
 
@@ -89,6 +132,11 @@ handle_dns_forward_hijack (const ip_addr_t *addr, u16_t port,
     const char *target = NULL;
     int is_ipv6;
     const char *log_ver;
+
+    if (!addr || !target_ip || !target_port) {
+        LOG_E ("router: handle_dns_forward_hijack: invalid parameters");
+        return 0;
+    }
 
     if (port != 53)
         return 0;
@@ -133,9 +181,13 @@ hev_traffic_router_init (void)
 {
     LOG_D ("router: Initializing traffic router");
 
-    /* Blacklist functionality now handled by filter module */
+    /* 初始化 DNS 缓存模块 */
+    if (hev_dns_cache_init() < 0) {
+        LOG_E("router: Failed to initialize DNS cache module");
+        return -1;
+    }
 
-    LOG_I ("router: Traffic router initialized successfully");
+    LOG_I ("router: Traffic router initialized successfully (with DNS cache)");
     return 0;
 }
 
@@ -144,7 +196,14 @@ hev_traffic_router_fini (void)
 {
     LOG_D ("router: Finalizing traffic router");
 
-    /* Blacklist functionality now handled by filter module */
+    /* 清理 DNS 缓存模块 */
+    size_t total, poisoned;
+    uint64_t hits;
+    hev_dns_cache_get_stats(&total, &poisoned, &hits);
+    LOG_I("router: DNS cache stats - total:%zu, poisoned:%zu, hits:%llu", 
+          total, poisoned, (unsigned long long)hits);
+    
+    hev_dns_cache_fini();
 
     LOG_I ("router: Traffic router finalized");
 }
@@ -241,28 +300,49 @@ hev_traffic_router_handle_udp (struct udp_pcb *pcb, struct pbuf *p,
         return 1; // Handled (blocked)
     }
 
-    /* DNS Forwarder hijack check (highest priority) */
-    ip_addr_t target_ip;
-    u16_t target_port = 53;
+    /* ⭐ 新增功能：DNS 污染检测与处理（优先级最高） */
+    if (port == 53) {
+        /* 检查是否为 DNS Forwarder 劫持 */
+        ip_addr_t hijack_target_ip;
+        u16_t hijack_target_port = 53;
 
-    if (handle_dns_forward_hijack (addr, port, &target_ip, &target_port)) {
-        char tip_str[INET6_ADDRSTRLEN];
-        ipaddr_ntoa_r (&target_ip, tip_str, sizeof (tip_str));
-        LOG_I ("%p router: UDP DNS Forwarder hijack: %s:%d -> %s:%d", pcb,
-               dst_ip, port, tip_str, target_port);
-        pbuf_ref (p);
-        hev_session_manager_start_direct_udp (pcb, &target_ip, target_port,
-                                              addr, port, p);
-        return 1;
+        if (handle_dns_forward_hijack (addr, port, &hijack_target_ip,
+                                       &hijack_target_port)) {
+            /* DNS Forwarder 劫持优先级最高，直接转发 */
+            char tip_str[INET6_ADDRSTRLEN];
+            ipaddr_ntoa_r (&hijack_target_ip, tip_str, sizeof (tip_str));
+            LOG_I ("%p router: UDP DNS Forwarder hijack: %s:%d -> %s:%d",
+                   pcb, dst_ip, port, tip_str, hijack_target_port);
+            hev_session_manager_start_direct_udp (pcb, &hijack_target_ip,
+                                                  hijack_target_port, addr,
+                                                  port, p);
+            pbuf_ref (p);
+            return 1;
+        }
+
+        /* 检查 DNS 缓存（仅查询，不启动监控） */
+        struct pbuf *p_copy = pbuf_clone (PBUF_RAW, PBUF_RAM, p);
+        if (p_copy && hev_dns_cache_check_only (pcb, p_copy, addr, port)) {
+            LOG_I ("%p router: DNS response from cache for %s:%d", pcb, dst_ip,
+                   port);
+            pbuf_free (p_copy);
+            return 1; /* 缓存命中，已响应 */
+        }
+        if (p_copy)
+            pbuf_free (p_copy);
+
+        /* 缓存未命中，让 DNS 查询走 SOCKS5 UDP 代理 */
+        LOG_I ("%p router: DNS query to %s:%d (cache miss), routing via SOCKS5",
+               pcb, dst_ip, port);
     }
 
-    /* Domestic IP direct connection check (second priority) */
+    /* 国内IP直连检查（第二优先级） */
     if (hev_filter_is_domestic (addr)) {
         LOG_I (
             "%p router: UDP routing %s:%d -> %s:%d via DIRECT (domestic IP, packet_size=%d)",
             pcb, src_ip, pcb->remote_port, dst_ip, port, p ? p->tot_len : 0);
-        pbuf_ref (p);
         hev_session_manager_start_direct_udp (pcb, addr, port, addr, port, p);
+        pbuf_ref (p);
         return 1;
     }
 

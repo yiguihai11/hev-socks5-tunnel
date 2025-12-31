@@ -150,9 +150,9 @@ misc:
   # read-write timeout (ms)
 # read-write-timeout: 300000
   # stdout, stderr or file-path
-#  log-file: stdout
+  log-file: stdout
   # debug, info, warn or error
-#  log-level: debug
+  log-level: debug
   # If present, run as a daemon with this pid file
 # pid-file: /run/hev-socks5-tunnel.pid
   # If present, set rlimit nofile; else use default value

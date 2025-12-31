@@ -98,13 +98,86 @@ def build_dns_query(domain):
     question = qname + struct.pack(">HH", 0x0001, 0x0001)
     return header + question
 
+def _parse_dns_name_labels(response, offset):
+    """(辅助函数) 递归解析DNS名称，正确处理指针压缩。"""
+    labels = []
+    # 跟踪原始偏移量以处理指针跳转
+    current_offset = offset
+    while current_offset < len(response):
+        length = response[current_offset]
+        current_offset += 1
+        # 检查是否为指针（前两位是11）
+        if (length & 0xC0) == 0xC0:
+            pointer = ((length & 0x3F) << 8) + response[current_offset]
+            # 从指针位置递归解析，但主偏移量只前进2字节
+            labels.extend(_parse_dns_name_labels(response, pointer)[0])
+            current_offset += 1 # 指针本身占2字节
+            return labels, current_offset
+        # 名称段结束符
+        if length == 0:
+            return labels, current_offset
+        # 读取标签内容
+        labels.append(response[current_offset:current_offset + length])
+        current_offset += length
+    raise ValueError("解析DNS名称时超出响应边界")
+
+def parse_dns_response(response):
+    """(辅助函数) 解析完整的DNS响应，提取A、AAAA、CNAME记录。"""
+    if len(response) < 12:
+        raise ValueError("DNS响应头不完整")
+
+    # 解析头部
+    tid, flags, qdcount, ancount, _, _ = struct.unpack('>HHHHHH', response[:12])
+    
+    # 跳过问题区域
+    offset = 12
+    for _ in range(qdcount):
+        _, offset = _parse_dns_name_labels(response, offset)
+        offset += 4  # 跳过QTYPE (2B) 和 QCLASS (2B)
+
+    # 解析回答区域
+    records = []
+    for _ in range(ancount):
+        if offset >= len(response): break
+        
+        # 解析域名
+        labels, offset = _parse_dns_name_labels(response, offset)
+        name = b".".join(labels).decode("utf-8", errors="ignore")
+        
+        if offset + 10 > len(response): break
+        
+        # 解析RR头部：类型、类别、TTL、数据长度
+        rr_type, _, _, rdlength = struct.unpack('>HHIH', response[offset:offset+10])
+        offset += 10
+
+        if offset + rdlength > len(response): break
+        
+        rdata_offset = offset
+        
+        record = {'name': name}
+        # 根据记录类型解析数据
+        if rr_type == 1 and rdlength == 4:  # A 记录
+            record['type'] = 'A'
+        elif rr_type == 28 and rdlength == 16:  # AAAA 记录
+            record['type'] = 'AAAA'
+        elif rr_type == 5:  # CNAME 记录
+            record['type'] = 'CNAME'
+        
+        # 只有在是我们关心的类型时才添加到列表
+        if 'type' in record:
+            records.append(record)
+            
+        offset += rdlength # 移动到下一条记录
+
+    return records
+
 def _test_single_dns(dns_ip, dns_port, query, iface, timeout):
-    """测试单个DNS服务器的响应能力"""
+    """测试单个DNS服务器，并验证响应是否包含A、AAAA、CNAME记录中的至少一个。"""
     try:
         # 自动适配IPv4/IPv6
         ip = ipaddress.ip_address(dns_ip)
         family = socket.AF_INET6 if ip.version == 6 else socket.AF_INET
-        # 创建UDP套接字（DNS默认用UDP）
+        # 创建UDP套接字
         sock = socket.socket(family, socket.SOCK_DGRAM)
         # 绑定指定网卡（需root权限）
         if iface:
@@ -112,20 +185,38 @@ def _test_single_dns(dns_ip, dns_port, query, iface, timeout):
         sock.settimeout(timeout)
 
         # 发送DNS查询
-        sent_bytes = sock.sendto(query, (dns_ip, dns_port))
-        if sent_bytes != len(query):
-            return f"发送失败：预期{len(query)}字节，实际发送{sent_bytes}字节"
+        sock.sendto(query, (dns_ip, dns_port))
         
         # 接收响应
-        response, addr = sock.recvfrom(1024)  # DNS响应通常不超过1024字节
-        return f"成功：收到{len(response)}字节响应，前32位Hex：{response.hex()[:32]}..."
+        response, _ = sock.recvfrom(1024)
+        
+        # 1. 检查响应大小
+        if not response:
+            return "失败：收到0字节的空响应"
+        
+        # 2. 检查响应是否合法
+        # parse_dns_response 会在响应不合法时抛出异常，被外层的except捕获
+        records = parse_dns_response(response)
+        
+        found_types = {r['type'] for r in records if 'type' in r}
+        
+        has_a = 'A' in found_types
+        has_aaaa = 'AAAA' in found_types
+        has_cname = 'CNAME' in found_types
+        
+        # 3. 根据记录完整性返回结果 (至少存在其中一个即可)
+        if has_a or has_aaaa or has_cname:
+            found_list = [t for t, h in [('A', has_a), ('AAAA', has_aaaa), ('CNAME', has_cname)] if h]
+            return f"成功：收到{len(response)}字节响应，包含 {', '.join(found_list)} 记录"
+        else:
+            return f"失败：收到{len(response)}字节响应，但未找到 A、AAAA 或 CNAME 记录"
 
     except socket.timeout:
         return f"超时：{timeout}秒内未收到响应"
     except PermissionError:
         return f"权限不足：绑定网卡{iface}需用sudo运行脚本"
-    except Exception as e:
-        return f"测试失败：{str(e)}（如IP无效、端口不可达）"
+    except Exception as e: # This will catch ValueError from parse_dns_response
+        return f"测试失败：响应不合法或解析失败 - {e}"
     finally:
         # 确保套接字关闭（避免资源泄漏）
         if 'sock' in locals():

@@ -1202,14 +1202,14 @@ hev_filter_load_chnroutes (const char *file_path)
     LOG_I ("filter: Loading chnroutes from %s", file_path);
 
     /* Pre-allocate memory */
-    chnroutes_ipv4 = malloc (sizeof (CIDRRange4) * ipv4_capacity);
-    chnroutes_ipv6 = malloc (sizeof (CIDRRange6) * ipv6_capacity);
+    chnroutes_ipv4 = hev_malloc0 (sizeof (CIDRRange4) * ipv4_capacity);
+    chnroutes_ipv6 = hev_malloc0 (sizeof (CIDRRange6) * ipv6_capacity);
     if (!chnroutes_ipv4 || !chnroutes_ipv6) {
         LOG_E ("filter: Failed to pre-allocate memory for chnroutes");
         if (chnroutes_ipv4)
-            free (chnroutes_ipv4);
+            hev_free (chnroutes_ipv4);
         if (chnroutes_ipv6)
-            free (chnroutes_ipv6);
+            hev_free (chnroutes_ipv6);
         fclose (fp);
         return -1;
     }
@@ -1226,7 +1226,7 @@ hev_filter_load_chnroutes (const char *file_path)
             LOG_D ("filter: Parsing IPv6 CIDR: %s/%d", ip_str, prefix_len);
             if (chnroutes_ipv6_count >= ipv6_capacity) {
                 ipv6_capacity *= 2;
-                CIDRRange6 *new_ptr = realloc (
+                CIDRRange6 *new_ptr = hev_realloc (
                     chnroutes_ipv6, sizeof (CIDRRange6) * ipv6_capacity);
                 if (!new_ptr) {
                     LOG_E (
@@ -1258,7 +1258,7 @@ hev_filter_load_chnroutes (const char *file_path)
             /* IPv4 */
             if (chnroutes_ipv4_count >= ipv4_capacity) {
                 ipv4_capacity *= 2;
-                CIDRRange4 *new_ptr = realloc (
+                CIDRRange4 *new_ptr = hev_realloc (
                     chnroutes_ipv4, sizeof (CIDRRange4) * ipv4_capacity);
                 if (!new_ptr) {
                     LOG_E (
