@@ -1698,9 +1698,11 @@ direct_udp_recv_task (void *data)
                 size_t socks5_response_len = 0;
 
                 if (hev_dns_query_via_socks5 (buffer, received,
-                                              &socks5_response, &socks5_response_len) == 0) {
+                                              &socks5_response,
+                                              &socks5_response_len) == 0) {
                     /* 替换响应数据 */
-                    if (socks5_response_len > 0 && socks5_response_len <= sizeof (buffer)) {
+                    if (socks5_response_len > 0 &&
+                        socks5_response_len <= sizeof (buffer)) {
                         memcpy (buffer, socks5_response, socks5_response_len);
                         received = socks5_response_len;
                         LOG_I (

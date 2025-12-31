@@ -330,8 +330,9 @@ hev_traffic_router_handle_udp (struct udp_pcb *pcb, struct pbuf *p,
             pbuf_free (p_copy);
 
         /* 缓存未命中，继续往下走直接连接（响应中检测污染） */
-        LOG_D ("%p router: DNS query to %s:%d (cache miss), continuing to DIRECT for pollution detection",
-               pcb, dst_ip, port);
+        LOG_D (
+            "%p router: DNS query to %s:%d (cache miss), continuing to DIRECT for pollution detection",
+            pcb, dst_ip, port);
         /* 不 return，继续往下执行走直接连接 */
     }
 
