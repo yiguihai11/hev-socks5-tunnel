@@ -329,8 +329,8 @@ hev_traffic_router_handle_udp (struct udp_pcb *pcb, struct pbuf *p,
         if (p_copy)
             pbuf_free (p_copy);
 
-        /* 缓存未命中，让 DNS 查询走 SOCKS5 UDP 代理 */
-        LOG_I ("%p router: DNS query to %s:%d (cache miss), routing via SOCKS5",
+        /* 缓存未命中，继续路由决策（可能直连或SOCKS5） */
+        LOG_D ("%p router: DNS query to %s:%d (cache miss), continuing to routing decision",
                pcb, dst_ip, port);
     }
 
