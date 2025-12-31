@@ -1714,7 +1714,7 @@ direct_udp_recv_task (void *data)
                         if (extract_dns_domain (buffer, received, domain,
                                                 sizeof (domain)) > 0) {
                             hev_dns_cache_insert (domain, buffer, received,
-                                                 time (NULL) + 300, 1);
+                                                  time (NULL) + 300, 1);
                             LOG_I (
                                 "%p session: Cached clean DNS response for domain '%s' (from SOCKS5)",
                                 session, domain);
