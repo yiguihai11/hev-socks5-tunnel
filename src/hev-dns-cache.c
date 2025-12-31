@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <arpa/inet.h>
+#include <errno.h>
 #include <hev-memory-allocator.h>
 #include <hev-task.h>
 #include <hev-task-mutex.h>
@@ -22,6 +23,7 @@
 #include "hev-logger.h"
 #include "hev-config.h"
 #include "hev-filter.h"
+#include "hev-utils.h"
 #include "hev-dns-cache.h"
 
 /* DNS 缓存哈希表 */
@@ -448,13 +450,32 @@ dns_response_monitor_task (void *data)
         int is_poisoned = detect_dns_pollution (buffer, recv_len);
 
         if (is_poisoned) {
-            LOG_W (
-                "dns-cache: DNS pollution detected for domain: %s, querying via SOCKS5...",
-                ctx->domain);
+            LOG_W ("dns-cache: DNS pollution detected for domain: %s, querying via SOCKS5...",
+                   ctx->domain);
 
-            /* TODO: 通过 SOCKS5 查询 1.1.1.1:53 */
-            /* 这里需要集成 SOCKS5 UDP 客户端 */
+            /* 通过 SOCKS5 重新查询 1.1.1.1:53 */
+            uint8_t *socks5_response = NULL;
+            size_t socks5_response_len = 0;
 
+            /* 从备份的查询包中提取查询数据 */
+            if (ctx->original_query && ctx->original_query->payload) {
+                uint8_t *query_data = (uint8_t *)ctx->original_query->payload;
+                size_t query_len = ctx->original_query->len;
+
+                if (hev_dns_query_via_socks5 (query_data, query_len,
+                                              &socks5_response, &socks5_response_len) == 0) {
+                    /* 成功获取干净的响应，缓存它 */
+                    uint32_t ttl = extract_dns_ttl (socks5_response, socks5_response_len);
+                    hev_dns_cache_insert (ctx->domain, socks5_response, socks5_response_len,
+                                         ttl, 0);
+                    LOG_I ("dns-cache: Cached clean response from SOCKS5 for domain: %s",
+                           ctx->domain);
+                    hev_free (socks5_response);
+                } else {
+                    LOG_E ("dns-cache: Failed to query via SOCKS5 for domain: %s",
+                           ctx->domain);
+                }
+            }
         } else {
             LOG_I (
                 "dns-cache: DNS response is clean for domain: %s, caching...",
@@ -611,4 +632,107 @@ hev_dns_cache_get_stats (size_t *total_entries, size_t *poisoned_entries,
         *total_hits = total_cache_hits;
 
     hev_task_mutex_unlock (&dns_cache_mutex);
+}
+
+/**
+ * hev_dns_query_via_socks5:
+ *
+ * 通过 SOCKS5 UDP 代理查询 DNS（查询 1.1.1.1:53）
+ */
+int
+hev_dns_query_via_socks5 (const uint8_t *query, size_t query_len,
+                          uint8_t **response_out, size_t *response_len_out)
+{
+    HevSocks5UDP *sock5_udp = NULL;
+    HevConfigSocks5Server *srv;
+    ip_addr_t dns_server;
+    HevSocks5UDPMsg msg;
+    int res;
+
+    if (!query || query_len == 0 || !response_out || !response_len_out) {
+        LOG_E ("dns-cache: Invalid parameters for socks5 query");
+        return -1;
+    }
+
+    *response_out = NULL;
+    *response_len_out = 0;
+
+    /* 获取 SOCKS5 UDP 配置 */
+    srv = hev_config_get_socks5_udp_server ();
+    if (!srv || srv->addr[0] == '\0' || srv->port == 0) {
+        LOG_E ("dns-cache: SOCKS5 UDP server not configured");
+        return -1;
+    }
+
+    /* 创建 SOCKS5 UDP 客户端 */
+    sock5_udp = hev_socks5_client_udp_new (HEV_SOCKS5_TYPE_UDP_IN_TCP);
+    if (!sock5_udp) {
+        LOG_E ("dns-cache: Failed to create SOCKS5 UDP client");
+        return -1;
+    }
+
+    /* 连接到 SOCKS5 服务器 */
+    res = hev_socks5_client_connect (HEV_SOCKS5_CLIENT (sock5_udp), srv->addr,
+                                     srv->port);
+    if (res < 0) {
+        LOG_E ("dns-cache: Failed to connect to SOCKS5 server");
+        goto cleanup;
+    }
+
+    /* 设置认证 */
+    if (srv->user && srv->pass) {
+        hev_socks5_client_set_auth (HEV_SOCKS5_CLIENT (sock5_udp), srv->user,
+                                    srv->pass);
+    }
+
+    /* 握手 */
+    res = hev_socks5_client_handshake (HEV_SOCKS5_CLIENT (sock5_udp), 0);
+    if (res < 0) {
+        LOG_E ("dns-cache: SOCKS5 handshake failed");
+        goto cleanup;
+    }
+
+    /* 设置目标地址：1.1.1.1:53 */
+    ipaddr_aton ("1.1.1.1", &dns_server);
+    hev_socks5_addr_from_lwip (msg.addr, &dns_server, 53);
+
+    /* 设置消息数据 */
+    msg.buf = (void *)query;
+    msg.len = query_len;
+
+    /* 发送 DNS 查询 */
+    res = hev_socks5_udp_sendmmsg (sock5_udp, &msg, 1);
+    if (res < 0) {
+        LOG_E ("dns-cache: Failed to send DNS query via SOCKS5");
+        goto cleanup;
+    }
+
+    LOG_I ("dns-cache: Sent DNS query via SOCKS5 to 1.1.1.1:53");
+
+    /* 接收响应 */
+    res = hev_socks5_udp_recvmmsg (sock5_udp, &msg, 1, 1);
+    if (res <= 0) {
+        LOG_W ("dns-cache: No response from SOCKS5 DNS server");
+        goto cleanup;
+    }
+
+    /* 复制响应数据 */
+    *response_out = hev_malloc (msg.len);
+    if (!*response_out) {
+        LOG_E ("dns-cache: Failed to allocate response buffer");
+        goto cleanup;
+    }
+    memcpy (*response_out, msg.buf, msg.len);
+    *response_len_out = msg.len;
+
+    LOG_I ("dns-cache: Received DNS response via SOCKS5 (%zu bytes)",
+           *response_len_out);
+
+    hev_object_unref (HEV_OBJECT (sock5_udp));
+    return 0;
+
+cleanup:
+    if (sock5_udp)
+        hev_object_unref (HEV_OBJECT (sock5_udp));
+    return -1;
 }

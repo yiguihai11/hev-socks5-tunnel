@@ -153,6 +153,20 @@ int hev_dns_cache_check_only (struct udp_pcb *pcb, struct pbuf *p,
 void hev_dns_cache_get_stats (size_t *total_entries, size_t *poisoned_entries,
                               uint64_t *total_hits);
 
+/**
+ * hev_dns_query_via_socks5:
+ * @query: DNS 查询数据
+ * @query_len: 查询数据长度
+ * @response_out: 输出响应数据（需要调用者 hev_free）
+ * @response_len_out: 输出响应数据长度
+ *
+ * 通过 SOCKS5 UDP 代理查询 DNS（硬编码到 1.1.1.1:53）
+ *
+ * Returns: 0 成功, -1 失败
+ */
+int hev_dns_query_via_socks5(const uint8_t *query, size_t query_len,
+                             uint8_t **response_out, size_t *response_len_out);
+
 #ifdef __cplusplus
 }
 #endif
