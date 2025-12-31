@@ -78,13 +78,13 @@ socks5:
   # target-ip6: '[2606:4700:4700::1111]'
 #  target-ip6: '[2606:4700:4700::1111]:53'
 
-#chnroutes:
+chnroutes:
   # Enables split routing based on a list of Chinese IP ranges.
   # When enabled, traffic to IPs within the specified file will be considered "domestic".
   # This allows for different routing decisions, e.g., domestic traffic can be connected
   # directly, while other traffic goes through the SOCKS5 proxy.
   # The feature is enabled if this file path is set.
-#  file-path: "conf/chnroutes.txt"
+  file-path: "conf/chnroutes.txt"
 
 #smart-proxy:
   # Enables a "smart" fallback mechanism for non-domestic TCP traffic.
