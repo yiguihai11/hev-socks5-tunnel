@@ -35,28 +35,30 @@ extern "C" {
 /**
  * DNS 缓存条目
  */
-typedef struct _HevDNSCacheEntry {
-    char domain[256];              /* 域名 */
-    uint8_t *response_data;        /* DNS 响应数据 */
-    size_t response_len;           /* 响应数据长度 */
-    time_t expire_time;            /* 过期时间 */
-    int is_poisoned;               /* 是否被污染 */
-    uint32_t hits;                 /* 命中次数 */
+typedef struct _HevDNSCacheEntry
+{
+    char domain[256]; /* 域名 */
+    uint8_t *response_data; /* DNS 响应数据 */
+    size_t response_len; /* 响应数据长度 */
+    time_t expire_time; /* 过期时间 */
+    int is_poisoned; /* 是否被污染 */
+    uint32_t hits; /* 命中次数 */
     struct _HevDNSCacheEntry *next; /* 哈希链表 */
 } HevDNSCacheEntry;
 
 /**
  * DNS 污染检测上下文
  */
-typedef struct _HevDNSPoisonContext {
-    struct udp_pcb *pcb;           /* 原始 UDP PCB */
-    struct pbuf *original_query;   /* 原始查询（备份） */
-    ip_addr_t client_ip;           /* 客户端 IP */
-    u16_t client_port;             /* 客户端端口 */
-    ip_addr_t query_dest_ip;       /* 原查询目标 IP */
-    u16_t query_dest_port;         /* 原查询目标端口 */
-    time_t created_time;           /* 创建时间 */
-    char domain[256];              /* 查询的域名 */
+typedef struct _HevDNSPoisonContext
+{
+    struct udp_pcb *pcb; /* 原始 UDP PCB */
+    struct pbuf *original_query; /* 原始查询（备份） */
+    ip_addr_t client_ip; /* 客户端 IP */
+    u16_t client_port; /* 客户端端口 */
+    ip_addr_t query_dest_ip; /* 原查询目标 IP */
+    u16_t query_dest_port; /* 原查询目标端口 */
+    time_t created_time; /* 创建时间 */
+    char domain[256]; /* 查询的域名 */
 } HevDNSPoisonContext;
 
 /**
@@ -66,14 +68,14 @@ typedef struct _HevDNSPoisonContext {
  *
  * Returns: 0 成功, -1 失败
  */
-int hev_dns_cache_init(void);
+int hev_dns_cache_init (void);
 
 /**
  * hev_dns_cache_fini:
  *
  * 清理 DNS 缓存模块
  */
-void hev_dns_cache_fini(void);
+void hev_dns_cache_fini (void);
 
 /**
  * hev_dns_cache_lookup:
@@ -85,7 +87,8 @@ void hev_dns_cache_fini(void);
  *
  * Returns: 1 找到, 0 未找到
  */
-int hev_dns_cache_lookup(const char *domain, uint8_t **response_out, size_t *response_len_out);
+int hev_dns_cache_lookup (const char *domain, uint8_t **response_out,
+                          size_t *response_len_out);
 
 /**
  * hev_dns_cache_insert:
@@ -99,8 +102,8 @@ int hev_dns_cache_lookup(const char *domain, uint8_t **response_out, size_t *res
  *
  * Returns: 0 成功, -1 失败
  */
-int hev_dns_cache_insert(const char *domain, const uint8_t *response_data, 
-                         size_t response_len, uint32_t ttl, int is_poisoned);
+int hev_dns_cache_insert (const char *domain, const uint8_t *response_data,
+                          size_t response_len, uint32_t ttl, int is_poisoned);
 
 /**
  * hev_dns_poison_detect_and_handle:
@@ -147,8 +150,8 @@ int hev_dns_cache_check_only (struct udp_pcb *pcb, struct pbuf *p,
  *
  * 获取 DNS 缓存统计信息
  */
-void hev_dns_cache_get_stats(size_t *total_entries, size_t *poisoned_entries, 
-                             uint64_t *total_hits);
+void hev_dns_cache_get_stats (size_t *total_entries, size_t *poisoned_entries,
+                              uint64_t *total_hits);
 
 #ifdef __cplusplus
 }

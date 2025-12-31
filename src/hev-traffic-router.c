@@ -82,13 +82,12 @@ parse_target_ip_port (const char *target, int is_ipv6, ip_addr_t *ip,
 
     /* Parse IP address */
     if (!ipaddr_aton (ip_str, ip)) {
-        LOG_W ("router: Invalid IP address '%s' in target: %s", ip_str,
-               target);
+        LOG_W ("router: Invalid IP address '%s' in target: %s", ip_str, target);
         return 0;
     }
 
-    LOG_D ("router: Parsed target: %s -> %s:%d", target,
-           ipaddr_ntoa (ip), *port);
+    LOG_D ("router: Parsed target: %s -> %s:%d", target, ipaddr_ntoa (ip),
+           *port);
     return 1;
 }
 
@@ -182,8 +181,8 @@ hev_traffic_router_init (void)
     LOG_D ("router: Initializing traffic router");
 
     /* 初始化 DNS 缓存模块 */
-    if (hev_dns_cache_init() < 0) {
-        LOG_E("router: Failed to initialize DNS cache module");
+    if (hev_dns_cache_init () < 0) {
+        LOG_E ("router: Failed to initialize DNS cache module");
         return -1;
     }
 
@@ -199,11 +198,11 @@ hev_traffic_router_fini (void)
     /* 清理 DNS 缓存模块 */
     size_t total, poisoned;
     uint64_t hits;
-    hev_dns_cache_get_stats(&total, &poisoned, &hits);
-    LOG_I("router: DNS cache stats - total:%zu, poisoned:%zu, hits:%llu", 
-          total, poisoned, (unsigned long long)hits);
-    
-    hev_dns_cache_fini();
+    hev_dns_cache_get_stats (&total, &poisoned, &hits);
+    LOG_I ("router: DNS cache stats - total:%zu, poisoned:%zu, hits:%llu",
+           total, poisoned, (unsigned long long)hits);
+
+    hev_dns_cache_fini ();
 
     LOG_I ("router: Traffic router finalized");
 }
@@ -270,10 +269,10 @@ hev_traffic_router_handle_tcp (struct tcp_pcb *pcb)
     }
 
     // --- Priority 5: Fallback to SOCKS5 ---
-    const char *reason =
-        is_blacklisted ? "IP is blacklisted" : "smart proxy disabled";
-    LOG_I ("%p router: TCP routing %s:%d -> %s:%d via SOCKS5 (%s)", pcb,
-           src_ip, pcb->remote_port, dst_ip, pcb->local_port, reason);
+    const char *reason = is_blacklisted ? "IP is blacklisted" :
+                                          "smart proxy disabled";
+    LOG_I ("%p router: TCP routing %s:%d -> %s:%d via SOCKS5 (%s)", pcb, src_ip,
+           pcb->remote_port, dst_ip, pcb->local_port, reason);
     hev_session_manager_start_socks5_tcp (pcb, NULL);
     return 1;
 }
@@ -311,11 +310,10 @@ hev_traffic_router_handle_udp (struct udp_pcb *pcb, struct pbuf *p,
             /* DNS Forwarder 劫持优先级最高，直接转发 */
             char tip_str[INET6_ADDRSTRLEN];
             ipaddr_ntoa_r (&hijack_target_ip, tip_str, sizeof (tip_str));
-            LOG_I ("%p router: UDP DNS Forwarder hijack: %s:%d -> %s:%d",
-                   pcb, dst_ip, port, tip_str, hijack_target_port);
-            hev_session_manager_start_direct_udp (pcb, &hijack_target_ip,
-                                                  hijack_target_port, addr,
-                                                  port, p);
+            LOG_I ("%p router: UDP DNS Forwarder hijack: %s:%d -> %s:%d", pcb,
+                   dst_ip, port, tip_str, hijack_target_port);
+            hev_session_manager_start_direct_udp (
+                pcb, &hijack_target_ip, hijack_target_port, addr, port, p);
             pbuf_ref (p);
             return 1;
         }
