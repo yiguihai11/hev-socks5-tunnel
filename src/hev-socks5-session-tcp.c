@@ -18,6 +18,7 @@
 #include <hev-task-mutex.h>
 #include <hev-memory-allocator.h>
 #include <hev-socks5-misc.h>
+#include <hev-compiler.h>
 
 #include "hev-utils.h"
 #include "hev-config.h"
@@ -68,8 +69,8 @@ tcp_splice_f (HevSocks5SessionTCP *self)
 
     if (iovc) {
         ssize_t s = writev (HEV_SOCKS5 (self)->fd, iov, iovc);
-        if (0 >= s) {
-            if ((0 > s) && (EAGAIN == errno))
+        if (unlikely (0 >= s)) {
+            if (likely ((0 > s) && (EAGAIN == errno)))
                 res = 0;
             else
                 res = -1;
@@ -82,7 +83,7 @@ tcp_splice_f (HevSocks5SessionTCP *self)
             hev_task_mutex_unlock (self->mutex);
             res = 1;
         }
-    } else if (res < 0) {
+    } else if (unlikely (res < 0)) {
         LOG_D ("%p socks5 session tcp: forward EOF, shutting down write", self);
         shutdown (HEV_SOCKS5 (self)->fd, SHUT_WR);
     }
@@ -100,8 +101,8 @@ tcp_splice_b (HevSocks5SessionTCP *self)
     iovc = hev_ring_buffer_writing (self->buffer, iov);
     if (iovc) {
         ssize_t s = readv (HEV_SOCKS5 (self)->fd, iov, iovc);
-        if (0 >= s) {
-            if ((0 > s) && (EAGAIN == errno))
+        if (unlikely (0 >= s)) {
+            if (likely ((0 > s) && (EAGAIN == errno)))
                 res = 0;
             else
                 res = -1;
@@ -114,7 +115,7 @@ tcp_splice_b (HevSocks5SessionTCP *self)
     }
 
     hev_task_mutex_lock (self->mutex);
-    if (self->pcb) {
+    if (likely (self->pcb)) {
         iovc = hev_ring_buffer_reading (self->buffer, iov);
         if (iovc) {
             ssize_t s = 0;
@@ -128,7 +129,7 @@ tcp_splice_b (HevSocks5SessionTCP *self)
             hev_ring_buffer_read_finish (self->buffer, s);
             err |= tcp_output (self->pcb);
             res = 1;
-        } else if (res < 0) {
+        } else if (unlikely (res < 0)) {
             LOG_D (
                 "%p socks5 session tcp: backward EOF, shutting down pcb write",
                 self);
@@ -136,7 +137,7 @@ tcp_splice_b (HevSocks5SessionTCP *self)
         }
     }
     hev_task_mutex_unlock (self->mutex);
-    if (!self->pcb || (err != ERR_OK))
+    if (unlikely (!self->pcb || (err != ERR_OK)))
         res = -1;
 
     return res;

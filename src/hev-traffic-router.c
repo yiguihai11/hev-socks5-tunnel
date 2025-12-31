@@ -222,7 +222,7 @@ hev_traffic_router_handle_tcp (struct tcp_pcb *pcb)
            pcb->remote_port, dst_ip, pcb->local_port);
 
     // --- Priority 1: ACL IP block check ---
-    if (hev_filter_is_blocked_ip (local_ip)) {
+    if (unlikely (hev_filter_is_blocked_ip (local_ip))) {
         LOG_W (
             "%p router: TCP connection blocked to IP: %s:%d (from %s:%d) by ACL. Deferring termination.",
             pcb, dst_ip, pcb->local_port, src_ip, pcb->remote_port);
@@ -237,7 +237,7 @@ hev_traffic_router_handle_tcp (struct tcp_pcb *pcb)
 
     // --- Priority 2: Domain-first routing for probe ports ---
     // Domain-first sends fake reply to quickly get hostname, then decides routing
-    if (is_probe_port) {
+    if (unlikely (is_probe_port)) {
         LOG_I (
             "%p router: TCP routing %s:%d -> %s:%d via DOMAIN-FIRST (probe port, quick hostname detection)",
             pcb, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
@@ -260,7 +260,7 @@ hev_traffic_router_handle_tcp (struct tcp_pcb *pcb)
         hev_config_get_smart_proxy_timeout_ms () > 0 &&
         hev_config_get_smart_proxy_blocked_ip_expiry_minutes () > 0;
 
-    if (smart_proxy_enabled && !is_blacklisted) {
+    if (unlikely (smart_proxy_enabled && !is_blacklisted)) {
         LOG_I (
             "%p router: TCP routing %s:%d -> %s:%d via SMART_PROXY (foreign IP, non-probe port, trying direct first)",
             pcb, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
@@ -292,7 +292,7 @@ hev_traffic_router_handle_udp (struct udp_pcb *pcb, struct pbuf *p,
         pcb, src_ip, pcb->remote_port, dst_ip, port, p ? p->tot_len : 0);
 
     // --- IP-based ACL check ---
-    if (hev_filter_is_blocked_ip (addr)) {
+    if (unlikely (hev_filter_is_blocked_ip (addr))) {
         LOG_W ("%p router: UDP packet blocked to IP: %s:%d (from %s:%d) by ACL",
                pcb, dst_ip, port, src_ip, pcb->remote_port);
         pbuf_free (p);
@@ -300,7 +300,7 @@ hev_traffic_router_handle_udp (struct udp_pcb *pcb, struct pbuf *p,
     }
 
     /* ⭐ 新增功能：DNS 污染检测与处理（优先级最高） */
-    if (port == 53) {
+    if (unlikely (port == 53)) {
         /* 检查是否为 DNS Forwarder 劫持 */
         ip_addr_t hijack_target_ip;
         u16_t hijack_target_port = 53;
