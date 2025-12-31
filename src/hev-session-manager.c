@@ -117,6 +117,7 @@ memmem_compat (const void *haystack, size_t haystacklen, const void *needle,
 #include "hev-socks5-tunnel.h"
 #include "hev-traffic-router.h"
 #include "hev-filter.h"
+#include "hev-dns-cache.h"
 
 #include "hev-session-manager.h"
 
@@ -1683,6 +1684,40 @@ direct_udp_recv_task (void *data)
         LOG_D (
             "%p session: UDP received %zd bytes from server (total=%zu packets, %zu bytes)",
             session, received, total_received_packets, total_received_bytes);
+
+        /* ⭐ DNS 响应污染检测与处理 */
+        if (unlikely (session->dest_port == 53)) {
+            int is_poisoned = hev_dns_detect_pollution (buffer, received);
+            if (is_poisoned) {
+                LOG_W (
+                    "%p session: DNS pollution detected from %s:%d, querying via SOCKS5 to 1.1.1.1:53",
+                    session, dst_ip, session->dest_port);
+
+                /* 通过 SOCKS5 重新查询 */
+                uint8_t *socks5_response = NULL;
+                size_t socks5_response_len = 0;
+
+                if (hev_dns_query_via_socks5 (buffer, received,
+                                              &socks5_response, &socks5_response_len) == 0) {
+                    /* 替换响应数据 */
+                    if (socks5_response_len > 0 && socks5_response_len <= sizeof (buffer)) {
+                        memcpy (buffer, socks5_response, socks5_response_len);
+                        received = socks5_response_len;
+                        LOG_I (
+                            "%p session: Replaced poisoned response with clean response from SOCKS5 (%zu bytes)",
+                            session, received);
+                    }
+                    hev_free (socks5_response);
+                } else {
+                    LOG_E (
+                        "%p session: Failed to query via SOCKS5, using original poisoned response",
+                        session);
+                }
+            } else {
+                LOG_I ("%p session: DNS response is clean from %s:%d", session,
+                       dst_ip, session->dest_port);
+            }
+        }
 
         struct pbuf *p = pbuf_alloc (PBUF_TRANSPORT, received, PBUF_RAM);
         if (p) {

@@ -299,7 +299,7 @@ hev_traffic_router_handle_udp (struct udp_pcb *pcb, struct pbuf *p,
         return 1; // Handled (blocked)
     }
 
-    /* ⭐ 新增功能：DNS 污染检测与处理（优先级最高） */
+    /* ⭐ DNS 查询特殊处理：缓存未命中时走直接连接（响应中进行污染检测） */
     if (unlikely (port == 53)) {
         /* 检查是否为 DNS Forwarder 劫持 */
         ip_addr_t hijack_target_ip;
@@ -318,7 +318,7 @@ hev_traffic_router_handle_udp (struct udp_pcb *pcb, struct pbuf *p,
             return 1;
         }
 
-        /* 检查 DNS 缓存（仅查询，不启动监控） */
+        /* 检查 DNS 缓存 */
         struct pbuf *p_copy = pbuf_clone (PBUF_RAW, PBUF_RAM, p);
         if (p_copy && hev_dns_cache_check_only (pcb, p_copy, addr, port)) {
             LOG_I ("%p router: DNS response from cache for %s:%d", pcb, dst_ip,
@@ -329,10 +329,10 @@ hev_traffic_router_handle_udp (struct udp_pcb *pcb, struct pbuf *p,
         if (p_copy)
             pbuf_free (p_copy);
 
-        /* 缓存未命中，继续路由决策（可能直连或SOCKS5） */
-        LOG_D (
-            "%p router: DNS query to %s:%d (cache miss), continuing to routing decision",
-            pcb, dst_ip, port);
+        /* 缓存未命中，继续往下走直接连接（响应中检测污染） */
+        LOG_D ("%p router: DNS query to %s:%d (cache miss), continuing to DIRECT for pollution detection",
+               pcb, dst_ip, port);
+        /* 不 return，继续往下执行走直接连接 */
     }
 
     /* 国内IP直连检查（第二优先级） */

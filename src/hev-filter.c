@@ -1236,7 +1236,7 @@ hev_filter_load_chnroutes (const char *file_path)
 
         if (strchr (ip_str, ':')) {
             /* IPv6 */
-            LOG_D ("filter: Parsing IPv6 CIDR: %s/%d", ip_str, prefix_len);
+            /* LOG_D ("filter: Parsing IPv6 CIDR: %s/%d", ip_str, prefix_len); */
             if (chnroutes_ipv6_count >= ipv6_capacity) {
                 ipv6_capacity *= 2;
                 CIDRRange6 *new_ptr = hev_realloc (

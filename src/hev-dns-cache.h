@@ -167,6 +167,17 @@ void hev_dns_cache_get_stats (size_t *total_entries, size_t *poisoned_entries,
 int hev_dns_query_via_socks5 (const uint8_t *query, size_t query_len,
                               uint8_t **response_out, size_t *response_len_out);
 
+/**
+ * hev_dns_detect_pollution:
+ * @data: DNS 响应数据
+ * @len: 响应数据长度
+ *
+ * 检测 DNS 响应是否被污染（包含国外IP地址）
+ *
+ * Returns: 1 污染, 0 干净
+ */
+int hev_dns_detect_pollution (const uint8_t *data, size_t len);
+
 #ifdef __cplusplus
 }
 #endif

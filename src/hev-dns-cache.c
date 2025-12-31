@@ -161,8 +161,8 @@ is_foreign_ip (const ip_addr_t *ip)
 }
 
 /* 解析 DNS 响应，检测是否包含国外 IP（污染检测） */
-static int
-detect_dns_pollution (const uint8_t *data, size_t len)
+int
+hev_dns_detect_pollution (const uint8_t *data, size_t len)
 {
     if (len < sizeof (DNSHeader))
         return 0;
@@ -528,7 +528,7 @@ dns_response_monitor_task (void *data)
                recv_len, ctx->domain);
 
         /* 检测污染 */
-        int is_poisoned = detect_dns_pollution (buffer, recv_len);
+        int is_poisoned = hev_dns_detect_pollution (buffer, recv_len);
 
         if (is_poisoned) {
             LOG_W (
@@ -641,7 +641,7 @@ hev_dns_poison_detect_and_handle (struct udp_pcb *pcb, struct pbuf *p,
     ip_addr_copy (ctx->query_dest_ip, *addr);
     ctx->query_dest_port = port;
     ctx->created_time = time (NULL);
-    strncpy (ctx->domain, domain, sizeof (ctx->domain) - 1);
+    snprintf (ctx->domain, sizeof (ctx->domain), "%s", domain);
 
     /* 启动监控任务 */
     int stack_size = hev_config_get_misc_task_stack_size ();
@@ -730,6 +730,8 @@ hev_dns_query_via_socks5 (const uint8_t *query, size_t query_len,
     HevConfigSocks5Server *srv;
     ip_addr_t dns_server;
     HevSocks5UDPMsg msg;
+    HevSocks5Addr addr_storage;
+    uint8_t response_buf[512];
     int res;
 
     if (!query || query_len == 0 || !response_out || !response_len_out) {
@@ -777,6 +779,7 @@ hev_dns_query_via_socks5 (const uint8_t *query, size_t query_len,
 
     /* 设置目标地址：1.1.1.1:53 */
     ipaddr_aton ("1.1.1.1", &dns_server);
+    msg.addr = &addr_storage;
     hev_socks5_addr_from_lwip (msg.addr, &dns_server, 53);
 
     /* 设置消息数据 */
@@ -793,6 +796,8 @@ hev_dns_query_via_socks5 (const uint8_t *query, size_t query_len,
     LOG_I ("dns-cache: Sent DNS query via SOCKS5 to 1.1.1.1:53");
 
     /* 接收响应 */
+    msg.buf = response_buf;
+    msg.len = sizeof (response_buf);
     res = hev_socks5_udp_recvmmsg (sock5_udp, &msg, 1, 1);
     if (res <= 0) {
         LOG_W ("dns-cache: No response from SOCKS5 DNS server");
