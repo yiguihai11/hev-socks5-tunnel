@@ -238,7 +238,8 @@ radix_tree_lookup_ipv4 (uint32_t ip)
         current = bit ? current->right : current->left;
     }
 
-    if (current && current->is_leaf && current->action != HEV_ACL_ACTION_DEFAULT) {
+    if (current && current->is_leaf &&
+        current->action != HEV_ACL_ACTION_DEFAULT) {
         found_action = current->action;
     }
 
@@ -263,7 +264,8 @@ radix_tree_lookup_ipv6 (const uint8_t *ip)
         current = bit ? current->right : current->left;
     }
 
-    if (current && current->is_leaf && current->action != HEV_ACL_ACTION_DEFAULT) {
+    if (current && current->is_leaf &&
+        current->action != HEV_ACL_ACTION_DEFAULT) {
         found_action = current->action;
     }
 
@@ -1114,7 +1116,8 @@ hev_filter_load_acl (const char *file_path)
                     radix_tree_insert_ipv4 (ip, 32, action);
                 } else if (IP_IS_V6 (&ip_test)) {
                     radix_tree_insert_ipv6 (
-                        (const uint8_t *)ip_2_ip6 (&ip_test)->addr, 128, action);
+                        (const uint8_t *)ip_2_ip6 (&ip_test)->addr, 128,
+                        action);
                 }
 
                 LOG_D ("filter: Added IP rule: %s %s",
