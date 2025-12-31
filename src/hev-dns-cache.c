@@ -26,9 +26,13 @@
 #include "hev-utils.h"
 #include "hev-dns-cache.h"
 
+/* DNS 缓存分片锁配置 */
+#define DNS_CACHE_SHARD_COUNT 16
+#define DNS_CACHE_SHARD_MASK (DNS_CACHE_SHARD_COUNT - 1)
+
 /* DNS 缓存哈希表 */
 static HevDNSCacheEntry *dns_cache_table[DNS_CACHE_HASH_SIZE];
-static HevTaskMutex dns_cache_mutex;
+static HevTaskMutex dns_cache_shards[DNS_CACHE_SHARD_COUNT];
 static size_t total_cache_entries = 0;
 static size_t poisoned_cache_entries = 0;
 static uint64_t total_cache_hits = 0;
@@ -69,6 +73,26 @@ dns_hash (const char *str)
         hash = ((hash << 5) + hash) + c;
     }
     return hash % DNS_CACHE_HASH_SIZE;
+}
+
+/* 获取分片索引（基于哈希值） */
+static inline int
+dns_cache_get_shard (uint32_t hash)
+{
+    return hash & DNS_CACHE_SHARD_MASK;
+}
+
+/* 获取域名对应的分片索引 */
+static inline int
+dns_cache_domain_shard (const char *domain)
+{
+    uint32_t hash = 5381;
+    int c;
+    while ((c = *domain++)) {
+        c = tolower (c);
+        hash = ((hash << 5) + hash) + c;
+    }
+    return hash & DNS_CACHE_SHARD_MASK;
 }
 
 /* 解析 DNS 域名（带压缩指针支持） */
@@ -266,33 +290,43 @@ int
 hev_dns_cache_init (void)
 {
     memset (dns_cache_table, 0, sizeof (dns_cache_table));
-    hev_task_mutex_init (&dns_cache_mutex);
+
+    /* 初始化所有分片锁 */
+    for (int i = 0; i < DNS_CACHE_SHARD_COUNT; i++) {
+        hev_task_mutex_init (&dns_cache_shards[i]);
+    }
+
     total_cache_entries = 0;
     poisoned_cache_entries = 0;
     total_cache_hits = 0;
 
-    LOG_I ("dns-cache: DNS cache module initialized");
+    LOG_I ("dns-cache: DNS cache module initialized (shards=%d)",
+           DNS_CACHE_SHARD_COUNT);
     return 0;
 }
 
 void
 hev_dns_cache_fini (void)
 {
-    hev_task_mutex_lock (&dns_cache_mutex);
+    /* 遍历所有分片，清理每个分片的哈希表 */
+    for (int shard = 0; shard < DNS_CACHE_SHARD_COUNT; shard++) {
+        hev_task_mutex_lock (&dns_cache_shards[shard]);
 
-    for (int i = 0; i < DNS_CACHE_HASH_SIZE; i++) {
-        HevDNSCacheEntry *entry = dns_cache_table[i];
-        while (entry) {
-            HevDNSCacheEntry *next = entry->next;
-            if (entry->response_data)
-                hev_free (entry->response_data);
-            hev_free (entry);
-            entry = next;
+        /* 清理属于这个分片的哈希桶 */
+        for (int i = shard; i < DNS_CACHE_HASH_SIZE; i += DNS_CACHE_SHARD_COUNT) {
+            HevDNSCacheEntry *entry = dns_cache_table[i];
+            while (entry) {
+                HevDNSCacheEntry *next = entry->next;
+                if (entry->response_data)
+                    hev_free (entry->response_data);
+                hev_free (entry);
+                entry = next;
+            }
+            dns_cache_table[i] = NULL;
         }
-        dns_cache_table[i] = NULL;
-    }
 
-    hev_task_mutex_unlock (&dns_cache_mutex);
+        hev_task_mutex_unlock (&dns_cache_shards[shard]);
+    }
 
     LOG_I ("dns-cache: DNS cache module finalized (cleared %zu entries)",
            total_cache_entries);
@@ -303,9 +337,10 @@ hev_dns_cache_lookup (const char *domain, uint8_t **response_out,
                       size_t *response_len_out)
 {
     uint32_t hash = dns_hash (domain);
+    int shard = dns_cache_get_shard (hash);
     time_t now = time (NULL);
 
-    hev_task_mutex_lock (&dns_cache_mutex);
+    hev_task_mutex_lock (&dns_cache_shards[shard]);
 
     HevDNSCacheEntry *entry = dns_cache_table[hash];
     while (entry) {
@@ -313,7 +348,7 @@ hev_dns_cache_lookup (const char *domain, uint8_t **response_out,
             /* 检查是否过期 */
             if (now > entry->expire_time) {
                 LOG_D ("dns-cache: Cache expired for domain: %s", domain);
-                hev_task_mutex_unlock (&dns_cache_mutex);
+                hev_task_mutex_unlock (&dns_cache_shards[shard]);
                 return 0;
             }
 
@@ -326,13 +361,13 @@ hev_dns_cache_lookup (const char *domain, uint8_t **response_out,
             LOG_I ("dns-cache: Cache hit for domain: %s (hits=%u, poisoned=%d)",
                    domain, entry->hits, entry->is_poisoned);
 
-            hev_task_mutex_unlock (&dns_cache_mutex);
+            hev_task_mutex_unlock (&dns_cache_shards[shard]);
             return 1;
         }
         entry = entry->next;
     }
 
-    hev_task_mutex_unlock (&dns_cache_mutex);
+    hev_task_mutex_unlock (&dns_cache_shards[shard]);
     return 0;
 }
 
@@ -341,6 +376,7 @@ hev_dns_cache_insert (const char *domain, const uint8_t *response_data,
                       size_t response_len, uint32_t ttl, int is_poisoned)
 {
     uint32_t hash = dns_hash (domain);
+    int shard = dns_cache_get_shard (hash);
     time_t now = time (NULL);
 
     /* 分配新条目 */
@@ -364,7 +400,7 @@ hev_dns_cache_insert (const char *domain, const uint8_t *response_data,
     new_entry->is_poisoned = is_poisoned;
     new_entry->hits = 0;
 
-    hev_task_mutex_lock (&dns_cache_mutex);
+    hev_task_mutex_lock (&dns_cache_shards[shard]);
 
     /* 检查是否已存在，如存在则替换 */
     HevDNSCacheEntry **current = &dns_cache_table[hash];
@@ -388,7 +424,7 @@ hev_dns_cache_insert (const char *domain, const uint8_t *response_data,
                 "dns-cache: Updated cache for domain: %s (ttl=%u, poisoned=%d)",
                 domain, ttl, is_poisoned);
 
-            hev_task_mutex_unlock (&dns_cache_mutex);
+            hev_task_mutex_unlock (&dns_cache_shards[shard]);
             return 0;
         }
         current = &(*current)->next;
@@ -405,7 +441,7 @@ hev_dns_cache_insert (const char *domain, const uint8_t *response_data,
         "dns-cache: Inserted cache for domain: %s (ttl=%u, poisoned=%d, total=%zu)",
         domain, ttl, is_poisoned, total_cache_entries);
 
-    hev_task_mutex_unlock (&dns_cache_mutex);
+    hev_task_mutex_unlock (&dns_cache_shards[shard]);
     return 0;
 }
 
@@ -627,16 +663,13 @@ void
 hev_dns_cache_get_stats (size_t *total_entries, size_t *poisoned_entries,
                          uint64_t *total_hits)
 {
-    hev_task_mutex_lock (&dns_cache_mutex);
-
+    /* 统计数据读取不需要锁（协程环境，单线程执行） */
     if (total_entries)
         *total_entries = total_cache_entries;
     if (poisoned_entries)
         *poisoned_entries = poisoned_cache_entries;
     if (total_hits)
         *total_hits = total_cache_hits;
-
-    hev_task_mutex_unlock (&dns_cache_mutex);
 }
 
 /**
