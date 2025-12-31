@@ -313,7 +313,8 @@ hev_dns_cache_fini (void)
         hev_task_mutex_lock (&dns_cache_shards[shard]);
 
         /* 清理属于这个分片的哈希桶 */
-        for (int i = shard; i < DNS_CACHE_HASH_SIZE; i += DNS_CACHE_SHARD_COUNT) {
+        for (int i = shard; i < DNS_CACHE_HASH_SIZE;
+             i += DNS_CACHE_SHARD_COUNT) {
             HevDNSCacheEntry *entry = dns_cache_table[i];
             while (entry) {
                 HevDNSCacheEntry *next = entry->next;
