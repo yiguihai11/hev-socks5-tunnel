@@ -318,9 +318,10 @@ hev_dns_cache_init (void)
     poisoned_cache_entries = 0;
     total_cache_hits = 0;
 
-    LOG_I ("dns-cache: DNS cache module initialized (shards=%d, entry_pool=%d/%d)",
-           DNS_CACHE_SHARD_COUNT, DNS_ENTRY_POOL_INIT_CAPACITY,
-           DNS_ENTRY_POOL_MAX_CAPACITY);
+    LOG_I (
+        "dns-cache: DNS cache module initialized (shards=%d, entry_pool=%d/%d)",
+        DNS_CACHE_SHARD_COUNT, DNS_ENTRY_POOL_INIT_CAPACITY,
+        DNS_ENTRY_POOL_MAX_CAPACITY);
     return 0;
 }
 
