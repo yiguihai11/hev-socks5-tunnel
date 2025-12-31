@@ -450,8 +450,9 @@ dns_response_monitor_task (void *data)
         int is_poisoned = detect_dns_pollution (buffer, recv_len);
 
         if (is_poisoned) {
-            LOG_W ("dns-cache: DNS pollution detected for domain: %s, querying via SOCKS5...",
-                   ctx->domain);
+            LOG_W (
+                "dns-cache: DNS pollution detected for domain: %s, querying via SOCKS5...",
+                ctx->domain);
 
             /* 通过 SOCKS5 重新查询 1.1.1.1:53 */
             uint8_t *socks5_response = NULL;
@@ -463,17 +464,21 @@ dns_response_monitor_task (void *data)
                 size_t query_len = ctx->original_query->len;
 
                 if (hev_dns_query_via_socks5 (query_data, query_len,
-                                              &socks5_response, &socks5_response_len) == 0) {
+                                              &socks5_response,
+                                              &socks5_response_len) == 0) {
                     /* 成功获取干净的响应，缓存它 */
-                    uint32_t ttl = extract_dns_ttl (socks5_response, socks5_response_len);
-                    hev_dns_cache_insert (ctx->domain, socks5_response, socks5_response_len,
-                                         ttl, 0);
-                    LOG_I ("dns-cache: Cached clean response from SOCKS5 for domain: %s",
-                           ctx->domain);
+                    uint32_t ttl =
+                        extract_dns_ttl (socks5_response, socks5_response_len);
+                    hev_dns_cache_insert (ctx->domain, socks5_response,
+                                          socks5_response_len, ttl, 0);
+                    LOG_I (
+                        "dns-cache: Cached clean response from SOCKS5 for domain: %s",
+                        ctx->domain);
                     hev_free (socks5_response);
                 } else {
-                    LOG_E ("dns-cache: Failed to query via SOCKS5 for domain: %s",
-                           ctx->domain);
+                    LOG_E (
+                        "dns-cache: Failed to query via SOCKS5 for domain: %s",
+                        ctx->domain);
                 }
             }
         } else {

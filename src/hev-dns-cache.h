@@ -164,8 +164,8 @@ void hev_dns_cache_get_stats (size_t *total_entries, size_t *poisoned_entries,
  *
  * Returns: 0 成功, -1 失败
  */
-int hev_dns_query_via_socks5(const uint8_t *query, size_t query_len,
-                             uint8_t **response_out, size_t *response_len_out);
+int hev_dns_query_via_socks5 (const uint8_t *query, size_t query_len,
+                              uint8_t **response_out, size_t *response_len_out);
 
 #ifdef __cplusplus
 }
