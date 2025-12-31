@@ -101,11 +101,11 @@ __write_once_size (volatile void *dst, const void *src, int size)
 
 /* Branch prediction hints */
 #ifndef likely
-#define likely(x) __builtin_expect (!! (x), 1)
+#define likely(x) __builtin_expect (!!(x), 1)
 #endif
 
 #ifndef unlikely
-#define unlikely(x) __builtin_expect (!! (x), 0)
+#define unlikely(x) __builtin_expect (!!(x), 0)
 #endif
 
 #ifdef __cplusplus
