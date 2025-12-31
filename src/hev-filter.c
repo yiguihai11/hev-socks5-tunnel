@@ -48,7 +48,8 @@ typedef struct _RadixNode
     struct _RadixNode *left; /* 0 bit */
     struct _RadixNode *right; /* 1 bit */
     uint8_t is_leaf; /* Leaf node flag */
-    uint8_t blocked; /* Blocked flag for ACL */
+    uint8_t blocked; /* Blocked flag for ACL (legacy, for chnroutes) */
+    HevACLAction action; /* ACL action: ALLOW, BLOCK, or DEFAULT */
 } RadixNode;
 
 static RadixNode *acl_ipv4_tree = NULL;
@@ -174,7 +175,7 @@ static uint64_t total_hits = 0;
 static uint64_t total_blocked_bytes = 0;
 
 static void
-radix_tree_insert_ipv4 (uint32_t ip, uint8_t prefix)
+radix_tree_insert_ipv4 (uint32_t ip, uint8_t prefix, HevACLAction action)
 {
     RadixNode **current = &acl_ipv4_tree;
 
@@ -192,11 +193,12 @@ radix_tree_insert_ipv4 (uint32_t ip, uint8_t prefix)
     }
 
     (*current)->is_leaf = 1;
-    (*current)->blocked = 1;
+    (*current)->blocked = (action == HEV_ACL_ACTION_BLOCK);
+    (*current)->action = action;
 }
 
 static void __attribute__ ((unused))
-radix_tree_insert_ipv6 (const uint8_t *ip, uint8_t prefix)
+radix_tree_insert_ipv6 (const uint8_t *ip, uint8_t prefix, HevACLAction action)
 {
     RadixNode **current = &acl_ipv6_tree;
 
@@ -217,40 +219,41 @@ radix_tree_insert_ipv6 (const uint8_t *ip, uint8_t prefix)
     }
 
     (*current)->is_leaf = 1;
-    (*current)->blocked = 1;
+    (*current)->blocked = (action == HEV_ACL_ACTION_BLOCK);
+    (*current)->action = action;
 }
 
-static int
+static HevACLAction
 radix_tree_lookup_ipv4 (uint32_t ip)
 {
     RadixNode *current = acl_ipv4_tree;
-    int blocked = 0;
+    HevACLAction found_action = HEV_ACL_ACTION_DEFAULT;
 
     for (int i = 0; i < 32 && current; i++) {
-        if (current->blocked) { // Check if any parent prefix is blocked
-            blocked = 1;
+        if (current->is_leaf && current->action != HEV_ACL_ACTION_DEFAULT) {
+            found_action = current->action;
         }
 
         uint8_t bit = (ip >> (31 - i)) & 1;
         current = bit ? current->right : current->left;
     }
 
-    if (current && current->blocked) { // Check the final node
-        blocked = 1;
+    if (current && current->is_leaf && current->action != HEV_ACL_ACTION_DEFAULT) {
+        found_action = current->action;
     }
 
-    return blocked;
+    return found_action;
 }
 
-static int
+static HevACLAction
 radix_tree_lookup_ipv6 (const uint8_t *ip)
 {
     RadixNode *current = acl_ipv6_tree;
-    int blocked = 0;
+    HevACLAction found_action = HEV_ACL_ACTION_DEFAULT;
 
     for (int i = 0; i < 128 && current; i++) {
-        if (current->blocked) { // Check if any parent prefix is blocked
-            blocked = 1;
+        if (current->is_leaf && current->action != HEV_ACL_ACTION_DEFAULT) {
+            found_action = current->action;
         }
 
         uint8_t byte = i / 8;
@@ -260,11 +263,11 @@ radix_tree_lookup_ipv6 (const uint8_t *ip)
         current = bit ? current->right : current->left;
     }
 
-    if (current && current->blocked) { // Check the final node
-        blocked = 1;
+    if (current && current->is_leaf && current->action != HEV_ACL_ACTION_DEFAULT) {
+        found_action = current->action;
     }
 
-    return blocked;
+    return found_action;
 }
 
 /* ============================================================================
@@ -1105,15 +1108,18 @@ hev_filter_load_acl (const char *file_path)
                 acl_ip_rules = rule;
                 ip_count++;
 
+                /* Add to radix tree for O(1) lookup */
+                if (IP_IS_V4 (&ip_test)) {
+                    uint32_t ip = ntohl (ip_2_ip4 (&ip_test)->addr);
+                    radix_tree_insert_ipv4 (ip, 32, action);
+                } else if (IP_IS_V6 (&ip_test)) {
+                    radix_tree_insert_ipv6 (
+                        (const uint8_t *)ip_2_ip6 (&ip_test)->addr, 128, action);
+                }
+
                 LOG_D ("filter: Added IP rule: %s %s",
                        action == HEV_ACL_ACTION_ALLOW ? "ALLOW" : "BLOCK",
                        value_str);
-
-                /* Also add to old radix tree for backward compatibility */
-                if (IP_IS_V4 (&ip_test) && action == HEV_ACL_ACTION_BLOCK) {
-                    uint32_t ip = ntohl (ip_2_ip4 (&ip_test)->addr);
-                    radix_tree_insert_ipv4 (ip, 32);
-                }
             }
         } else if (strcasecmp (type_str, "cidr") == 0) {
             /* CIDR rule */
@@ -1129,10 +1135,14 @@ hev_filter_load_acl (const char *file_path)
                     acl_cidr_rules = rule;
                     cidr_count++;
 
-                    /* Also add to old radix tree for backward compatibility */
-                    if (IP_IS_V4 (&ip_test) && action == HEV_ACL_ACTION_BLOCK) {
+                    /* Add to radix tree for O(prefix) lookup */
+                    if (IP_IS_V4 (&ip_test)) {
                         uint32_t ip = ntohl (ip_2_ip4 (&ip_test)->addr);
-                        radix_tree_insert_ipv4 (ip, prefix_len);
+                        radix_tree_insert_ipv4 (ip, prefix_len, action);
+                    } else if (IP_IS_V6 (&ip_test)) {
+                        radix_tree_insert_ipv6 (
+                            (const uint8_t *)ip_2_ip6 (&ip_test)->addr,
+                            prefix_len, action);
                     }
 
                     LOG_D ("filter: Added CIDR rule: %s %s",
@@ -1303,13 +1313,16 @@ hev_filter_is_blocked_ip (const ip_addr_t *ip)
     /* 只检查ACL规则（真正的安全黑名单） */
     if (IP_IS_V4 (ip)) {
         uint32_t addr = ntohl (ip_2_ip4 (ip)->addr);
-        if (radix_tree_lookup_ipv4 (addr)) {
+        HevACLAction action = radix_tree_lookup_ipv4 (addr);
+        if (action == HEV_ACL_ACTION_BLOCK) {
             stats.ip_blocked++;
             LOG_D ("filter: IP %s blocked by ACL rule", ipaddr_ntoa (ip));
             return 1;
         }
     } else if (IP_IS_V6 (ip)) {
-        if (radix_tree_lookup_ipv6 ((const uint8_t *)ip_2_ip6 (ip)->addr)) {
+        HevACLAction action =
+            radix_tree_lookup_ipv6 ((const uint8_t *)ip_2_ip6 (ip)->addr);
+        if (action == HEV_ACL_ACTION_BLOCK) {
             stats.ip_blocked++;
             LOG_D ("filter: IPv6 %s blocked by ACL rule", ipaddr_ntoa (ip));
             return 1;
@@ -2011,70 +2024,22 @@ hev_acl_match_stage1_connection (const ip_addr_t *ip, int port)
         }
     }
 
-    /* 2. Check IP rules (exact match) */
-    HevACLRule *rule = acl_ip_rules;
-    while (rule) {
-        ip_addr_t rule_ip;
-        if (ipaddr_aton (rule->pattern, &rule_ip)) {
-            /* Only match if IP types are the same (IPv4 vs IPv6) */
-            int type_match = 0;
-            if (IP_IS_V4 (ip) && IP_IS_V4 (&rule_ip)) {
-                type_match = 1;
-            } else if (IP_IS_V6 (ip) && IP_IS_V6 (&rule_ip)) {
-                type_match = 1;
-            }
-
-            if (type_match) {
-                /* Compare IP addresses directly */
-                int match = 0;
-                if (IP_IS_V4 (ip) && IP_IS_V4 (&rule_ip)) {
-                    uint32_t ip1 = ip_2_ip4 (ip)->addr;
-                    uint32_t ip2 = ip_2_ip4 (&rule_ip)->addr;
-                    match = (ip1 == ip2);
-                } else if (IP_IS_V6 (ip) && IP_IS_V6 (&rule_ip)) {
-                    match = (memcmp (ip_2_ip6 (ip)->addr,
-                                     ip_2_ip6 (&rule_ip)->addr, 16) == 0);
-                }
-
-                if (match) { /* Match */
-                    result.matched = 1;
-                    result.action = rule->action;
-                    result.rule_pattern = rule->pattern;
-                    LOG_D ("ACL Stage1: IP %s matched rule '%s' -> action=%d",
-                           ipaddr_ntoa (ip), rule->pattern, rule->action);
-                    return result;
-                }
-            }
-        }
-        rule = rule->next;
+    /* 2. Check IP/CIDR rules using Radix Tree (O(prefix) instead of O(n)) */
+    HevACLAction action = HEV_ACL_ACTION_DEFAULT;
+    if (IP_IS_V4 (ip)) {
+        uint32_t addr = ntohl (ip_2_ip4 (ip)->addr);
+        action = radix_tree_lookup_ipv4 (addr);
+    } else if (IP_IS_V6 (ip)) {
+        action = radix_tree_lookup_ipv6 ((const uint8_t *)ip_2_ip6 (ip)->addr);
     }
 
-    /* 3. Check CIDR rules */
-    rule = acl_cidr_rules;
-    while (rule) {
-        char ip_str[128];
-        int prefix_len;
-        if (sscanf (rule->pattern, "%[^/]/%d", ip_str, &prefix_len) == 2) {
-            ip_addr_t rule_ip;
-            if (ipaddr_aton (ip_str, &rule_ip)) {
-                if (IP_IS_V4 (ip) && IP_IS_V4 (&rule_ip)) {
-                    uint32_t ip_addr = ntohl (ip_2_ip4 (ip)->addr);
-                    uint32_t rule_addr = ntohl (ip_2_ip4 (&rule_ip)->addr);
-                    uint32_t mask =
-                        prefix_len > 0 ? (0xFFFFFFFF << (32 - prefix_len)) : 0;
-                    if ((ip_addr & mask) == (rule_addr & mask)) {
-                        result.matched = 1;
-                        result.action = rule->action;
-                        result.rule_pattern = rule->pattern;
-                        LOG_D (
-                            "ACL Stage1: IP %s matched CIDR rule '%s' -> action=%d",
-                            ipaddr_ntoa (ip), rule->pattern, rule->action);
-                        return result;
-                    }
-                }
-            }
-        }
-        rule = rule->next;
+    if (action != HEV_ACL_ACTION_DEFAULT) {
+        result.matched = 1;
+        result.action = action;
+        result.rule_pattern = ipaddr_ntoa (ip); /* Use IP as pattern */
+        LOG_D ("ACL Stage1: IP %s matched Radix Tree rule -> action=%d",
+               ipaddr_ntoa (ip), action);
+        return result;
     }
 
     return result;
