@@ -1708,6 +1708,17 @@ direct_udp_recv_task (void *data)
                         LOG_I (
                             "%p session: Replaced poisoned response with clean response from SOCKS5 (%zu bytes)",
                             session, received);
+
+                        /* ⭐ 缓存干净的DNS响应 */
+                        char domain[256];
+                        if (extract_dns_domain (buffer, received, domain,
+                                                sizeof (domain)) > 0) {
+                            hev_dns_cache_insert (domain, buffer, received,
+                                                 time (NULL) + 300, 1);
+                            LOG_I (
+                                "%p session: Cached clean DNS response for domain '%s' (from SOCKS5)",
+                                session, domain);
+                        }
                     }
                     hev_free (socks5_response);
                 } else {

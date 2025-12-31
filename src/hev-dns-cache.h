@@ -178,6 +178,20 @@ int hev_dns_query_via_socks5 (const uint8_t *query, size_t query_len,
  */
 int hev_dns_detect_pollution (const uint8_t *data, size_t len);
 
+/**
+ * extract_dns_domain:
+ * @data: DNS 查询/响应数据
+ * @len: 数据长度
+ * @domain_out: 输出域名
+ * @domain_max: 输出缓冲区大小
+ *
+ * 从 DNS 数据包中提取域名
+ *
+ * Returns: 提取的域名长度（不含null）, -1 失败
+ */
+int extract_dns_domain (const uint8_t *data, size_t len, char *domain_out,
+                        size_t domain_max);
+
 #ifdef __cplusplus
 }
 #endif

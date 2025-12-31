@@ -281,7 +281,7 @@ extract_dns_ttl (const uint8_t *data, size_t len)
 }
 
 /* 提取 DNS 查询中的域名 */
-static int
+int
 extract_dns_domain (const uint8_t *data, size_t len, char *domain_out,
                     size_t domain_max)
 {
