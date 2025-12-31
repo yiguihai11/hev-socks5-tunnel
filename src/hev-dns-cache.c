@@ -795,12 +795,28 @@ hev_dns_query_via_socks5 (const uint8_t *query, size_t query_len,
 
     LOG_I ("dns-cache: Sent DNS query via SOCKS5 to 1.1.1.1:53");
 
-    /* 接收响应 */
+    /* 异步接收响应：循环等待，每次yield让出CPU */
     msg.buf = response_buf;
     msg.len = sizeof (response_buf);
-    res = hev_socks5_udp_recvmmsg (sock5_udp, &msg, 1, 1);
+
+    int retry_count = 0;
+    const int max_retries = 10; /* 最多尝试10次 */
+
+    while (retry_count < max_retries) {
+        res = hev_socks5_udp_recvmmsg (sock5_udp, &msg, 1, 1);
+        if (res > 0) {
+            /* 收到响应 */
+            break;
+        }
+
+        /* 没有收到响应，yield让出CPU */
+        hev_task_yield (HEV_TASK_YIELD);
+        retry_count++;
+    }
+
     if (res <= 0) {
-        LOG_W ("dns-cache: No response from SOCKS5 DNS server");
+        LOG_W ("dns-cache: No response from SOCKS5 DNS server after %d retries",
+               max_retries);
         goto cleanup;
     }
 
