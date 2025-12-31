@@ -19,6 +19,7 @@
 #include <hev-task-io-socket.h>
 #include <hev-socks5.h>
 #include <hev-socks5-client-udp.h>
+#include <hev-object-pool.h>
 
 #include "hev-logger.h"
 #include "hev-config.h"
@@ -30,9 +31,14 @@
 #define DNS_CACHE_SHARD_COUNT 16
 #define DNS_CACHE_SHARD_MASK (DNS_CACHE_SHARD_COUNT - 1)
 
+/* DNS 缓存对象池配置 */
+#define DNS_ENTRY_POOL_INIT_CAPACITY 32
+#define DNS_ENTRY_POOL_MAX_CAPACITY 256
+
 /* DNS 缓存哈希表 */
 static HevDNSCacheEntry *dns_cache_table[DNS_CACHE_HASH_SIZE];
 static HevTaskMutex dns_cache_shards[DNS_CACHE_SHARD_COUNT];
+static HevObjectPool *dns_entry_pool = NULL;
 static size_t total_cache_entries = 0;
 static size_t poisoned_cache_entries = 0;
 static uint64_t total_cache_hits = 0;
@@ -289,6 +295,8 @@ extract_dns_domain (const uint8_t *data, size_t len, char *domain_out,
 int
 hev_dns_cache_init (void)
 {
+    HevObjectPoolConfig pool_config;
+
     memset (dns_cache_table, 0, sizeof (dns_cache_table));
 
     /* 初始化所有分片锁 */
@@ -296,12 +304,23 @@ hev_dns_cache_init (void)
         hev_task_mutex_init (&dns_cache_shards[i]);
     }
 
+    /* 创建 DNS 缓存条目对象池 */
+    pool_config.obj_size = sizeof (HevDNSCacheEntry);
+    pool_config.init_capacity = DNS_ENTRY_POOL_INIT_CAPACITY;
+    pool_config.max_capacity = DNS_ENTRY_POOL_MAX_CAPACITY;
+    dns_entry_pool = hev_object_pool_new (&pool_config);
+    if (!dns_entry_pool) {
+        LOG_E ("dns-cache: Failed to create DNS entry object pool");
+        return -1;
+    }
+
     total_cache_entries = 0;
     poisoned_cache_entries = 0;
     total_cache_hits = 0;
 
-    LOG_I ("dns-cache: DNS cache module initialized (shards=%d)",
-           DNS_CACHE_SHARD_COUNT);
+    LOG_I ("dns-cache: DNS cache module initialized (shards=%d, entry_pool=%d/%d)",
+           DNS_CACHE_SHARD_COUNT, DNS_ENTRY_POOL_INIT_CAPACITY,
+           DNS_ENTRY_POOL_MAX_CAPACITY);
     return 0;
 }
 
@@ -320,13 +339,23 @@ hev_dns_cache_fini (void)
                 HevDNSCacheEntry *next = entry->next;
                 if (entry->response_data)
                     hev_free (entry->response_data);
-                hev_free (entry);
+                /* 将条目归还到对象池，而非直接释放 */
+                if (dns_entry_pool)
+                    hev_object_pool_put (dns_entry_pool, entry);
+                else
+                    hev_free (entry);
                 entry = next;
             }
             dns_cache_table[i] = NULL;
         }
 
         hev_task_mutex_unlock (&dns_cache_shards[shard]);
+    }
+
+    /* 最后销毁对象池（会释放池中所有对象） */
+    if (dns_entry_pool) {
+        hev_object_pool_destroy (dns_entry_pool);
+        dns_entry_pool = NULL;
     }
 
     LOG_I ("dns-cache: DNS cache module finalized (cleared %zu entries)",
@@ -380,17 +409,28 @@ hev_dns_cache_insert (const char *domain, const uint8_t *response_data,
     int shard = dns_cache_get_shard (hash);
     time_t now = time (NULL);
 
-    /* 分配新条目 */
-    HevDNSCacheEntry *new_entry = hev_malloc0 (sizeof (HevDNSCacheEntry));
+    /* 从对象池分配新条目 */
+    HevDNSCacheEntry *new_entry = hev_object_pool_get (dns_entry_pool);
+    if (!new_entry) {
+        LOG_W ("dns-cache: Object pool empty, falling back to malloc");
+        new_entry = hev_malloc0 (sizeof (HevDNSCacheEntry));
+    }
     if (!new_entry) {
         LOG_E ("dns-cache: Failed to allocate cache entry");
         return -1;
+    }
+    /* 对象池返回的内存可能未清零，清零关键字段 */
+    if (dns_entry_pool && new_entry) {
+        memset (new_entry, 0, sizeof (HevDNSCacheEntry));
     }
 
     strncpy (new_entry->domain, domain, sizeof (new_entry->domain) - 1);
     new_entry->response_data = hev_malloc (response_len);
     if (!new_entry->response_data) {
-        hev_free (new_entry);
+        if (dns_entry_pool)
+            hev_object_pool_put (dns_entry_pool, new_entry);
+        else
+            hev_free (new_entry);
         LOG_E ("dns-cache: Failed to allocate response data");
         return -1;
     }
@@ -416,7 +456,10 @@ hev_dns_cache_insert (const char *domain, const uint8_t *response_data,
                 hev_free (old->response_data);
             if (old->is_poisoned)
                 poisoned_cache_entries--;
-            hev_free (old);
+            if (dns_entry_pool)
+                hev_object_pool_put (dns_entry_pool, old);
+            else
+                hev_free (old);
 
             if (is_poisoned)
                 poisoned_cache_entries++;
