@@ -330,8 +330,9 @@ hev_traffic_router_handle_udp (struct udp_pcb *pcb, struct pbuf *p,
             pbuf_free (p_copy);
 
         /* 缓存未命中，继续路由决策（可能直连或SOCKS5） */
-        LOG_D ("%p router: DNS query to %s:%d (cache miss), continuing to routing decision",
-               pcb, dst_ip, port);
+        LOG_D (
+            "%p router: DNS query to %s:%d (cache miss), continuing to routing decision",
+            pcb, dst_ip, port);
     }
 
     /* 国内IP直连检查（第二优先级） */
