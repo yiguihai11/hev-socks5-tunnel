@@ -30,30 +30,37 @@ parse_target_ip_port (const char *target, int is_ipv6, ip_addr_t *ip,
                       u16_t *port)
 {
     char buf[128];
+    char *ip_str;
+    char *port_str = NULL;
+
     strncpy (buf, target, sizeof (buf) - 1);
+    buf[sizeof (buf) - 1] = '\0';
+
+    *port = 53; /* Default port */
 
     if (is_ipv6) {
+        ip_str = buf;
         /* [IPv6]:port format */
         char *bracket_end = strrchr (buf, ']');
         if (bracket_end && bracket_end[1] == ':') {
-            *port = atoi (bracket_end + 2);
+            port_str = bracket_end + 2;
             *bracket_end = '\0';
-            return ipaddr_aton (buf + 1, ip);
+            ip_str = buf + 1;
         }
-        /* plain IPv6 without port */
-        *port = 53;
-        return ipaddr_aton (buf, ip);
     } else {
+        ip_str = buf;
         /* IPv4:port format */
         char *colon = strchr (buf, ':');
         if (colon) {
+            port_str = colon + 1;
             *colon = '\0';
-            *port = atoi (colon + 1);
-        } else {
-            *port = 53;
         }
-        return ipaddr_aton (buf, ip);
     }
+
+    if (port_str)
+        *port = atoi (port_str);
+
+    return ipaddr_aton (ip_str, ip);
 }
 
 static int
@@ -78,23 +85,31 @@ static int
 handle_dns_forward_hijack (const ip_addr_t *addr, u16_t port,
                            ip_addr_t *target_ip, u16_t *target_port)
 {
+    const char *virtual_ip = NULL;
+    const char *target = NULL;
+    int is_ipv6;
+    const char *log_ver;
+
     if (port != 53)
         return 0;
 
     if (IP_IS_V4 (addr)) {
-        const char *virtual_ip = hev_config_get_dns_forwarder_virtual_ip4 ();
-        const char *target = hev_config_get_dns_forwarder_target_ip4 ();
-        if (virtual_ip && target)
-            return check_and_hijack (addr, virtual_ip, target, target_ip,
-                                     target_port, 0, "IPv4");
+        virtual_ip = hev_config_get_dns_forwarder_virtual_ip4 ();
+        target = hev_config_get_dns_forwarder_target_ip4 ();
+        is_ipv6 = 0;
+        log_ver = "IPv4";
+    } else if (IP_IS_V6 (addr)) {
+        virtual_ip = hev_config_get_dns_forwarder_virtual_ip6 ();
+        target = hev_config_get_dns_forwarder_target_ip6 ();
+        is_ipv6 = 1;
+        log_ver = "IPv6";
+    } else {
+        return 0;
     }
 
-    if (IP_IS_V6 (addr)) {
-        const char *virtual_ip = hev_config_get_dns_forwarder_virtual_ip6 ();
-        const char *target = hev_config_get_dns_forwarder_target_ip6 ();
-        if (virtual_ip && target)
-            return check_and_hijack (addr, virtual_ip, target, target_ip,
-                                     target_port, 1, "IPv6");
+    if (virtual_ip && target) {
+        return check_and_hijack (addr, virtual_ip, target, target_ip,
+                                 target_port, is_ipv6, log_ver);
     }
 
     return 0;
@@ -182,9 +197,12 @@ hev_traffic_router_handle_tcp (struct tcp_pcb *pcb)
     }
 
     // --- Priority 4: Smart proxy for foreign IPs ---
-    if (hev_config_get_smart_proxy_timeout_ms () > 0 &&
-        hev_config_get_smart_proxy_blocked_ip_expiry_minutes () > 0 &&
-        !hev_filter_blacklist_check_ip (local_ip)) {
+    int is_blacklisted = hev_filter_blacklist_check_ip (local_ip);
+    int smart_proxy_enabled =
+        hev_config_get_smart_proxy_timeout_ms () > 0 &&
+        hev_config_get_smart_proxy_blocked_ip_expiry_minutes () > 0;
+
+    if (smart_proxy_enabled && !is_blacklisted) {
         LOG_I (
             "%p router: TCP routing %s:%d -> %s:%d via SMART_PROXY (foreign IP, non-probe port, trying direct first)",
             pcb, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
@@ -193,15 +211,10 @@ hev_traffic_router_handle_tcp (struct tcp_pcb *pcb)
     }
 
     // --- Priority 5: Fallback to SOCKS5 ---
-    if (hev_filter_blacklist_check_ip (local_ip)) {
-        LOG_I (
-            "%p router: TCP routing %s:%d -> %s:%d via SOCKS5 (IP is blacklisted)",
-            pcb, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
-    } else {
-        LOG_I (
-            "%p router: TCP routing %s:%d -> %s:%d via SOCKS5 (smart proxy disabled)",
-            pcb, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
-    }
+    const char *reason =
+        is_blacklisted ? "IP is blacklisted" : "smart proxy disabled";
+    LOG_I ("%p router: TCP routing %s:%d -> %s:%d via SOCKS5 (%s)", pcb,
+           src_ip, pcb->remote_port, dst_ip, pcb->local_port, reason);
     hev_session_manager_start_socks5_tcp (pcb, NULL);
     return 1;
 }
@@ -228,7 +241,7 @@ hev_traffic_router_handle_udp (struct udp_pcb *pcb, struct pbuf *p,
         return 1; // Handled (blocked)
     }
 
-    /* DNS Forwarder 劫持检查（优先级最高）*/
+    /* DNS Forwarder hijack check (highest priority) */
     ip_addr_t target_ip;
     u16_t target_port = 53;
 
@@ -243,7 +256,7 @@ hev_traffic_router_handle_udp (struct udp_pcb *pcb, struct pbuf *p,
         return 1;
     }
 
-    /* 国内IP直连检查（第二优先级） */
+    /* Domestic IP direct connection check (second priority) */
     if (hev_filter_is_domestic (addr)) {
         LOG_I (
             "%p router: UDP routing %s:%d -> %s:%d via DIRECT (domestic IP, packet_size=%d)",
