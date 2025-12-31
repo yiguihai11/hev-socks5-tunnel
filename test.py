@@ -384,10 +384,8 @@ def run_test_workflow(iface=DEFAULT_IFACE, start_tunnel=True):
                 with open(log_file_path, "r") as f:
                     tunnel_log = f.read()
                 if tunnel_log:
-                    print(f"\n=== 隧道运行日志（最后100行）===")
-                    lines = tunnel_log.splitlines()
-                    for line in lines[-100:]:
-                        print(line)
+                    print(f"\n=== 隧道运行日志 ===")
+                    print(tunnel_log)
                 else:
                     print(f"\n=== 隧道无运行日志 ===")
             except Exception as e:
