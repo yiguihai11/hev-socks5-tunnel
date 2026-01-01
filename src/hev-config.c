@@ -183,6 +183,15 @@ static int smart_proxy_probe_ports_count = 0;
 /* acl */
 static char acl_file_path[1024];
 
+/* dns-split-tunnel */
+static int dns_split_tunnel = 1; /* 默认启用 */
+static char *foreign_dns_servers[32]; /* 所有DNS服务器（混合IPv4和IPv6） */
+static int foreign_dns_count = 0;
+static char *foreign_dns_v4[16]; /* 自动分类后的IPv4列表 */
+static int foreign_dns_v4_count = 0;
+static char *foreign_dns_v6[16]; /* 自动分类后的IPv6列表 */
+static int foreign_dns_v6_count = 0;
+
 HevConfigSocks5Server *
 hev_config_get_socks5_tcp_server (void)
 {
@@ -423,6 +432,94 @@ hev_config_parse_dns_forwarder (yaml_document_t *doc, yaml_node_t *base)
 }
 
 static int
+hev_config_parse_dns_split_tunnel (yaml_document_t *doc, yaml_node_t *base)
+{
+    yaml_node_pair_t *pair;
+
+    CHECK_YAML_MAPPING (base);
+    for (pair = base->data.mapping.pairs.start;
+         pair < base->data.mapping.pairs.top; pair++) {
+        yaml_node_t *node;
+        const char *key;
+
+        if (!pair->key || !pair->value)
+            break;
+
+        node = yaml_document_get_node (doc, pair->key);
+        if (!node || YAML_SCALAR_NODE != node->type)
+            break;
+        key = (const char *)node->data.scalar.value;
+
+        node = yaml_document_get_node (doc, pair->value);
+
+        if (0 == strcmp (key, "split-tunnel")) {
+            if (YAML_SCALAR_NODE == node->type) {
+                const char *value = (const char *)node->data.scalar.value;
+                if (0 == strcmp (value, "true") || 0 == strcmp (value, "1")
+                    || 0 == strcmp (value, "yes"))
+                    dns_split_tunnel = 1;
+                else
+                    dns_split_tunnel = 0;
+                LOG_I ("config: dns-split-tunnel = %d", dns_split_tunnel);
+            }
+        } else if (0 == strcmp (key, "foreign-dns")) {
+            /* 解析DNS服务器列表并自动分类IPv4/IPv6 */
+            if (YAML_SEQUENCE_NODE == node->type) {
+                yaml_node_item_t *item;
+                foreign_dns_count = 0;
+                foreign_dns_v4_count = 0;
+                foreign_dns_v6_count = 0;
+
+                /* 先清空分类数组 */
+                for (int i = 0; i < 16; i++) {
+                    foreign_dns_v4[i] = NULL;
+                    foreign_dns_v6[i] = NULL;
+                }
+
+                for (item = node->data.sequence.items.start;
+                     item < node->data.sequence.items.top; item++) {
+                    yaml_node_t *dns_node;
+                    const char *dns_addr;
+
+                    dns_node = yaml_document_get_node (doc, *item);
+                    if (!dns_node || YAML_SCALAR_NODE != dns_node->type)
+                        continue;
+                    if (foreign_dns_count >= 32)
+                        break;
+
+                    dns_addr = (const char *)dns_node->data.scalar.value;
+
+                    /* 保存到混合列表 */
+                    foreign_dns_servers[foreign_dns_count] = strdup (dns_addr);
+                    foreign_dns_count++;
+
+                    /* 自动分类：包含冒号的是IPv6 */
+                    if (strchr (dns_addr, ':')) {
+                        if (foreign_dns_v6_count < 16) {
+                            foreign_dns_v6[foreign_dns_v6_count] =
+                                strdup (dns_addr);
+                            foreign_dns_v6_count++;
+                        }
+                    } else {
+                        if (foreign_dns_v4_count < 16) {
+                            foreign_dns_v4[foreign_dns_v4_count] =
+                                strdup (dns_addr);
+                            foreign_dns_v4_count++;
+                        }
+                    }
+                }
+                LOG_I (
+                    "config: foreign-dns loaded: total=%d, v4=%d, v6=%d",
+                    foreign_dns_count, foreign_dns_v4_count,
+                    foreign_dns_v6_count);
+            }
+        }
+    }
+
+    return 0;
+}
+
+static int
 hev_config_parse_chnroutes (yaml_document_t *doc, yaml_node_t *base)
 {
     yaml_node_pair_t *pair;
@@ -643,6 +740,8 @@ hev_config_parse_doc (yaml_document_t *doc)
             res = hev_config_parse_misc (doc, node);
         else if (0 == strcmp (key, "dns-forwarder"))
             res = hev_config_parse_dns_forwarder (doc, node);
+        else if (0 == strcmp (key, "dns-split-tunnel"))
+            res = hev_config_parse_dns_split_tunnel (doc, node);
         else if (0 == strcmp (key, "chnroutes"))
             res = hev_config_parse_chnroutes (doc, node);
         else if (0 == strcmp (key, "smart-proxy"))
@@ -984,4 +1083,32 @@ hev_config_get_acl_file_path (void)
     if (!acl_file_path[0])
         return NULL;
     return acl_file_path;
+}
+
+/* dns-split-tunnel */
+int
+hev_config_get_dns_split_tunnel (void)
+{
+    return dns_split_tunnel;
+}
+
+const char **
+hev_config_get_foreign_dns_v4 (int *count)
+{
+    *count = foreign_dns_v4_count;
+    return (const char **)foreign_dns_v4;
+}
+
+const char **
+hev_config_get_foreign_dns_v6 (int *count)
+{
+    *count = foreign_dns_v6_count;
+    return (const char **)foreign_dns_v6;
+}
+
+/* 向后兼容：默认返回IPv4列表 */
+const char **
+hev_config_get_foreign_dns (int *count)
+{
+    return hev_config_get_foreign_dns_v4 (count);
 }

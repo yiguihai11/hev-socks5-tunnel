@@ -78,6 +78,19 @@ socks5:
   # target-ip6: '[2606:4700:4700::1111]'
 #  target-ip6: '[2606:4700:4700::1111]:53'
 
+dns-split-tunnel:
+  # 启用 DNS 分流功能
+  split-tunnel: true
+
+  # 国外 DNS 服务器列表（自动分类 IPv4/IPv6）
+  # 当查询国内 DNS (如 119.29.29.29) 检测到污染时，
+  # 会根据原 DNS 服务器的协议类型选择对应协议的国外 DNS 重新查询
+  foreign-dns:
+    - "1.1.1.1"              # Cloudflare DNS (IPv4)
+    - "8.8.8.8"              # Google DNS (IPv4)
+    - "2606:4700:4700::1111" # Cloudflare DNS (IPv6)
+    - "2001:4860:4860::8888" # Google DNS (IPv6)
+
 chnroutes:
   # Enables split routing based on a list of Chinese IP ranges.
   # When enabled, traffic to IPs within the specified file will be considered "domestic".

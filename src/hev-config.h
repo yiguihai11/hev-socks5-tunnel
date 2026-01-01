@@ -90,4 +90,10 @@ int hev_config_is_smart_proxy_probe_port (int port);
 /* acl */
 const char *hev_config_get_acl_file_path (void);
 
+/* dns-split-tunnel */
+int hev_config_get_dns_split_tunnel (void);
+const char **hev_config_get_foreign_dns_v4 (int *count); /* 返回自动分类的IPv4 DNS列表 */
+const char **hev_config_get_foreign_dns_v6 (int *count); /* 返回自动分类的IPv6 DNS列表 */
+const char **hev_config_get_foreign_dns (int *count);    /* 向后兼容，默认返回IPv4列表 */
+
 #endif /* __HEV_CONFIG_H__ */

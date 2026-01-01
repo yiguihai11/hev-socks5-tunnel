@@ -10,6 +10,8 @@
 #ifndef __HEV_DNS_CACHE_H__
 #define __HEV_DNS_CACHE_H__
 
+typedef struct _HevSocks5 HevSocks5;
+
 #include <stdint.h>
 #include <time.h>
 #include <lwip/ip_addr.h>
@@ -59,6 +61,7 @@ typedef struct _HevDNSPoisonContext
     u16_t query_dest_port; /* 原查询目标端口 */
     time_t created_time; /* 创建时间 */
     char domain[256]; /* 查询的域名 */
+    HevSocks5 *base;
 } HevDNSPoisonContext;
 
 /**
@@ -76,6 +79,15 @@ int hev_dns_cache_init (void);
  * 清理 DNS 缓存模块
  */
 void hev_dns_cache_fini (void);
+
+/**
+ * hev_dns_cache_clean_expired:
+ *
+ * 清理所有过期的缓存条目（定期调用）
+ *
+ * Returns: 清理的条目数量
+ */
+size_t hev_dns_cache_clean_expired (void);
 
 /**
  * hev_dns_cache_lookup:
@@ -157,15 +169,19 @@ void hev_dns_cache_get_stats (size_t *total_entries, size_t *poisoned_entries,
  * hev_dns_query_via_socks5:
  * @query: DNS 查询数据
  * @query_len: 查询数据长度
+ * @prefer_ipv6: 是否优先使用 IPv6 DNS 服务器（根据原DNS服务器类型决定）
  * @response_out: 输出响应数据（需要调用者 hev_free）
  * @response_len_out: 输出响应数据长度
  *
- * 通过 SOCKS5 UDP 代理查询 DNS（硬编码到 1.1.1.1:53）
+ * 通过 SOCKS5 UDP 代理查询 DNS
+ * prefer_ipv6=0: 使用 foreign-dns 中的 IPv4 服务器
+ * prefer_ipv6=1: 使用 foreign-dns 中的 IPv6 服务器
  *
  * Returns: 0 成功, -1 失败
  */
 int hev_dns_query_via_socks5 (const uint8_t *query, size_t query_len,
-                              uint8_t **response_out, size_t *response_len_out);
+                              int prefer_ipv6, uint8_t **response_out,
+                              size_t *response_len_out);
 
 /**
  * hev_dns_detect_pollution:

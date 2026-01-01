@@ -299,9 +299,9 @@ hev_traffic_router_handle_udp (struct udp_pcb *pcb, struct pbuf *p,
         return 1; // Handled (blocked)
     }
 
-    /* ⭐ DNS 查询特殊处理：缓存未命中时走直接连接（响应中进行污染检测） */
+    /* ⭐ DNS 查询特殊处理 */
     if (unlikely (port == 53)) {
-        /* 检查是否为 DNS Forwarder 劫持 */
+        /* 优先级1: 检查是否为 DNS Forwarder 劫持（不受 split-tunnel 影响） */
         ip_addr_t hijack_target_ip;
         u16_t hijack_target_port = 53;
 
@@ -318,6 +318,17 @@ hev_traffic_router_handle_udp (struct udp_pcb *pcb, struct pbuf *p,
             return 1;
         }
 
+        /* 优先级2: 检查 DNS 分流是否启用 */
+        if (!hev_config_get_dns_split_tunnel ()) {
+            /* DNS 分流禁用，跳过特殊处理，继续普通 UDP 路由 */
+            LOG_D (
+                "%p router: DNS split-tunnel disabled, using normal UDP routing for %s:%d",
+                pcb, dst_ip, port);
+            goto normal_udp_routing;
+        }
+
+        /* 优先级3: DNS 分流逻辑（以下仅在 split-tunnel 启用时执行） */
+
         /* 检查 DNS 缓存 */
         struct pbuf *p_copy = pbuf_clone (PBUF_RAW, PBUF_RAM, p);
         if (p_copy && hev_dns_cache_check_only (pcb, p_copy, addr, port)) {
@@ -329,13 +340,26 @@ hev_traffic_router_handle_udp (struct udp_pcb *pcb, struct pbuf *p,
         if (p_copy)
             pbuf_free (p_copy);
 
-        /* 缓存未命中，继续往下走直接连接（响应中检测污染） */
-        LOG_D (
-            "%p router: DNS query to %s:%d (cache miss), continuing to DIRECT for pollution detection",
-            pcb, dst_ip, port);
-        /* 不 return，继续往下执行走直接连接 */
+        /* 缓存未命中，根据目标DNS服务器类型决定路由 */
+        if (hev_filter_is_domestic (addr)) {
+            /* 国内DNS服务器 → DIRECT连接（响应中检测污染） */
+            LOG_I (
+                "%p router: DNS query to domestic %s:%d (cache miss), using DIRECT for pollution detection",
+                pcb, dst_ip, port);
+            hev_session_manager_start_direct_udp (pcb, addr, port, addr, port,
+                                                  p);
+            pbuf_ref (p);
+            return 1;
+        } else {
+            /* 国外DNS服务器 → 直接走SOCKS5代理（不检测污染） */
+            LOG_I (
+                "%p router: DNS query to foreign %s:%d (cache miss), using SOCKS5 proxy",
+                pcb, dst_ip, port);
+            return 0; /* 让主流程使用SOCKS5代理 */
+        }
     }
 
+normal_udp_routing:
     /* 国内IP直连检查（第二优先级） */
     if (hev_filter_is_domestic (addr)) {
         LOG_I (

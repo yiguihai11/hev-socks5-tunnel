@@ -22,29 +22,6 @@
 #include <fcntl.h> /* For fcntl, O_NONBLOCK */
 
 /* memmem compatibility for systems without _GNU_SOURCE */
-#ifndef _GNU_SOURCE
-static void *
-memmem_compat (const void *haystack, size_t haystacklen, const void *needle,
-               size_t needlelen)
-{
-    const char *h = haystack;
-    const char *n = needle;
-    size_t i;
-
-    if (needlelen == 0)
-        return (void *)haystack;
-    if (haystacklen < needlelen)
-        return NULL;
-
-    for (i = 0; i <= haystacklen - needlelen; i++) {
-        if (memcmp (h + i, n, needlelen) == 0)
-            return (void *)(h + i);
-    }
-    return NULL;
-}
-
-#define memmem memmem_compat
-#endif
 
 /* ⬇️ TCP Keep-Alive 跨平台兼容性 - 修改顺序,先包含系统头文件 */
 #if defined(__linux__)
@@ -108,6 +85,7 @@ memmem_compat (const void *haystack, size_t haystacklen, const void *needle,
 #include <hev-object.h>
 #include <hev-socks5.h>
 #include <hev-socks5-misc.h>
+#include <hev-socks5-client-udp.h>
 
 #include "hev-config.h"
 #include "hev-logger.h"
@@ -1496,6 +1474,7 @@ typedef struct _HevDirectUDPSession
     time_t session_start;
     ip_addr_t orig_dest_ip;
     u16_t orig_dest_port;
+    struct pbuf *dns_query;
 } HevDirectUDPSession;
 
 #define UDP_ALIVE_SEND 0x01
@@ -1554,6 +1533,9 @@ direct_udp_cleanup (HevDirectUDPSession *session)
         LOG_W ("%p session: UDP dropped %d queued packets during cleanup",
                session, dropped_packets);
     }
+
+    if (session->dns_query)
+        pbuf_free (session->dns_query);
 
     LOG_I (
         "%p session: UDP Direct connect %s:%d -> %s:%d ended (duration=%ld ms, packets_dropped=%d)",
@@ -1621,9 +1603,18 @@ direct_udp_recv_task (void *data)
     socklen_t addr_len;
     char src_ip[INET6_ADDRSTRLEN];
     char dst_ip[INET6_ADDRSTRLEN];
+    HevSocks5 *s5;
     int fd;
     size_t total_received_bytes = 0;
     size_t total_received_packets = 0;
+
+    s5 = HEV_SOCKS5 (hev_socks5_client_udp_new (HEV_SOCKS5_TYPE_NONE));
+    if (!s5) {
+        LOG_E ("%p session: UDP recv task failed to create dummy socks5",
+               session);
+        session->alive &= ~UDP_ALIVE_RECV;
+        return;
+    }
 
     ipaddr_ntoa_r (&session->src_ip, src_ip, sizeof (src_ip));
     ipaddr_ntoa_r (&session->dest_ip, dst_ip, sizeof (dst_ip));
@@ -1636,6 +1627,7 @@ direct_udp_recv_task (void *data)
         LOG_E ("%p session: UDP recv task failed to dup fd: %s", session,
                strerror (errno));
         session->alive &= ~UDP_ALIVE_RECV;
+        hev_object_unref (HEV_OBJECT (s5));
         return;
     }
 
@@ -1649,35 +1641,17 @@ direct_udp_recv_task (void *data)
     while (session->alive & UDP_ALIVE_RECV) {
         addr_len = sizeof (remote_addr);
 
-        time_t now = get_current_time_seconds ();
-        time_t idle_time = now - session->last_activity;
-        if (idle_time > UDP_IDLE_TIMEOUT) {
-            LOG_I (
-                "%p session: UDP recv task idle timeout (no activity for %ld seconds)",
-                session, idle_time);
+        hev_socks5_set_timeout (s5, UDP_IDLE_TIMEOUT * 1000);
+        ssize_t received = hev_task_io_socket_recvfrom (
+            fd, buffer, sizeof (buffer), 0, (struct sockaddr *)&remote_addr,
+            &addr_len, hev_socks5_task_io_yielder, s5);
+
+        if (received <= 0) {
+            LOG_I ("%p session: UDP recv task idle timeout", session);
             break;
         }
 
-        ssize_t received = recvfrom (fd, buffer, sizeof (buffer), 0,
-                                     (struct sockaddr *)&remote_addr,
-                                     &addr_len);
-
-        if (received < 0) {
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                hev_task_yield (HEV_TASK_WAITIO);
-                continue;
-            }
-            LOG_E ("%p session: UDP recvfrom failed: %s", session,
-                   strerror (errno));
-            break;
-        }
-
-        if (received == 0) {
-            LOG_W ("%p session: UDP recvfrom returned 0", session);
-            break;
-        }
-
-        session->last_activity = now;
+        session->last_activity = get_current_time_seconds ();
         total_received_bytes += received;
         total_received_packets++;
 
@@ -1685,21 +1659,49 @@ direct_udp_recv_task (void *data)
             "%p session: UDP received %zd bytes from server (total=%zu packets, %zu bytes)",
             session, received, total_received_packets, total_received_bytes);
 
-        /* ⭐ DNS 响应污染检测与处理 */
+        /* ⭐ DNS 响应污染检测与处理（仅在 split-tunnel 启用时执行） */
         if (unlikely (session->dest_port == 53)) {
-            int is_poisoned = hev_dns_detect_pollution (buffer, received);
-            if (is_poisoned) {
+            /* 检查 DNS 分流是否启用 */
+            if (!hev_config_get_dns_split_tunnel ()) {
+                /* DNS 分流禁用，不进行污染检测 */
+                LOG_D ("%p session: DNS split-tunnel disabled, skip pollution detection",
+                       session);
+            } else {
+                /* DNS 分流启用，进行污染检测 */
+                int is_poisoned = hev_dns_detect_pollution (buffer, received);
+                if (is_poisoned) {
                 LOG_W (
-                    "%p session: DNS pollution detected from %s:%d, querying via SOCKS5 to 1.1.1.1:53",
+                    "%p session: DNS pollution detected from %s:%d, querying via SOCKS5 proxy (using configured foreign-dns)",
                     session, dst_ip, session->dest_port);
 
                 /* 通过 SOCKS5 重新查询 */
                 uint8_t *socks5_response = NULL;
                 size_t socks5_response_len = 0;
+                const uint8_t *query_payload = NULL;
+                size_t query_len = 0;
 
-                if (hev_dns_query_via_socks5 (buffer, received,
-                                              &socks5_response,
-                                              &socks5_response_len) == 0) {
+                if (session->dns_query) {
+                    query_payload = session->dns_query->payload;
+                    query_len = session->dns_query->len;
+
+                    /* Check for and strip the 8-byte header */
+                    if (query_len > 8) {
+                        uint16_t check_port =
+                            (query_payload[2] << 8) | query_payload[3];
+                        if (check_port == session->dest_port) {
+                            LOG_D ("%p session: Stripping 8-byte header from SOCKS5 DNS query",
+                                   session);
+                            query_payload += 8;
+                            query_len -= 8;
+                        }
+                    }
+                }
+
+                if (query_payload &&
+                    hev_dns_query_via_socks5 (
+                        query_payload, query_len,
+                        IP_IS_V6 (&session->dest_ip) ? 1 : 0, &socks5_response,
+                        &socks5_response_len) == 0) {
                     /* 替换响应数据 */
                     if (socks5_response_len > 0 &&
                         socks5_response_len <= sizeof (buffer)) {
@@ -1730,6 +1732,7 @@ direct_udp_recv_task (void *data)
                 LOG_I ("%p session: DNS response is clean from %s:%d", session,
                        dst_ip, session->dest_port);
             }
+            } /* split-tunnel 启用的 else 块结束 */
         }
 
         struct pbuf *p = pbuf_alloc (PBUF_TRANSPORT, received, PBUF_RAM);
@@ -1782,27 +1785,30 @@ run_direct_udp_task (void *data)
     char src_ip[INET6_ADDRSTRLEN];
     char dst_ip[INET6_ADDRSTRLEN];
     int stack_size;
+    HevSocks5 *s5;
     size_t total_sent_bytes = 0;
     size_t total_sent_packets = 0;
+
+    s5 = HEV_SOCKS5 (hev_socks5_client_udp_new (HEV_SOCKS5_TYPE_NONE));
+    if (!s5) {
+        LOG_E ("%p session: UDP send task failed to create dummy socks5",
+               session);
+        goto cleanup;
+    }
 
     ipaddr_ntoa_r (&session->src_ip, src_ip, sizeof (src_ip));
     ipaddr_ntoa_r (&session->dest_ip, dst_ip, sizeof (dst_ip));
 
     LOG_D ("%p session: UDP send task start %s:%d -> %s:%d", session, src_ip,
            session->src_port, dst_ip, session->dest_port);
-
-    session->last_activity = get_current_time_seconds ();
-    session->session_start = get_current_time_seconds ();
-
-    /* Log with millisecond precision for debugging */
-    time_t current_ms = get_current_time_ms ();
     LOG_D ("%p session: UDP session created at %ld ms", session,
-           current_ms % 1000);
+           get_current_time_ms () % 1000);
 
     session->fd = hev_task_io_socket_socket (AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
     if (session->fd < 0) {
         LOG_E ("%p session: UDP failed to create socket: %s", session,
                strerror (errno));
+        hev_object_unref (HEV_OBJECT (s5));
         goto cleanup;
     }
 
@@ -1841,6 +1847,7 @@ run_direct_udp_task (void *data)
     session->task_recv = hev_task_new (stack_size);
     if (!session->task_recv) {
         LOG_E ("%p session: UDP failed to create recv task", session);
+        hev_object_unref (HEV_OBJECT (s5));
         goto cleanup;
     }
 
@@ -1860,16 +1867,11 @@ run_direct_udp_task (void *data)
                 break;
             }
 
-            time_t now = get_current_time_seconds ();
-            time_t idle_time = now - session->last_activity;
-            if (idle_time > UDP_IDLE_TIMEOUT) {
-                LOG_I (
-                    "%p session: UDP send task idle timeout (no activity for %ld seconds)",
-                    session, idle_time);
+            hev_socks5_set_timeout (s5, UDP_IDLE_TIMEOUT * 1000);
+            if (hev_socks5_task_io_yielder (HEV_TASK_WAITIO, s5) < 0) {
+                LOG_I ("%p session: UDP send task idle timeout", session);
                 break;
             }
-
-            hev_task_yield (HEV_TASK_WAITIO);
             continue;
         }
 
@@ -1892,18 +1894,14 @@ run_direct_udp_task (void *data)
             }
         }
 
-        ssize_t sent = sendto (session->fd, p->payload, p->len, 0,
-                               (struct sockaddr *)&dest_addr, addr_len);
+        ssize_t sent = hev_task_io_socket_sendto (
+            session->fd, p->payload, p->len, 0,
+            (const struct sockaddr *)&dest_addr, addr_len,
+            hev_socks5_task_io_yielder, s5);
 
-        if (sent < 0) {
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                hev_task_yield (HEV_TASK_WAITIO);
-                continue;
-            }
-            LOG_W ("%p session: UDP sendto failed: %s", session,
-                   strerror (errno));
+        if (sent <= 0) {
+            LOG_W ("%p session: UDP sendto failed or timeout", session);
         } else {
-            session->last_activity = get_current_time_seconds ();
             total_sent_bytes += sent;
             total_sent_packets++;
 
@@ -1924,6 +1922,7 @@ run_direct_udp_task (void *data)
 
     hev_task_join (session->task_recv);
     hev_task_unref (session->task_recv);
+    hev_object_unref (HEV_OBJECT (s5));
 
 cleanup:
     LOG_I (
@@ -1950,6 +1949,13 @@ hev_session_manager_start_direct_udp (struct udp_pcb *pcb,
         pbuf_free (p);
         udp_remove (pcb);
         return;
+    }
+
+    session->dns_query = NULL;
+    if (port == 53) {
+        session->dns_query = pbuf_clone (PBUF_RAW, PBUF_RAM, p);
+        if (!session->dns_query)
+            LOG_W ("%p session: UDP failed to clone dns query", session);
     }
 
     stack_size = hev_config_get_misc_task_stack_size ();

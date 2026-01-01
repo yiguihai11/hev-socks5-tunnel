@@ -11,6 +11,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
 #include <errno.h>
 #include <hev-memory-allocator.h>
 #include <hev-task.h>
@@ -26,6 +28,7 @@
 #include "hev-filter.h"
 #include "hev-utils.h"
 #include "hev-dns-cache.h"
+#include <hev-socks5-misc.h>
 
 /* DNS 缓存分片锁配置 */
 #define DNS_CACHE_SHARD_COUNT 16
@@ -35,6 +38,9 @@
 #define DNS_ENTRY_POOL_INIT_CAPACITY 32
 #define DNS_ENTRY_POOL_MAX_CAPACITY 256
 
+/* DNS 缓存清理配置 */
+#define DNS_CACHE_CLEAN_INTERVAL_MS 60000 /* 清理间隔：60秒 */
+
 /* DNS 缓存哈希表 */
 static HevDNSCacheEntry *dns_cache_table[DNS_CACHE_HASH_SIZE];
 static HevTaskMutex dns_cache_shards[DNS_CACHE_SHARD_COUNT];
@@ -42,6 +48,16 @@ static HevObjectPool *dns_entry_pool = NULL;
 static size_t total_cache_entries = 0;
 static size_t poisoned_cache_entries = 0;
 static uint64_t total_cache_hits = 0;
+
+/* 清理任务控制 */
+static volatile int cache_cleaner_running = 0;
+static volatile int cache_cleaner_started = 0;
+
+/* DNS服务器轮询索引（统一索引，轮询所有配置的DNS服务器） */
+static size_t dns_server_rotation_index = 0;
+
+/* IPv6可用性检测结果（-1=未检测, 0=不可用, 1=可用） */
+static int ipv6_available = -1;
 
 /* DNS 报文结构 */
 typedef struct
@@ -292,6 +308,126 @@ extract_dns_domain (const uint8_t *data, size_t len, char *domain_out,
     return parse_dns_name (data, len, &pos, domain_out, domain_max);
 }
 
+/* 检测IPv6是否可用 */
+static int
+check_ipv6_available (void)
+{
+    int sock = socket (AF_INET6, SOCK_DGRAM, 0);
+    if (sock < 0) {
+        LOG_D ("dns-cache: IPv6 not available (socket failed: %s)", strerror (errno));
+        return 0;
+    }
+
+    /* 尝试连接到一个IPv6地址（Google DNS） */
+    struct sockaddr_in6 addr;
+    memset (&addr, 0, sizeof (addr));
+    addr.sin6_family = AF_INET6;
+    addr.sin6_port = htons (53); /* DNS端口 */
+    /* 使用链路本地地址进行简单测试 */
+    inet_pton (AF_INET6, "::1", &addr.sin6_addr);
+
+    /* 连接测试（不真正发送数据） */
+    int ret = connect (sock, (struct sockaddr *)&addr, sizeof (addr));
+    if (ret < 0 && errno != EINPROGRESS) {
+        LOG_D ("dns-cache: IPv6 not available (connect failed: %s)",
+               strerror (errno));
+        close (sock);
+        return 0;
+    }
+
+    close (sock);
+    LOG_D ("dns-cache: IPv6 available");
+    return 1;
+}
+
+/* DNS 缓存清理任务 */
+static void
+dns_cache_cleaner_task (void *data)
+{
+    LOG_I ("dns-cache: Cache cleaner task started");
+
+    while (cache_cleaner_running) {
+        /* 清理过期条目 */
+        size_t cleaned = hev_dns_cache_clean_expired ();
+
+        if (cleaned > 0) {
+            LOG_I ("dns-cache: Cleaner task removed %zu expired entries",
+                   cleaned);
+        }
+
+        /* 等待下次清理 */
+        hev_task_sleep (DNS_CACHE_CLEAN_INTERVAL_MS);
+    }
+
+    cache_cleaner_started = 0;
+    LOG_I ("dns-cache: Cache cleaner task stopped");
+}
+
+/* 启动缓存清理任务（延迟启动，确保任务系统已初始化） */
+static void
+start_cache_cleaner_if_needed (void)
+{
+    if (!cache_cleaner_started) {
+        cache_cleaner_running = 1;
+        cache_cleaner_started = 1;
+        int stack_size = hev_config_get_misc_task_stack_size ();
+        hev_task_run (hev_task_new (stack_size), dns_cache_cleaner_task, NULL);
+        LOG_D ("dns-cache: Cache cleaner task started");
+    }
+}
+
+size_t
+hev_dns_cache_clean_expired (void)
+{
+    size_t total_cleaned = 0;
+    time_t now = time (NULL);
+
+    /* 遍历所有分片 */
+    for (int shard = 0; shard < DNS_CACHE_SHARD_COUNT; shard++) {
+        hev_task_mutex_lock (&dns_cache_shards[shard]);
+
+        /* 清理属于这个分片的哈希桶 */
+        for (int i = shard; i < DNS_CACHE_HASH_SIZE; i += DNS_CACHE_SHARD_COUNT) {
+            HevDNSCacheEntry **current = &dns_cache_table[i];
+            size_t shard_cleaned = 0;
+
+            while (*current) {
+                HevDNSCacheEntry *entry = *current;
+
+                /* 检查是否过期 */
+                if (now > entry->expire_time) {
+                    /* 从链表中移除 */
+                    *current = entry->next;
+
+                    if (entry->response_data)
+                        hev_free (entry->response_data);
+                    if (entry->is_poisoned)
+                        poisoned_cache_entries--;
+                    if (dns_entry_pool)
+                        hev_object_pool_put (dns_entry_pool, entry);
+                    else
+                        hev_free (entry);
+
+                    total_cache_entries--;
+                    shard_cleaned++;
+                    total_cleaned++;
+                } else {
+                    current = &entry->next;
+                }
+            }
+        }
+
+        hev_task_mutex_unlock (&dns_cache_shards[shard]);
+    }
+
+    if (total_cleaned > 0) {
+        LOG_D ("dns-cache: Cleaned %zu expired entries (total=%zu remaining)",
+               total_cleaned, total_cache_entries);
+    }
+
+    return total_cleaned;
+}
+
 int
 hev_dns_cache_init (void)
 {
@@ -318,16 +454,23 @@ hev_dns_cache_init (void)
     poisoned_cache_entries = 0;
     total_cache_hits = 0;
 
+    /* 注意：不在这里启动清理任务，因为任务系统可能还没初始化
+     * 清理任务将在第一次使用时延迟启动 */
+
     LOG_I (
-        "dns-cache: DNS cache module initialized (shards=%d, entry_pool=%d/%d)",
+        "dns-cache: DNS cache module initialized (shards=%d, entry_pool=%d/%d, clean_interval=%dms)",
         DNS_CACHE_SHARD_COUNT, DNS_ENTRY_POOL_INIT_CAPACITY,
-        DNS_ENTRY_POOL_MAX_CAPACITY);
+        DNS_ENTRY_POOL_MAX_CAPACITY, DNS_CACHE_CLEAN_INTERVAL_MS);
     return 0;
 }
 
 void
 hev_dns_cache_fini (void)
 {
+    /* 停止清理任务 */
+    cache_cleaner_running = 0;
+    LOG_D ("dns-cache: Cache cleaner task stopping...");
+
     /* 遍历所有分片，清理每个分片的哈希表 */
     for (int shard = 0; shard < DNS_CACHE_SHARD_COUNT; shard++) {
         hev_task_mutex_lock (&dns_cache_shards[shard]);
@@ -373,12 +516,25 @@ hev_dns_cache_lookup (const char *domain, uint8_t **response_out,
 
     hev_task_mutex_lock (&dns_cache_shards[shard]);
 
-    HevDNSCacheEntry *entry = dns_cache_table[hash];
-    while (entry) {
+    HevDNSCacheEntry **current = &dns_cache_table[hash];
+    while (*current) {
+        HevDNSCacheEntry *entry = *current;
         if (strcasecmp (entry->domain, domain) == 0) {
             /* 检查是否过期 */
             if (now > entry->expire_time) {
-                LOG_D ("dns-cache: Cache expired for domain: %s", domain);
+                LOG_D ("dns-cache: Cache expired for domain: %s, removing",
+                       domain);
+                /* 惰性删除：从链表中移除过期条目 */
+                *current = entry->next;
+                if (entry->response_data)
+                    hev_free (entry->response_data);
+                if (entry->is_poisoned)
+                    poisoned_cache_entries--;
+                if (dns_entry_pool)
+                    hev_object_pool_put (dns_entry_pool, entry);
+                else
+                    hev_free (entry);
+                total_cache_entries--;
                 hev_task_mutex_unlock (&dns_cache_shards[shard]);
                 return 0;
             }
@@ -395,7 +551,7 @@ hev_dns_cache_lookup (const char *domain, uint8_t **response_out,
             hev_task_mutex_unlock (&dns_cache_shards[shard]);
             return 1;
         }
-        entry = entry->next;
+        current = &(*current)->next;
     }
 
     hev_task_mutex_unlock (&dns_cache_shards[shard]);
@@ -406,6 +562,9 @@ int
 hev_dns_cache_insert (const char *domain, const uint8_t *response_data,
                       size_t response_len, uint32_t ttl, int is_poisoned)
 {
+    /* 延迟启动清理任务（确保任务系统已初始化） */
+    start_cache_cleaner_if_needed ();
+
     uint32_t hash = dns_hash (domain);
     int shard = dns_cache_get_shard (hash);
     time_t now = time (NULL);
@@ -498,30 +657,35 @@ dns_response_monitor_task (void *data)
     uint8_t buffer[2048];
     struct sockaddr_storage remote_addr;
     socklen_t addr_len;
+    HevTask *task = hev_task_self ();
+    int sock = -1;
 
     LOG_D ("dns-cache: DNS response monitor started for domain: %s",
            ctx->domain);
 
     /* 创建临时 UDP socket 监听响应 */
-    int sock = socket (AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
+    sock = hev_task_io_socket_socket (AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
     if (sock < 0) {
         LOG_E ("dns-cache: Failed to create monitor socket");
         goto cleanup;
     }
 
+    if (hev_task_add_fd (task, sock, POLLIN) < 0) {
+        hev_task_mod_fd (task, sock, POLLIN);
+    }
+
     /* 设置超时（5秒） */
-    struct timeval tv = { .tv_sec = 5, .tv_usec = 0 };
-    setsockopt (sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof (tv));
+    hev_socks5_set_timeout (HEV_SOCKS5 (ctx->base), 5000);
 
-    /* 等待响应（通过拦截 UDP 响应包） */
-    /* 注意：这里需要通过 lwIP 的回调机制来监控，暂时简化处理 */
-    /* 实际实现中，应该在 UDP 接收处理函数中添加钩子 */
-
+    /* 等待响应 */
     LOG_D ("dns-cache: Waiting for DNS response for domain: %s", ctx->domain);
 
     addr_len = sizeof (remote_addr);
-    ssize_t recv_len = recvfrom (sock, buffer, sizeof (buffer), 0,
-                                 (struct sockaddr *)&remote_addr, &addr_len);
+    ssize_t recv_len =
+        hev_task_io_socket_recvfrom (sock, buffer, sizeof (buffer), 0,
+                                     (struct sockaddr *)&remote_addr,
+                                     &addr_len, hev_socks5_task_io_yielder,
+                                     ctx->base);
 
     if (recv_len > 0) {
         LOG_D ("dns-cache: Received DNS response (%zd bytes) for domain: %s",
@@ -544,8 +708,11 @@ dns_response_monitor_task (void *data)
                 uint8_t *query_data = (uint8_t *)ctx->original_query->payload;
                 size_t query_len = ctx->original_query->len;
 
+                /* 根据原DNS服务器类型选择对应协议的foreign-dns */
+                int prefer_ipv6 = IP_IS_V6 (&ctx->query_dest_ip) ? 1 : 0;
+
                 if (hev_dns_query_via_socks5 (query_data, query_len,
-                                              &socks5_response,
+                                              prefer_ipv6, &socks5_response,
                                               &socks5_response_len) == 0) {
                     /* 成功获取干净的响应，缓存它 */
                     uint32_t ttl =
@@ -576,12 +743,14 @@ dns_response_monitor_task (void *data)
                ctx->domain);
     }
 
+    hev_task_del_fd (task, sock);
     close (sock);
 
 cleanup:
     /* 清理上下文 */
     if (ctx->original_query)
         pbuf_free (ctx->original_query);
+    hev_object_unref (HEV_OBJECT (ctx->base));
     hev_free (ctx);
 
     LOG_D ("dns-cache: DNS response monitor task finished");
@@ -643,11 +812,20 @@ hev_dns_poison_detect_and_handle (struct udp_pcb *pcb, struct pbuf *p,
     ctx->created_time = time (NULL);
     snprintf (ctx->domain, sizeof (ctx->domain), "%s", domain);
 
+    ctx->base = HEV_SOCKS5 (hev_socks5_client_udp_new (HEV_SOCKS5_TYPE_NONE));
+    if (!ctx->base) {
+        pbuf_free (ctx->original_query);
+        hev_free (ctx);
+        LOG_E ("dns-cache: Failed to create dummy socks5");
+        return 0;
+    }
+
     /* 启动监控任务 */
     int stack_size = hev_config_get_misc_task_stack_size ();
     HevTask *task = hev_task_new (stack_size);
     if (!task) {
         pbuf_free (ctx->original_query);
+        hev_object_unref (HEV_OBJECT (ctx->base));
         hev_free (ctx);
         LOG_E ("dns-cache: Failed to create monitor task");
         return 0;
@@ -720,11 +898,15 @@ hev_dns_cache_get_stats (size_t *total_entries, size_t *poisoned_entries,
 /**
  * hev_dns_query_via_socks5:
  *
- * 通过 SOCKS5 UDP 代理查询 DNS（查询 1.1.1.1:53）
+ * 通过 SOCKS5 UDP 代理查询 DNS
+ * 根据原 DNS 服务器的协议类型选择对应协议的 foreign-dns
+ * prefer_ipv6=0: 使用 IPv4 DNS 服务器
+ * prefer_ipv6=1: 使用 IPv6 DNS 服务器
  */
 int
 hev_dns_query_via_socks5 (const uint8_t *query, size_t query_len,
-                          uint8_t **response_out, size_t *response_len_out)
+                          int prefer_ipv6, uint8_t **response_out,
+                          size_t *response_len_out)
 {
     HevSocks5UDP *sock5_udp = NULL;
     HevConfigSocks5Server *srv;
@@ -733,6 +915,8 @@ hev_dns_query_via_socks5 (const uint8_t *query, size_t query_len,
     HevSocks5Addr addr_storage;
     uint8_t response_buf[512];
     int res;
+    int udp_type;
+    const char *dns_addr = NULL;
 
     if (!query || query_len == 0 || !response_out || !response_len_out) {
         LOG_E ("dns-cache: Invalid parameters for socks5 query");
@@ -742,6 +926,12 @@ hev_dns_query_via_socks5 (const uint8_t *query, size_t query_len,
     *response_out = NULL;
     *response_len_out = 0;
 
+    /* 检查DNS分流是否启用 */
+    if (!hev_config_get_dns_split_tunnel ()) {
+        LOG_D ("dns-cache: DNS split-tunnel disabled, skipping socks5 query");
+        return -1;
+    }
+
     /* 获取 SOCKS5 UDP 配置 */
     srv = hev_config_get_socks5_udp_server ();
     if (!srv || srv->addr[0] == '\0' || srv->port == 0) {
@@ -749,10 +939,69 @@ hev_dns_query_via_socks5 (const uint8_t *query, size_t query_len,
         return -1;
     }
 
+    /* 获取UDP类型（根据SOCKS5配置的udp-relay字段） */
+    /* udp_relay: 0=tcp(UDP_IN_TCP=2), 1=udp(UDP_IN_UDP=1) */
+    udp_type = (srv->udp_relay == 1) ? 1 : 2;
+
+    /* 获取配置的DNS服务器列表 */
+    const char **dns_servers = NULL;
+    int dns_count = 0;
+    size_t *rotation_index = NULL;
+
+    if (prefer_ipv6) {
+        /* 原DNS服务器是IPv6，使用IPv6 foreign-dns列表 */
+        dns_servers = hev_config_get_foreign_dns_v6 (&dns_count);
+        rotation_index = &dns_server_rotation_index;
+
+        if (dns_count == 0) {
+            static const char *default_dns_v6[] = { "2606:4700:4700::1111",
+                                                     "2001:4860:4860::8888" };
+            dns_servers = default_dns_v6;
+            dns_count = 2;
+        }
+
+        /* 检查 IPv6 是否可用 */
+        if (ipv6_available < 0) {
+            ipv6_available = check_ipv6_available ();
+        }
+
+        if (!ipv6_available) {
+            LOG_W ("dns-cache: IPv6 DNS requested but IPv6 not available");
+            return -1;
+        }
+
+        LOG_D ("dns-cache: Using IPv6 foreign-dns list");
+    } else {
+        /* 原DNS服务器是IPv4，使用IPv4 foreign-dns列表 */
+        dns_servers = hev_config_get_foreign_dns_v4 (&dns_count);
+        rotation_index = &dns_server_rotation_index;
+
+        if (dns_count == 0) {
+            static const char *default_dns_v4[] = { "1.1.1.1", "8.8.8.8" };
+            dns_servers = default_dns_v4;
+            dns_count = 2;
+        }
+
+        LOG_D ("dns-cache: Using IPv4 foreign-dns list");
+    }
+
+    if (dns_count == 0) {
+        LOG_E ("dns-cache: No DNS servers configured");
+        return -1;
+    }
+
+    /* 轮询选择DNS服务器 */
+    size_t current_index = (*rotation_index) % dns_count;
+    (*rotation_index)++;
+    dns_addr = dns_servers[current_index];
+
+    LOG_D ("dns-cache: Selected DNS server: %s", dns_addr);
+
     /* 创建 SOCKS5 UDP 客户端 */
-    sock5_udp = hev_socks5_client_udp_new (HEV_SOCKS5_TYPE_UDP_IN_TCP);
+    sock5_udp = hev_socks5_client_udp_new (udp_type);
     if (!sock5_udp) {
-        LOG_E ("dns-cache: Failed to create SOCKS5 UDP client");
+        LOG_E ("dns-cache: Failed to create SOCKS5 UDP client (type=%d)",
+               udp_type);
         return -1;
     }
 
@@ -777,8 +1026,12 @@ hev_dns_query_via_socks5 (const uint8_t *query, size_t query_len,
         goto cleanup;
     }
 
-    /* 设置目标地址：1.1.1.1:53 */
-    ipaddr_aton ("1.1.1.1", &dns_server);
+    /* 设置目标地址（支持IPv4和IPv6） */
+    if (!ipaddr_aton (dns_addr, &dns_server)) {
+        LOG_E ("dns-cache: Invalid DNS server address: %s", dns_addr);
+        goto cleanup;
+    }
+
     msg.addr = &addr_storage;
     hev_socks5_addr_from_lwip (msg.addr, &dns_server, 53);
 
@@ -786,39 +1039,27 @@ hev_dns_query_via_socks5 (const uint8_t *query, size_t query_len,
     msg.buf = (void *)query;
     msg.len = query_len;
 
+    LOG_I ("dns-cache: Sending DNS query via SOCKS5 (target=%s:53, type=%d)",
+           dns_addr, udp_type);
+
     /* 发送 DNS 查询 */
     res = hev_socks5_udp_sendmmsg (sock5_udp, &msg, 1);
     if (res < 0) {
-        LOG_E ("dns-cache: Failed to send DNS query via SOCKS5");
+        LOG_E ("dns-cache: Failed to send DNS query via SOCKS5 (res=%d)", res);
         goto cleanup;
     }
 
-    LOG_I ("dns-cache: Sent DNS query via SOCKS5 to 1.1.1.1:53");
-
-    /* 异步接收响应：循环等待，每次yield让出CPU */
+    /* 接收响应 */
     msg.buf = response_buf;
     msg.len = sizeof (response_buf);
-
-    int retry_count = 0;
-    const int max_retries = 10; /* 最多尝试10次 */
-
-    while (retry_count < max_retries) {
-        res = hev_socks5_udp_recvmmsg (sock5_udp, &msg, 1, 1);
-        if (res > 0) {
-            /* 收到响应 */
-            break;
-        }
-
-        /* 没有收到响应，yield让出CPU */
-        hev_task_yield (HEV_TASK_YIELD);
-        retry_count++;
-    }
-
-    if (res <= 0) {
-        LOG_W ("dns-cache: No response from SOCKS5 DNS server after %d retries",
-               max_retries);
+    res = hev_socks5_udp_recvmmsg (sock5_udp, &msg, 1, 0);
+    if (res < 0) {
+        LOG_W ("dns-cache: Failed to receive DNS response via SOCKS5");
         goto cleanup;
     }
+
+    LOG_I ("dns-cache: Received SOCKS5 DNS response from %s (%zu bytes)",
+           dns_addr, msg.len);
 
     /* 复制响应数据 */
     *response_out = hev_malloc (msg.len);
@@ -828,9 +1069,6 @@ hev_dns_query_via_socks5 (const uint8_t *query, size_t query_len,
     }
     memcpy (*response_out, msg.buf, msg.len);
     *response_len_out = msg.len;
-
-    LOG_I ("dns-cache: Received DNS response via SOCKS5 (%zu bytes)",
-           *response_len_out);
 
     hev_object_unref (HEV_OBJECT (sock5_udp));
     return 0;
