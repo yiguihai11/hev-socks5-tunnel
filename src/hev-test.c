@@ -871,7 +871,7 @@ run_dns_domain_tests (void)
     // Test: Simple domain
     printf ("\nTesting simple domain extraction...\n");
 
-    uint8_t dns_query[32];
+    uint8_t dns_query[64]; // Increased from 32 to 64 for longer subdomain tests
     memset (dns_query, 0, sizeof (dns_query));
 
     // DNS Header (12 bytes)
