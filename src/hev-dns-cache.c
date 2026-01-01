@@ -104,8 +104,8 @@ dns_cache_get_shard (uint32_t hash)
     return hash & DNS_CACHE_SHARD_MASK;
 }
 
-/* 获取域名对应的分片索引 */
-static inline int
+/* 获取域名对应的分片索引（未使用，保留供将来使用） */
+static inline int __attribute__((unused))
 dns_cache_domain_shard (const char *domain)
 {
     uint32_t hash = 5381;
