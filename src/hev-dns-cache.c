@@ -391,7 +391,6 @@ hev_dns_cache_clean_expired (void)
         for (int i = shard; i < DNS_CACHE_HASH_SIZE;
              i += DNS_CACHE_SHARD_COUNT) {
             HevDNSCacheEntry **current = &dns_cache_table[i];
-            size_t shard_cleaned = 0;
 
             while (*current) {
                 HevDNSCacheEntry *entry = *current;
@@ -411,7 +410,6 @@ hev_dns_cache_clean_expired (void)
                         hev_free (entry);
 
                     total_cache_entries--;
-                    shard_cleaned++;
                     total_cleaned++;
                 } else {
                     current = &entry->next;
