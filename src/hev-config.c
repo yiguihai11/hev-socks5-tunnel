@@ -455,8 +455,8 @@ hev_config_parse_dns_split_tunnel (yaml_document_t *doc, yaml_node_t *base)
         if (0 == strcmp (key, "split-tunnel")) {
             if (YAML_SCALAR_NODE == node->type) {
                 const char *value = (const char *)node->data.scalar.value;
-                if (0 == strcmp (value, "true") || 0 == strcmp (value, "1")
-                    || 0 == strcmp (value, "yes"))
+                if (0 == strcmp (value, "true") || 0 == strcmp (value, "1") ||
+                    0 == strcmp (value, "yes"))
                     dns_split_tunnel = 1;
                 else
                     dns_split_tunnel = 0;
@@ -508,10 +508,9 @@ hev_config_parse_dns_split_tunnel (yaml_document_t *doc, yaml_node_t *base)
                         }
                     }
                 }
-                LOG_I (
-                    "config: foreign-dns loaded: total=%d, v4=%d, v6=%d",
-                    foreign_dns_count, foreign_dns_v4_count,
-                    foreign_dns_v6_count);
+                LOG_I ("config: foreign-dns loaded: total=%d, v4=%d, v6=%d",
+                       foreign_dns_count, foreign_dns_v4_count,
+                       foreign_dns_v6_count);
             }
         }
     }

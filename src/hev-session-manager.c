@@ -1664,74 +1664,77 @@ direct_udp_recv_task (void *data)
             /* 检查 DNS 分流是否启用 */
             if (!hev_config_get_dns_split_tunnel ()) {
                 /* DNS 分流禁用，不进行污染检测 */
-                LOG_D ("%p session: DNS split-tunnel disabled, skip pollution detection",
-                       session);
+                LOG_D (
+                    "%p session: DNS split-tunnel disabled, skip pollution detection",
+                    session);
             } else {
                 /* DNS 分流启用，进行污染检测 */
                 int is_poisoned = hev_dns_detect_pollution (buffer, received);
                 if (is_poisoned) {
-                LOG_W (
-                    "%p session: DNS pollution detected from %s:%d, querying via SOCKS5 proxy (using configured foreign-dns)",
-                    session, dst_ip, session->dest_port);
+                    LOG_W (
+                        "%p session: DNS pollution detected from %s:%d, querying via SOCKS5 proxy (using configured foreign-dns)",
+                        session, dst_ip, session->dest_port);
 
-                /* 通过 SOCKS5 重新查询 */
-                uint8_t *socks5_response = NULL;
-                size_t socks5_response_len = 0;
-                const uint8_t *query_payload = NULL;
-                size_t query_len = 0;
+                    /* 通过 SOCKS5 重新查询 */
+                    uint8_t *socks5_response = NULL;
+                    size_t socks5_response_len = 0;
+                    const uint8_t *query_payload = NULL;
+                    size_t query_len = 0;
 
-                if (session->dns_query) {
-                    query_payload = session->dns_query->payload;
-                    query_len = session->dns_query->len;
+                    if (session->dns_query) {
+                        query_payload = session->dns_query->payload;
+                        query_len = session->dns_query->len;
 
-                    /* Check for and strip the 8-byte header */
-                    if (query_len > 8) {
-                        uint16_t check_port =
-                            (query_payload[2] << 8) | query_payload[3];
-                        if (check_port == session->dest_port) {
-                            LOG_D ("%p session: Stripping 8-byte header from SOCKS5 DNS query",
-                                   session);
-                            query_payload += 8;
-                            query_len -= 8;
+                        /* Check for and strip the 8-byte header */
+                        if (query_len > 8) {
+                            uint16_t check_port = (query_payload[2] << 8) |
+                                                  query_payload[3];
+                            if (check_port == session->dest_port) {
+                                LOG_D (
+                                    "%p session: Stripping 8-byte header from SOCKS5 DNS query",
+                                    session);
+                                query_payload += 8;
+                                query_len -= 8;
+                            }
                         }
                     }
-                }
 
-                if (query_payload &&
-                    hev_dns_query_via_socks5 (
-                        query_payload, query_len,
-                        IP_IS_V6 (&session->dest_ip) ? 1 : 0, &socks5_response,
-                        &socks5_response_len) == 0) {
-                    /* 替换响应数据 */
-                    if (socks5_response_len > 0 &&
-                        socks5_response_len <= sizeof (buffer)) {
-                        memcpy (buffer, socks5_response, socks5_response_len);
-                        received = socks5_response_len;
-                        LOG_I (
-                            "%p session: Replaced poisoned response with clean response from SOCKS5 (%zu bytes)",
-                            session, received);
-
-                        /* ⭐ 缓存干净的DNS响应 */
-                        char domain[256];
-                        if (extract_dns_domain (buffer, received, domain,
-                                                sizeof (domain)) > 0) {
-                            hev_dns_cache_insert (domain, buffer, received,
-                                                  time (NULL) + 300, 1);
+                    if (query_payload &&
+                        hev_dns_query_via_socks5 (
+                            query_payload, query_len,
+                            IP_IS_V6 (&session->dest_ip) ? 1 : 0,
+                            &socks5_response, &socks5_response_len) == 0) {
+                        /* 替换响应数据 */
+                        if (socks5_response_len > 0 &&
+                            socks5_response_len <= sizeof (buffer)) {
+                            memcpy (buffer, socks5_response,
+                                    socks5_response_len);
+                            received = socks5_response_len;
                             LOG_I (
-                                "%p session: Cached clean DNS response for domain '%s' (from SOCKS5)",
-                                session, domain);
+                                "%p session: Replaced poisoned response with clean response from SOCKS5 (%zu bytes)",
+                                session, received);
+
+                            /* ⭐ 缓存干净的DNS响应 */
+                            char domain[256];
+                            if (extract_dns_domain (buffer, received, domain,
+                                                    sizeof (domain)) > 0) {
+                                hev_dns_cache_insert (domain, buffer, received,
+                                                      time (NULL) + 300, 1);
+                                LOG_I (
+                                    "%p session: Cached clean DNS response for domain '%s' (from SOCKS5)",
+                                    session, domain);
+                            }
                         }
+                        hev_free (socks5_response);
+                    } else {
+                        LOG_E (
+                            "%p session: Failed to query via SOCKS5, using original poisoned response",
+                            session);
                     }
-                    hev_free (socks5_response);
                 } else {
-                    LOG_E (
-                        "%p session: Failed to query via SOCKS5, using original poisoned response",
-                        session);
+                    LOG_I ("%p session: DNS response is clean from %s:%d",
+                           session, dst_ip, session->dest_port);
                 }
-            } else {
-                LOG_I ("%p session: DNS response is clean from %s:%d", session,
-                       dst_ip, session->dest_port);
-            }
             } /* split-tunnel 启用的 else 块结束 */
         }
 

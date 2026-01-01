@@ -314,7 +314,8 @@ check_ipv6_available (void)
 {
     int sock = socket (AF_INET6, SOCK_DGRAM, 0);
     if (sock < 0) {
-        LOG_D ("dns-cache: IPv6 not available (socket failed: %s)", strerror (errno));
+        LOG_D ("dns-cache: IPv6 not available (socket failed: %s)",
+               strerror (errno));
         return 0;
     }
 
@@ -387,7 +388,8 @@ hev_dns_cache_clean_expired (void)
         hev_task_mutex_lock (&dns_cache_shards[shard]);
 
         /* 清理属于这个分片的哈希桶 */
-        for (int i = shard; i < DNS_CACHE_HASH_SIZE; i += DNS_CACHE_SHARD_COUNT) {
+        for (int i = shard; i < DNS_CACHE_HASH_SIZE;
+             i += DNS_CACHE_SHARD_COUNT) {
             HevDNSCacheEntry **current = &dns_cache_table[i];
             size_t shard_cleaned = 0;
 
@@ -681,11 +683,9 @@ dns_response_monitor_task (void *data)
     LOG_D ("dns-cache: Waiting for DNS response for domain: %s", ctx->domain);
 
     addr_len = sizeof (remote_addr);
-    ssize_t recv_len =
-        hev_task_io_socket_recvfrom (sock, buffer, sizeof (buffer), 0,
-                                     (struct sockaddr *)&remote_addr,
-                                     &addr_len, hev_socks5_task_io_yielder,
-                                     ctx->base);
+    ssize_t recv_len = hev_task_io_socket_recvfrom (
+        sock, buffer, sizeof (buffer), 0, (struct sockaddr *)&remote_addr,
+        &addr_len, hev_socks5_task_io_yielder, ctx->base);
 
     if (recv_len > 0) {
         LOG_D ("dns-cache: Received DNS response (%zd bytes) for domain: %s",
@@ -955,7 +955,7 @@ hev_dns_query_via_socks5 (const uint8_t *query, size_t query_len,
 
         if (dns_count == 0) {
             static const char *default_dns_v6[] = { "2606:4700:4700::1111",
-                                                     "2001:4860:4860::8888" };
+                                                    "2001:4860:4860::8888" };
             dns_servers = default_dns_v6;
             dns_count = 2;
         }
