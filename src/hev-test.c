@@ -731,8 +731,8 @@ run_dns_cache_tests (void)
     clean_response[45] = 0x44;
     clean_response[46] = 0x42;
 
-    int is_poisoned
-        = hev_dns_detect_pollution (clean_response, sizeof (clean_response));
+    int is_poisoned =
+        hev_dns_detect_pollution (clean_response, sizeof (clean_response));
     TEST_ASSERT (is_poisoned == 0);
     printf ("  Pollution detection works for clean response\n");
 
@@ -742,7 +742,8 @@ run_dns_cache_tests (void)
     clean_response[45] = 0x08;
     clean_response[46] = 0x08;
 
-    is_poisoned = hev_dns_detect_pollution (clean_response, sizeof (clean_response));
+    is_poisoned =
+        hev_dns_detect_pollution (clean_response, sizeof (clean_response));
     TEST_ASSERT (is_poisoned == 1);
     printf ("  Pollution detection works for polluted response\n");
 
@@ -810,8 +811,8 @@ run_dns_pollution_tests (void)
     clean_response[45] = 0x44;
     clean_response[46] = 0x42;
 
-    int is_poisoned
-        = hev_dns_detect_pollution (clean_response, sizeof (clean_response));
+    int is_poisoned =
+        hev_dns_detect_pollution (clean_response, sizeof (clean_response));
     TEST_ASSERT (is_poisoned == 0);
     printf ("  Clean response detected correctly\n");
 
@@ -827,8 +828,8 @@ run_dns_pollution_tests (void)
     polluted_response[45] = 0x08;
     polluted_response[46] = 0x08;
 
-    is_poisoned
-        = hev_dns_detect_pollution (polluted_response, sizeof (polluted_response));
+    is_poisoned = hev_dns_detect_pollution (polluted_response,
+                                            sizeof (polluted_response));
     TEST_ASSERT (is_poisoned == 1);
     printf ("  Polluted response detected correctly\n");
 
@@ -840,7 +841,8 @@ run_dns_pollution_tests (void)
     memcpy (multi_response, clean_response, 47); // Copy base response
 
     // Only has domestic IP, should be clean
-    is_poisoned = hev_dns_detect_pollution (multi_response, sizeof (multi_response));
+    is_poisoned =
+        hev_dns_detect_pollution (multi_response, sizeof (multi_response));
     TEST_ASSERT (is_poisoned == 0);
     printf ("  Multi-IP clean response detected correctly\n");
 
@@ -953,14 +955,13 @@ run_dns_split_tunnel_tests (void)
 {
     printf ("--- Running tests for DNS split-tunnel configuration ---\n");
 
-    const char *test_config =
-        "dns-split-tunnel:\n"
-        "  split-tunnel: true\n"
-        "  foreign-dns:\n"
-        "    - \"1.1.1.1\"\n"
-        "    - \"8.8.8.8\"\n"
-        "    - \"2606:4700:4700::1111\"\n"
-        "    - \"2001:4860:4860::8888\"\n";
+    const char *test_config = "dns-split-tunnel:\n"
+                              "  split-tunnel: true\n"
+                              "  foreign-dns:\n"
+                              "    - \"1.1.1.1\"\n"
+                              "    - \"8.8.8.8\"\n"
+                              "    - \"2606:4700:4700::1111\"\n"
+                              "    - \"2001:4860:4860::8888\"\n";
 
     int config_res = hev_config_init_from_str (
         (const unsigned char *)test_config, strlen (test_config));
@@ -1053,8 +1054,7 @@ run_edge_case_tests (void)
     printf ("  Port 0 handled: %d\n", port_0_result);
 
     // Port > 65535 (will wrap, but should not crash)
-    int port_max_result
-        = hev_filter_check_all_filters (NULL, NULL, 65535);
+    int port_max_result = hev_filter_check_all_filters (NULL, NULL, 65535);
     printf ("  Port 65535 handled: %d\n", port_max_result);
 
     // Test: Special IP addresses
@@ -1095,22 +1095,21 @@ hev_test_run (void)
 {
     g_is_test_mode = 1; // Set test mode flag
 
-    const char *test_config =
-        "smart-proxy:\n"
-        "  timeout-ms: 2000\n"
-        "  blocked-ip-expiry-minutes: 1\n"
-        "  probe-ports:\n"
-        "    - 80\n"
-        "    - 443\n"
-        "    - 8080\n"
-        "    - 8443\n"
-        "dns-split-tunnel:\n"
-        "  split-tunnel: true\n"
-        "  foreign-dns:\n"
-        "    - \"1.1.1.1\"\n"
-        "    - \"8.8.8.8\"\n"
-        "    - \"2606:4700:4700::1111\"\n"
-        "    - \"2001:4860:4860::8888\"\n";
+    const char *test_config = "smart-proxy:\n"
+                              "  timeout-ms: 2000\n"
+                              "  blocked-ip-expiry-minutes: 1\n"
+                              "  probe-ports:\n"
+                              "    - 80\n"
+                              "    - 443\n"
+                              "    - 8080\n"
+                              "    - 8443\n"
+                              "dns-split-tunnel:\n"
+                              "  split-tunnel: true\n"
+                              "  foreign-dns:\n"
+                              "    - \"1.1.1.1\"\n"
+                              "    - \"8.8.8.8\"\n"
+                              "    - \"2606:4700:4700::1111\"\n"
+                              "    - \"2001:4860:4860::8888\"\n";
     hev_config_init_from_str ((const unsigned char *)test_config,
                               strlen (test_config));
     printf ("======== Running Built-in Tests =========\n");
