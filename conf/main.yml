@@ -91,6 +91,16 @@ dns-split-tunnel:
     - "2606:4700:4700::1111" # Cloudflare DNS (IPv6)
     - "2001:4860:4860::8888" # Google DNS (IPv6)
 
+# DNS 延迟优化功能（NEW）
+# 当干净的 DNS 响应包含多个 IP 时，自动测速并选择延迟最低的 IP
+dns-latency-optimize:
+  # 启用 DNS 延迟优化（默认禁用）
+  enabled: false
+
+  # 总测速超时时间（毫秒）
+  # 如果所有 IP 测速都超时，将返回原始 DNS 响应
+  timeout-ms: 3000
+
 chnroutes:
   # Enables split routing based on a list of Chinese IP ranges.
   # When enabled, traffic to IPs within the specified file will be considered "domestic".

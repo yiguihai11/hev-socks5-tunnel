@@ -27,6 +27,7 @@
 #include "hev-filter.h"
 #include "hev-test.h"
 #include "hev-socks5-misc.h"
+#include "hev-dns-latency.h"
 
 #include "hev-main.h"
 
@@ -102,7 +103,7 @@ hev_socks5_tunnel_main_inner (int tun_fd)
 
     lwip_init ();
 
-    res = hev_socks5_tunnel_init (tun_fd);
+    res = hev_dns_latency_init ();
     if (res < 0) {
         hev_task_system_fini ();
         hev_session_manager_fini ();
@@ -111,6 +112,18 @@ hev_socks5_tunnel_main_inner (int tun_fd)
         hev_socks5_logger_fini ();
         hev_logger_fini ();
         return -5;
+    }
+
+    res = hev_socks5_tunnel_init (tun_fd);
+    if (res < 0) {
+        hev_dns_latency_fini ();
+        hev_task_system_fini ();
+        hev_session_manager_fini ();
+        hev_traffic_router_fini ();
+        hev_filter_fini ();
+        hev_socks5_logger_fini ();
+        hev_logger_fini ();
+        return -6;
     }
 
     hev_socks5_tunnel_run ();
@@ -127,20 +140,23 @@ hev_socks5_tunnel_main_inner (int tun_fd)
     // 3. 清理任务系统
     hev_task_system_fini ();
 
-    // 4. 清理会话管理器
+    // 4. 清理 DNS 延迟优化模块
+    hev_dns_latency_fini ();
+
+    // 5. 清理会话管理器
     hev_session_manager_fini ();
 
-    // 5. 清理流量路由器 (依赖 filter)
+    // 6. 清理流量路由器 (依赖 filter)
     hev_traffic_router_fini ();
 
-    // 6. 清理过滤器 (最早加载数据的组件)
+    // 7. 清理过滤器 (最早加载数据的组件)
     hev_filter_fini ();
 
-    // 7. 清理日志系统
+    // 8. 清理日志系统
     hev_socks5_logger_fini ();
     hev_logger_fini ();
 
-    // 8. 配置清理由调用者负责（在 main_from_file/main_from_str 中）
+    // 9. 配置清理由调用者负责（在 main_from_file/main_from_str 中）
     // 注意：hev_config_fini() 不在这里调用，因为配置可能来自不同源
 
     LOG_D ("main: Cleanup sequence completed");

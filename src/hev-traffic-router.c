@@ -196,11 +196,12 @@ hev_traffic_router_fini (void)
     LOG_D ("router: Finalizing traffic router");
 
     /* 清理 DNS 缓存模块 */
-    size_t total, poisoned;
+    size_t total, poisoned, memory, max_memory;
     uint64_t hits;
-    hev_dns_cache_get_stats (&total, &poisoned, &hits);
-    LOG_I ("router: DNS cache stats - total:%zu, poisoned:%zu, hits:%llu",
-           total, poisoned, (unsigned long long)hits);
+    hev_dns_cache_get_stats (&total, &poisoned, &hits, &memory, &max_memory);
+    LOG_I ("router: DNS cache stats - total:%zu, poisoned:%zu, hits:%llu, memory:%zu/%zuMB",
+           total, poisoned, (unsigned long long)hits, memory / (1024 * 1024),
+           max_memory / (1024 * 1024));
 
     hev_dns_cache_fini ();
 

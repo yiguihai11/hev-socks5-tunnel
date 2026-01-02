@@ -99,4 +99,8 @@ hev_config_get_foreign_dns_v6 (int *count); /* 返回自动分类的IPv6 DNS列�
 const char **
 hev_config_get_foreign_dns (int *count); /* 向后兼容，默认返回IPv4列表 */
 
+/* dns-latency-optimize */
+int hev_config_get_dns_latency_optimize (void);
+int hev_config_get_dns_latency_timeout_ms (void);
+
 #endif /* __HEV_CONFIG_H__ */

@@ -192,6 +192,10 @@ static int foreign_dns_v4_count = 0;
 static char *foreign_dns_v6[16]; /* 自动分类后的IPv6列表 */
 static int foreign_dns_v6_count = 0;
 
+/* dns-latency-optimize */
+static int dns_latency_optimize = 0; /* 默认禁用 */
+static int dns_latency_timeout_ms = 3000; /* 默认3秒 */
+
 HevConfigSocks5Server *
 hev_config_get_socks5_tcp_server (void)
 {
@@ -519,6 +523,55 @@ hev_config_parse_dns_split_tunnel (yaml_document_t *doc, yaml_node_t *base)
 }
 
 static int
+hev_config_parse_dns_latency_optimize (yaml_document_t *doc, yaml_node_t *base)
+{
+    yaml_node_pair_t *pair;
+
+    CHECK_YAML_MAPPING (base);
+    for (pair = base->data.mapping.pairs.start;
+         pair < base->data.mapping.pairs.top; pair++) {
+        yaml_node_t *node;
+        const char *key;
+
+        if (!pair->key || !pair->value)
+            break;
+
+        node = yaml_document_get_node (doc, pair->key);
+        if (!node || YAML_SCALAR_NODE != node->type)
+            break;
+        key = (const char *)node->data.scalar.value;
+
+        node = yaml_document_get_node (doc, pair->value);
+
+        if (0 == strcmp (key, "enabled")) {
+            if (YAML_SCALAR_NODE == node->type) {
+                const char *value = (const char *)node->data.scalar.value;
+                if (0 == strcmp (value, "true") || 0 == strcmp (value, "1") ||
+                    0 == strcmp (value, "yes"))
+                    dns_latency_optimize = 1;
+                else
+                    dns_latency_optimize = 0;
+                LOG_I ("config: dns-latency-optimize.enabled = %d",
+                       dns_latency_optimize);
+            }
+        } else if (0 == strcmp (key, "timeout-ms")) {
+            if (YAML_SCALAR_NODE == node->type) {
+                const char *value = (const char *)node->data.scalar.value;
+                dns_latency_timeout_ms = atoi (value);
+                if (dns_latency_timeout_ms < 100)
+                    dns_latency_timeout_ms = 100; /* 最小100ms */
+                if (dns_latency_timeout_ms > 30000)
+                    dns_latency_timeout_ms = 30000; /* 最大30秒 */
+                LOG_I ("config: dns-latency-optimize.timeout-ms = %d",
+                       dns_latency_timeout_ms);
+            }
+        }
+    }
+
+    return 0;
+}
+
+static int
 hev_config_parse_chnroutes (yaml_document_t *doc, yaml_node_t *base)
 {
     yaml_node_pair_t *pair;
@@ -741,6 +794,8 @@ hev_config_parse_doc (yaml_document_t *doc)
             res = hev_config_parse_dns_forwarder (doc, node);
         else if (0 == strcmp (key, "dns-split-tunnel"))
             res = hev_config_parse_dns_split_tunnel (doc, node);
+        else if (0 == strcmp (key, "dns-latency-optimize"))
+            res = hev_config_parse_dns_latency_optimize (doc, node);
         else if (0 == strcmp (key, "chnroutes"))
             res = hev_config_parse_chnroutes (doc, node);
         else if (0 == strcmp (key, "smart-proxy"))
@@ -1110,4 +1165,17 @@ const char **
 hev_config_get_foreign_dns (int *count)
 {
     return hev_config_get_foreign_dns_v4 (count);
+}
+
+/* dns-latency-optimize */
+int
+hev_config_get_dns_latency_optimize (void)
+{
+    return dns_latency_optimize;
+}
+
+int
+hev_config_get_dns_latency_timeout_ms (void)
+{
+    return dns_latency_timeout_ms;
 }

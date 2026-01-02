@@ -25,6 +25,9 @@ extern "C" {
 /* DNS 缓存哈希表大小 */
 #define DNS_CACHE_HASH_SIZE 4096
 
+/* DNS 缓存内存限制（3MB） */
+#define DNS_CACHE_MAX_MEMORY (3 * 1024 * 1024)
+
 /* DNS 查询类型 */
 #define DNS_TYPE_A 1
 #define DNS_TYPE_AAAA 28
@@ -43,9 +46,13 @@ typedef struct _HevDNSCacheEntry
     uint8_t *response_data; /* DNS 响应数据 */
     size_t response_len; /* 响应数据长度 */
     time_t expire_time; /* 过期时间 */
+    time_t last_access; /* 最后访问时间（LRU） */
+    size_t entry_size; /* 条目总大小（内存统计） */
     int is_poisoned; /* 是否被污染 */
     uint32_t hits; /* 命中次数 */
     struct _HevDNSCacheEntry *next; /* 哈希链表 */
+    struct _HevDNSCacheEntry *lru_prev; /* LRU 前驱 */
+    struct _HevDNSCacheEntry *lru_next; /* LRU 后继 */
 } HevDNSCacheEntry;
 
 /**
@@ -159,11 +166,14 @@ int hev_dns_cache_check_only (struct udp_pcb *pcb, struct pbuf *p,
  * @total_entries: 输出总条目数
  * @poisoned_entries: 输出被污染条目数
  * @total_hits: 输出总命中次数
+ * @total_memory: 输出总内存使用（字节）
+ * @max_memory: 输出最大内存限制（字节）
  *
  * 获取 DNS 缓存统计信息
  */
 void hev_dns_cache_get_stats (size_t *total_entries, size_t *poisoned_entries,
-                              uint64_t *total_hits);
+                              uint64_t *total_hits, size_t *total_memory,
+                              size_t *max_memory);
 
 /**
  * hev_dns_query_via_socks5:

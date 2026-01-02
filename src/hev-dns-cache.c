@@ -48,6 +48,15 @@ static HevObjectPool *dns_entry_pool = NULL;
 static size_t total_cache_entries = 0;
 static size_t poisoned_cache_entries = 0;
 static uint64_t total_cache_hits = 0;
+static size_t total_cache_memory = 0; /* 总内存使用（字节） */
+
+/* LRU 链表头尾 */
+static HevDNSCacheEntry *lru_list_head = NULL; /* 最久未使用（淘汰端） */
+static HevDNSCacheEntry *lru_list_tail = NULL; /* 最近使用（新增端） */
+static HevTaskMutex lru_list_mutex;
+
+/* 初始化标志（防止重复初始化） */
+static int dns_cache_initialized = 0;
 
 /* 清理任务控制 */
 static volatile int cache_cleaner_running = 0;
@@ -102,6 +111,106 @@ static inline int
 dns_cache_get_shard (uint32_t hash)
 {
     return hash & DNS_CACHE_SHARD_MASK;
+}
+
+/* ============ LRU 链表操作函数 ============ */
+
+/* 从 LRU 链表中移除条目 */
+static void
+lru_remove (HevDNSCacheEntry *entry)
+{
+    if (entry->lru_prev)
+        entry->lru_prev->lru_next = entry->lru_next;
+    else
+        lru_list_head = entry->lru_next;
+
+    if (entry->lru_next)
+        entry->lru_next->lru_prev = entry->lru_prev;
+    else
+        lru_list_tail = entry->lru_prev;
+
+    entry->lru_prev = entry->lru_next = NULL;
+}
+
+/* 将条目移到 LRU 链表尾部（最近使用） */
+static void
+lru_move_to_tail (HevDNSCacheEntry *entry)
+{
+    if (entry == lru_list_tail)
+        return; /* 已经在尾部 */
+
+    /* 先移除 */
+    lru_remove (entry);
+
+    /* 添加到尾部 */
+    entry->lru_prev = lru_list_tail;
+    entry->lru_next = NULL;
+
+    if (lru_list_tail)
+        lru_list_tail->lru_next = entry;
+    else
+        lru_list_head = entry;
+
+    lru_list_tail = entry;
+
+    /* 更新访问时间 */
+    entry->last_access = time (NULL);
+}
+
+/* 将条目添加到 LRU 链表尾部（新条目） */
+static void
+lru_add_to_tail (HevDNSCacheEntry *entry)
+{
+    entry->lru_prev = lru_list_tail;
+    entry->lru_next = NULL;
+    entry->last_access = time (NULL);
+
+    if (lru_list_tail)
+        lru_list_tail->lru_next = entry;
+    else
+        lru_list_head = entry;
+
+    lru_list_tail = entry;
+}
+
+/* 淘汰最老的条目（LRU 链表头部） */
+static HevDNSCacheEntry *
+lru_evict_oldest (void)
+{
+    HevDNSCacheEntry *entry = lru_list_head;
+    if (!entry)
+        return NULL;
+
+    /* 从 LRU 链表移除 */
+    lru_remove (entry);
+
+    /* 从哈希表移除 */
+    uint32_t hash = dns_hash (entry->domain);
+    int shard = dns_cache_get_shard (hash);
+
+    hev_task_mutex_lock (&dns_cache_shards[shard]);
+
+    HevDNSCacheEntry **pp = &dns_cache_table[hash];
+    while (*pp) {
+        if (*pp == entry) {
+            *pp = entry->next;
+            break;
+        }
+        pp = &(*pp)->next;
+    }
+
+    hev_task_mutex_unlock (&dns_cache_shards[shard]);
+
+    /* 更新统计 */
+    total_cache_memory -= entry->entry_size;
+    total_cache_entries--;
+    if (entry->is_poisoned)
+        poisoned_cache_entries--;
+
+    LOG_I ("dns-cache: LRU evicted entry for domain '%s' (size=%zu, total_memory=%zu)",
+           entry->domain, entry->entry_size, total_cache_memory);
+
+    return entry;
 }
 
 /* 获取域名对应的分片索引（未使用，保留供将来使用） */
@@ -383,6 +492,8 @@ hev_dns_cache_clean_expired (void)
     size_t total_cleaned = 0;
     time_t now = time (NULL);
 
+    hev_task_mutex_lock (&lru_list_mutex);
+
     /* 遍历所有分片 */
     for (int shard = 0; shard < DNS_CACHE_SHARD_COUNT; shard++) {
         hev_task_mutex_lock (&dns_cache_shards[shard]);
@@ -397,8 +508,14 @@ hev_dns_cache_clean_expired (void)
 
                 /* 检查是否过期 */
                 if (now > entry->expire_time) {
-                    /* 从链表中移除 */
+                    /* 从哈希链表中移除 */
                     *current = entry->next;
+
+                    /* ⭐ 从 LRU 链表移除 */
+                    lru_remove (entry);
+
+                    /* 更新内存统计 */
+                    total_cache_memory -= entry->entry_size;
 
                     if (entry->response_data)
                         hev_free (entry->response_data);
@@ -420,9 +537,11 @@ hev_dns_cache_clean_expired (void)
         hev_task_mutex_unlock (&dns_cache_shards[shard]);
     }
 
+    hev_task_mutex_unlock (&lru_list_mutex);
+
     if (total_cleaned > 0) {
-        LOG_D ("dns-cache: Cleaned %zu expired entries (total=%zu remaining)",
-               total_cleaned, total_cache_entries);
+        LOG_D ("dns-cache: Cleaned %zu expired entries (total=%zu, memory=%zu)",
+               total_cleaned, total_cache_entries, total_cache_memory);
     }
 
     return total_cleaned;
@@ -433,12 +552,20 @@ hev_dns_cache_init (void)
 {
     HevObjectPoolConfig pool_config;
 
+    /* 防止重复初始化 */
+    if (dns_cache_initialized)
+        return 0;
+
     memset (dns_cache_table, 0, sizeof (dns_cache_table));
 
     /* 初始化所有分片锁 */
     for (int i = 0; i < DNS_CACHE_SHARD_COUNT; i++) {
         hev_task_mutex_init (&dns_cache_shards[i]);
     }
+
+    /* 初始化 LRU 链表 */
+    hev_task_mutex_init (&lru_list_mutex);
+    lru_list_head = lru_list_tail = NULL;
 
     /* 创建 DNS 缓存条目对象池 */
     pool_config.obj_size = sizeof (HevDNSCacheEntry);
@@ -453,14 +580,17 @@ hev_dns_cache_init (void)
     total_cache_entries = 0;
     poisoned_cache_entries = 0;
     total_cache_hits = 0;
+    total_cache_memory = 0;
 
     /* 注意：不在这里启动清理任务，因为任务系统可能还没初始化
      * 清理任务将在第一次使用时延迟启动 */
 
+    dns_cache_initialized = 1;
+
     LOG_I (
-        "dns-cache: DNS cache module initialized (shards=%d, entry_pool=%d/%d, clean_interval=%dms)",
+        "dns-cache: DNS cache initialized (shards=%d, pool=%d/%d, max_memory=%zuMB)",
         DNS_CACHE_SHARD_COUNT, DNS_ENTRY_POOL_INIT_CAPACITY,
-        DNS_ENTRY_POOL_MAX_CAPACITY, DNS_CACHE_CLEAN_INTERVAL_MS);
+        DNS_ENTRY_POOL_MAX_CAPACITY, DNS_CACHE_MAX_MEMORY / (1024 * 1024));
     return 0;
 }
 
@@ -502,6 +632,14 @@ hev_dns_cache_fini (void)
         dns_entry_pool = NULL;
     }
 
+    /* 注意：hev_task_mutex 没有 destroy 函数，所以不销毁 mutex */
+
+    /* 重置 LRU 链表 */
+    lru_list_head = lru_list_tail = NULL;
+
+    /* 重置初始化标志 */
+    dns_cache_initialized = 0;
+
     LOG_I ("dns-cache: DNS cache module finalized (cleared %zu entries)",
            total_cache_entries);
 }
@@ -526,6 +664,14 @@ hev_dns_cache_lookup (const char *domain, uint8_t **response_out,
                        domain);
                 /* 惰性删除：从链表中移除过期条目 */
                 *current = entry->next;
+
+                /* ⭐ 从 LRU 链表移除 */
+                hev_task_mutex_lock (&lru_list_mutex);
+                lru_remove (entry);
+                /* 更新内存统计 */
+                total_cache_memory -= entry->entry_size;
+                hev_task_mutex_unlock (&lru_list_mutex);
+
                 if (entry->response_data)
                     hev_free (entry->response_data);
                 if (entry->is_poisoned)
@@ -544,6 +690,11 @@ hev_dns_cache_lookup (const char *domain, uint8_t **response_out,
             *response_len_out = entry->response_len;
             entry->hits++;
             total_cache_hits++;
+
+            /* ⭐ 移动到 LRU 链表尾部（最近使用） */
+            hev_task_mutex_lock (&lru_list_mutex);
+            lru_move_to_tail (entry);
+            hev_task_mutex_unlock (&lru_list_mutex);
 
             LOG_I ("dns-cache: Cache hit for domain: %s (hits=%u, poisoned=%d)",
                    domain, entry->hits, entry->is_poisoned);
@@ -600,6 +751,28 @@ hev_dns_cache_insert (const char *domain, const uint8_t *response_data,
     new_entry->expire_time = now + ttl;
     new_entry->is_poisoned = is_poisoned;
     new_entry->hits = 0;
+    new_entry->last_access = now;
+
+    /* 计算条目总大小 */
+    new_entry->entry_size = sizeof (HevDNSCacheEntry) + response_len;
+
+    /* ⭐ 检查内存限制，淘汰 LRU 条目直到有足够空间 */
+    hev_task_mutex_lock (&lru_list_mutex);
+    while (total_cache_memory + new_entry->entry_size > DNS_CACHE_MAX_MEMORY) {
+        HevDNSCacheEntry *evicted = lru_evict_oldest ();
+        if (!evicted) {
+            LOG_E ("dns-cache: No entries to evict, but still over memory limit!");
+            break;
+        }
+        /* 释放被淘汰的条目 */
+        if (evicted->response_data)
+            hev_free (evicted->response_data);
+        if (dns_entry_pool)
+            hev_object_pool_put (dns_entry_pool, evicted);
+        else
+            hev_free (evicted);
+    }
+    hev_task_mutex_unlock (&lru_list_mutex);
 
     hev_task_mutex_lock (&dns_cache_shards[shard]);
 
@@ -611,6 +784,16 @@ hev_dns_cache_insert (const char *domain, const uint8_t *response_data,
             HevDNSCacheEntry *old = *current;
             new_entry->next = old->next;
             *current = new_entry;
+
+            /* 更新内存统计 */
+            total_cache_memory -= old->entry_size;
+            total_cache_memory += new_entry->entry_size;
+
+            /* 更新 LRU */
+            hev_task_mutex_lock (&lru_list_mutex);
+            lru_remove (old);
+            lru_add_to_tail (new_entry);
+            hev_task_mutex_unlock (&lru_list_mutex);
 
             if (old->response_data)
                 hev_free (old->response_data);
@@ -625,8 +808,8 @@ hev_dns_cache_insert (const char *domain, const uint8_t *response_data,
                 poisoned_cache_entries++;
 
             LOG_I (
-                "dns-cache: Updated cache for domain: %s (ttl=%u, poisoned=%d)",
-                domain, ttl, is_poisoned);
+                "dns-cache: Updated cache for domain: %s (ttl=%u, poisoned=%d, memory=%zu)",
+                domain, ttl, is_poisoned, total_cache_memory);
 
             hev_task_mutex_unlock (&dns_cache_shards[shard]);
             return 0;
@@ -638,12 +821,20 @@ hev_dns_cache_insert (const char *domain, const uint8_t *response_data,
     new_entry->next = dns_cache_table[hash];
     dns_cache_table[hash] = new_entry;
     total_cache_entries++;
+    total_cache_memory += new_entry->entry_size;
+
     if (is_poisoned)
         poisoned_cache_entries++;
 
+    /* 添加到 LRU 链表尾部 */
+    hev_task_mutex_lock (&lru_list_mutex);
+    lru_add_to_tail (new_entry);
+    hev_task_mutex_unlock (&lru_list_mutex);
+
     LOG_I (
-        "dns-cache: Inserted cache for domain: %s (ttl=%u, poisoned=%d, total=%zu)",
-        domain, ttl, is_poisoned, total_cache_entries);
+        "dns-cache: Inserted cache for domain: %s (ttl=%u, poisoned=%d, total=%zu, memory=%zu/%zuMB)",
+        domain, ttl, is_poisoned, total_cache_entries, total_cache_memory,
+        DNS_CACHE_MAX_MEMORY / (1024 * 1024));
 
     hev_task_mutex_unlock (&dns_cache_shards[shard]);
     return 0;
@@ -882,7 +1073,8 @@ hev_dns_cache_check_only (struct udp_pcb *pcb, struct pbuf *p,
 
 void
 hev_dns_cache_get_stats (size_t *total_entries, size_t *poisoned_entries,
-                         uint64_t *total_hits)
+                         uint64_t *total_hits, size_t *total_memory,
+                         size_t *max_memory)
 {
     /* 统计数据读取不需要锁（协程环境，单线程执行） */
     if (total_entries)
@@ -891,6 +1083,10 @@ hev_dns_cache_get_stats (size_t *total_entries, size_t *poisoned_entries,
         *poisoned_entries = poisoned_cache_entries;
     if (total_hits)
         *total_hits = total_cache_hits;
+    if (total_memory)
+        *total_memory = total_cache_memory;
+    if (max_memory)
+        *max_memory = DNS_CACHE_MAX_MEMORY;
 }
 
 /**

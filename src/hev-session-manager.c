@@ -96,6 +96,7 @@
 #include "hev-traffic-router.h"
 #include "hev-filter.h"
 #include "hev-dns-cache.h"
+#include "hev-dns-latency.h"
 
 #include "hev-session-manager.h"
 
@@ -1661,12 +1662,15 @@ direct_udp_recv_task (void *data)
 
         /* ⭐ DNS 响应污染检测与处理（仅在 split-tunnel 启用时执行） */
         if (unlikely (session->dest_port == 53)) {
+            int should_optimize = 0; /* 默认不优化 */
+
             /* 检查 DNS 分流是否启用 */
             if (!hev_config_get_dns_split_tunnel ()) {
                 /* DNS 分流禁用，不进行污染检测 */
                 LOG_D (
                     "%p session: DNS split-tunnel disabled, skip pollution detection",
                     session);
+                should_optimize = 1; /* 分流禁用 → 需要优化 */
             } else {
                 /* DNS 分流启用，进行污染检测 */
                 int is_poisoned = hev_dns_detect_pollution (buffer, received);
@@ -1731,45 +1735,77 @@ direct_udp_recv_task (void *data)
                             "%p session: Failed to query via SOCKS5, using original poisoned response",
                             session);
                     }
+                    /* 污染响应已替换为 SOCKS5 查询结果（国外IP），不优化 */
+                    should_optimize = 0;
                 } else {
                     LOG_I ("%p session: DNS response is clean from %s:%d",
                            session, dst_ip, session->dest_port);
+                    should_optimize = 1; /* 干净响应 → 需要优化 */
                 }
             } /* split-tunnel 启用的 else 块结束 */
-        }
 
-        struct pbuf *p = pbuf_alloc (PBUF_TRANSPORT, received, PBUF_RAM);
-        if (p) {
-            memcpy (p->payload, buffer, received);
+            /* ⭐ DNS 延迟优化（干净的国内 DNS 响应或 split-tunnel 禁用时） */
+            if (should_optimize && hev_config_get_dns_latency_optimize ()) {
+                char domain[256];
 
-            hev_task_mutex_lock (session->mutex);
-            if (session->pcb) {
-                char orig_dst_ip[INET6_ADDRSTRLEN];
-                ipaddr_ntoa_r (&session->orig_dest_ip, orig_dst_ip,
-                               sizeof (orig_dst_ip));
-                LOG_D ("%p session: UDP sending from spoofed source %s:%d",
-                       session, orig_dst_ip, session->orig_dest_port);
-                err_t err = udp_sendfrom (session->pcb, p,
-                                          &session->orig_dest_ip,
-                                          session->orig_dest_port);
-                if (err != ERR_OK) {
-                    LOG_E ("%p session: UDP udp_sendfrom failed: %d", session,
-                           err);
-                } else {
-                    LOG_D ("%p session: UDP forwarded %d bytes to client %s:%d",
-                           session, received, src_ip, session->src_port);
+                /* 提取域名 */
+                if (extract_dns_domain (buffer, received, domain,
+                                        sizeof (domain)) >= 0) {
+                    /* 启动异步优化任务 */
+                    int ret = hev_dns_latency_optimize_response_async (
+                        buffer, received, domain, session->pcb,
+                        &session->orig_dest_ip, session->orig_dest_port, s5);
+
+                    if (ret > 0) {
+                        LOG_I (
+                            "%p session: DNS latency optimization started for domain: %s",
+                            session, domain);
+                        /* 异步任务已启动，跳过发送流程 */
+                        received = 0; /* 设置为0以跳过后续发送 */
+                    }
+                    /* 失败则继续正常流程 */
                 }
-            } else {
-                LOG_W ("%p session: UDP pcb is NULL, cannot forward packet",
-                       session);
             }
-            hev_task_mutex_unlock (session->mutex);
-            pbuf_free (p);
-        } else {
-            LOG_E ("%p session: UDP failed to allocate pbuf for %zd bytes",
-                   session, received);
         }
-    }
+
+        /* 如果DNS响应已被异步任务处理，跳过发送 */
+        if (received == 0) {
+            LOG_D ("%p session: DNS response handled by async task, skipping send",
+                   session);
+        } else {
+            struct pbuf *p = pbuf_alloc (PBUF_TRANSPORT, received, PBUF_RAM);
+            if (p) {
+                memcpy (p->payload, buffer, received);
+
+                hev_task_mutex_lock (session->mutex);
+                if (session->pcb) {
+                    char orig_dst_ip[INET6_ADDRSTRLEN];
+                    ipaddr_ntoa_r (&session->orig_dest_ip, orig_dst_ip,
+                                   sizeof (orig_dst_ip));
+                    LOG_D ("%p session: UDP sending from spoofed source %s:%d",
+                           session, orig_dst_ip, session->orig_dest_port);
+                    err_t err = udp_sendfrom (session->pcb, p,
+                                              &session->orig_dest_ip,
+                                              session->orig_dest_port);
+                    if (err != ERR_OK) {
+                        LOG_E ("%p session: UDP udp_sendfrom failed: %d",
+                               session, err);
+                    } else {
+                        LOG_D ("%p session: UDP forwarded %d bytes to client %s:%d",
+                               session, received, src_ip, session->src_port);
+                    }
+                } else {
+                    LOG_W ("%p session: UDP pcb is NULL, cannot forward packet",
+                           session);
+                }
+                hev_task_mutex_unlock (session->mutex);
+                pbuf_free (p);
+            } else {
+                LOG_E ("%p session: UDP failed to allocate pbuf for %zd bytes",
+                       session, received);
+            }
+        }
+    } /* closes if (port == 53) */
 
     session->alive &= ~UDP_ALIVE_RECV;
     hev_task_del_fd (task, fd);
