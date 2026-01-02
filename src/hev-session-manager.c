@@ -922,7 +922,7 @@ run_direct_connect_task (void *data)
 
     /* 获取超时配置 */
     connect_timeout = hev_config_get_misc_connect_timeout ();
-    read_write_timeout = hev_config_get_misc_read_write_timeout ();
+    read_write_timeout = hev_config_get_misc_tcp_read_write_timeout ();
 
     /* 初始化空闲超时计时器 */
     idle_timer_init (&idle_timer, read_write_timeout / 1000);
@@ -1179,7 +1179,7 @@ run_smart_proxy_task (void *data)
         }
     }
 
-    read_write_timeout = hev_config_get_misc_read_write_timeout ();
+    read_write_timeout = hev_config_get_misc_tcp_read_write_timeout ();
     idle_timer_init (&idle_timer, read_write_timeout / 1000);
 
     /* Build address */

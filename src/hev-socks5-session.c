@@ -28,7 +28,7 @@ hev_socks5_session_run (HevSocks5Session *self)
 
     srv = hev_config_get_socks5_tcp_server ();
     connect_timeout = hev_config_get_misc_connect_timeout ();
-    read_write_timeout = hev_config_get_misc_read_write_timeout ();
+    read_write_timeout = hev_config_get_misc_tcp_read_write_timeout ();
 
     hev_socks5_set_timeout (HEV_SOCKS5 (self), connect_timeout);
 

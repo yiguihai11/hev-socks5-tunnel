@@ -520,7 +520,7 @@ hev_socks5_session_udp_run (HevSocks5SessionUDP *self)
     /* 使用UDP块的配置而不是TCP块 */
     srv = hev_config_get_socks5_udp_server ();
     connect_timeout = hev_config_get_misc_connect_timeout ();
-    read_write_timeout = hev_config_get_misc_read_write_timeout ();
+    read_write_timeout = hev_config_get_misc_udp_read_write_timeout ();
 
     hev_socks5_set_timeout (HEV_SOCKS5 (self), connect_timeout);
 

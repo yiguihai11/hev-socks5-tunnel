@@ -36,7 +36,8 @@ int hev_config_get_misc_task_stack_size (void);
 int hev_config_get_misc_tcp_buffer_size (void);
 int hev_config_get_misc_max_session_count (void);
 int hev_config_get_misc_connect_timeout (void);
-int hev_config_get_misc_read_write_timeout (void);
+int hev_config_get_misc_tcp_read_write_timeout (void);
+int hev_config_get_misc_udp_read_write_timeout (void);
 const char *hev_config_get_tunnel_name (void);
 unsigned int hev_config_get_tunnel_mtu (void);
 const char *hev_config_get_acl_file_path (void);
@@ -578,20 +579,23 @@ run_config_tests (void)
     int tcp_buffer_size = hev_config_get_misc_tcp_buffer_size ();
     int max_session_count = hev_config_get_misc_max_session_count ();
     int connect_timeout = hev_config_get_misc_connect_timeout ();
-    int rw_timeout = hev_config_get_misc_read_write_timeout ();
+    int tcp_rw_timeout = hev_config_get_misc_tcp_read_write_timeout ();
+    int udp_rw_timeout = hev_config_get_misc_udp_read_write_timeout ();
 
     TEST_ASSERT (task_stack_size > 0);
     TEST_ASSERT (tcp_buffer_size > 0);
     TEST_ASSERT (max_session_count >= 0); // 0 means use default
     TEST_ASSERT (connect_timeout > 0);
-    TEST_ASSERT (rw_timeout > 0);
+    TEST_ASSERT (tcp_rw_timeout > 0);
+    TEST_ASSERT (udp_rw_timeout > 0);
 
     printf ("  Task stack size: %d bytes\n", task_stack_size);
     printf ("  TCP buffer size: %d bytes\n", tcp_buffer_size);
     printf ("  Max session count: %d%s\n", max_session_count,
             max_session_count == 0 ? " (default)" : "");
     printf ("  Connect timeout: %d ms\n", connect_timeout);
-    printf ("  Read/Write timeout: %d ms\n", rw_timeout);
+    printf ("  TCP Read/Write timeout: %d ms\n", tcp_rw_timeout);
+    printf ("  UDP Read/Write timeout: %d ms\n", udp_rw_timeout);
 
     // Test: Tunnel configuration
     printf ("\nTesting tunnel configuration...\n");
