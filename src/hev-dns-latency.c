@@ -59,14 +59,6 @@ read_uint32 (const uint8_t *p)
     return (p[0] << 24) | (p[1] << 16) | (p[2] << 8) | p[3];
 }
 
-/* Helper: write big-endian uint16 */
-static inline void
-write_uint16 (uint8_t *p, uint16_t v)
-{
-    p[0] = (v >> 8) & 0xFF;
-    p[1] = v & 0xFF;
-}
-
 /* Parse DNS name with compression pointer support */
 static int
 parse_dns_name (const uint8_t *data, size_t data_len, size_t *offset,
