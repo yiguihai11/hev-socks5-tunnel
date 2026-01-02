@@ -81,6 +81,7 @@ const char *hev_config_get_dns_forwarder_target_ip4 (void);
 const char *hev_config_get_dns_forwarder_target_ip6 (void);
 
 /* chnroutes */
+int hev_config_get_chnroutes_enabled (void);
 const char *hev_config_get_chnroutes_file_path (void);
 
 /* smart-proxy */

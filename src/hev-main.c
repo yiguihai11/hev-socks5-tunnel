@@ -83,9 +83,11 @@ hev_socks5_tunnel_main_inner (int tun_fd)
     if (acl_path)
         hev_filter_load_acl (acl_path);
 
-    const char *chnroutes_path = hev_config_get_chnroutes_file_path ();
-    if (chnroutes_path)
-        hev_filter_load_chnroutes (chnroutes_path);
+    if (hev_config_get_chnroutes_enabled ()) {
+        const char *chnroutes_path = hev_config_get_chnroutes_file_path ();
+        if (chnroutes_path)
+            hev_filter_load_chnroutes (chnroutes_path);
+    }
 
     res = hev_traffic_router_init ();
     if (res < 0) {

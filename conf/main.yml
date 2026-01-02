@@ -106,7 +106,8 @@ chnroutes:
   # When enabled, traffic to IPs within the specified file will be considered "domestic".
   # This allows for different routing decisions, e.g., domestic traffic can be connected
   # directly, while other traffic goes through the SOCKS5 proxy.
-  # The feature is enabled if this file path is set.
+  enabled: true
+  # Path to the chnroutes file containing Chinese IP ranges.
   file-path: "conf/chnroutes.txt"
 
 #smart-proxy:

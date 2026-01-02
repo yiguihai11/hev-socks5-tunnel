@@ -174,6 +174,7 @@ static char dns_fwd_target_ip4[64];
 static char dns_fwd_target_ip6[64];
 
 /* chnroutes */
+static int chnroutes_enabled = 1; /* 默认启用 */
 static char chnroutes_file_path[1024];
 
 /* smart-proxy */
@@ -597,7 +598,9 @@ hev_config_parse_chnroutes (yaml_document_t *doc, yaml_node_t *base)
             break;
         value = (const char *)node->data.scalar.value;
 
-        if (0 == strcmp (key, "file-path"))
+        if (0 == strcmp (key, "enabled"))
+            chnroutes_enabled = yaml_parse_bool (value);
+        else if (0 == strcmp (key, "file-path"))
             strncpy (chnroutes_file_path, value,
                      sizeof (chnroutes_file_path) - 1);
     }
@@ -1109,6 +1112,12 @@ hev_config_get_dns_forwarder_target_ip6 (void)
 }
 
 /* chnroutes */
+int
+hev_config_get_chnroutes_enabled (void)
+{
+    return chnroutes_enabled;
+}
+
 const char *
 hev_config_get_chnroutes_file_path (void)
 {
