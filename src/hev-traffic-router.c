@@ -285,6 +285,7 @@ hev_traffic_router_handle_udp (struct udp_pcb *pcb, struct pbuf *p,
 {
     char dst_ip[INET6_ADDRSTRLEN];
     char src_ip[INET6_ADDRSTRLEN];
+    int is_domestic;
 
     ipaddr_ntoa_r (addr, dst_ip, sizeof (dst_ip));
     ipaddr_ntoa_r (&pcb->remote_ip, src_ip, sizeof (src_ip));
@@ -300,6 +301,9 @@ hev_traffic_router_handle_udp (struct udp_pcb *pcb, struct pbuf *p,
         pbuf_free (p);
         return 1; // Handled (blocked)
     }
+
+    /* 缓存国内IP判断结果，避免重复查询 */
+    is_domestic = hev_filter_is_domestic (addr);
 
     /* ⭐ DNS 查询特殊处理 */
     if (unlikely (port == 53)) {
@@ -331,19 +335,15 @@ hev_traffic_router_handle_udp (struct udp_pcb *pcb, struct pbuf *p,
 
         /* 优先级3: DNS 分流逻辑（以下仅在 split-tunnel 启用时执行） */
 
-        /* 检查 DNS 缓存 */
-        struct pbuf *p_copy = pbuf_clone (PBUF_RAW, PBUF_RAM, p);
-        if (p_copy && hev_dns_cache_check_only (pcb, p_copy, addr, port)) {
+        /* 检查 DNS 缓存（直接传递原始 pbuf，不克隆） */
+        if (hev_dns_cache_check_only (pcb, p, addr, port)) {
             LOG_I ("%p router: DNS response from cache for %s:%d", pcb, dst_ip,
                    port);
-            pbuf_free (p_copy);
             return 1; /* 缓存命中，已响应 */
         }
-        if (p_copy)
-            pbuf_free (p_copy);
 
         /* 缓存未命中，根据目标DNS服务器类型决定路由 */
-        if (hev_filter_is_domestic (addr)) {
+        if (is_domestic) {
             /* 国内DNS服务器 → DIRECT连接（响应中检测污染） */
             LOG_I (
                 "%p router: DNS query to domestic %s:%d (cache miss), using DIRECT for pollution detection",
@@ -362,8 +362,8 @@ hev_traffic_router_handle_udp (struct udp_pcb *pcb, struct pbuf *p,
     }
 
 normal_udp_routing:
-    /* 国内IP直连检查（第二优先级） */
-    if (hev_filter_is_domestic (addr)) {
+    /* 国内IP直连检查（使用缓存的判断结果） */
+    if (is_domestic) {
         LOG_I (
             "%p router: UDP routing %s:%d -> %s:%d via DIRECT (domestic IP, packet_size=%d)",
             pcb, src_ip, pcb->remote_port, dst_ip, port, p ? p->tot_len : 0);
