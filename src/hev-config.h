@@ -63,6 +63,7 @@ int hev_config_get_mapdns_cache_size (void);
 
 int hev_config_get_misc_task_stack_size (void);
 int hev_config_get_misc_tcp_buffer_size (void);
+int hev_config_get_misc_udp_recv_buffer_size (void);
 int hev_config_get_misc_udp_copy_buffer_nums (void);
 int hev_config_get_misc_max_session_count (void);
 int hev_config_get_misc_connect_timeout (void);
