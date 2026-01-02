@@ -1770,8 +1770,9 @@ direct_udp_recv_task (void *data)
 
         /* 如果DNS响应已被异步任务处理，跳过发送 */
         if (received == 0) {
-            LOG_D ("%p session: DNS response handled by async task, skipping send",
-                   session);
+            LOG_D (
+                "%p session: DNS response handled by async task, skipping send",
+                session);
         } else {
             struct pbuf *p = pbuf_alloc (PBUF_TRANSPORT, received, PBUF_RAM);
             if (p) {
@@ -1791,8 +1792,9 @@ direct_udp_recv_task (void *data)
                         LOG_E ("%p session: UDP udp_sendfrom failed: %d",
                                session, err);
                     } else {
-                        LOG_D ("%p session: UDP forwarded %d bytes to client %s:%d",
-                               session, received, src_ip, session->src_port);
+                        LOG_D (
+                            "%p session: UDP forwarded %d bytes to client %s:%d",
+                            session, received, src_ip, session->src_port);
                     }
                 } else {
                     LOG_W ("%p session: UDP pcb is NULL, cannot forward packet",

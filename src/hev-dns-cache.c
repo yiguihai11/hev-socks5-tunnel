@@ -207,8 +207,9 @@ lru_evict_oldest (void)
     if (entry->is_poisoned)
         poisoned_cache_entries--;
 
-    LOG_I ("dns-cache: LRU evicted entry for domain '%s' (size=%zu, total_memory=%zu)",
-           entry->domain, entry->entry_size, total_cache_memory);
+    LOG_I (
+        "dns-cache: LRU evicted entry for domain '%s' (size=%zu, total_memory=%zu)",
+        entry->domain, entry->entry_size, total_cache_memory);
 
     return entry;
 }
@@ -761,7 +762,8 @@ hev_dns_cache_insert (const char *domain, const uint8_t *response_data,
     while (total_cache_memory + new_entry->entry_size > DNS_CACHE_MAX_MEMORY) {
         HevDNSCacheEntry *evicted = lru_evict_oldest ();
         if (!evicted) {
-            LOG_E ("dns-cache: No entries to evict, but still over memory limit!");
+            LOG_E (
+                "dns-cache: No entries to evict, but still over memory limit!");
             break;
         }
         /* 释放被淘汰的条目 */

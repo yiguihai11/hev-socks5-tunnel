@@ -864,7 +864,7 @@ run_dns_pollution_tests (void)
     remove (chn_file);
 }
 
-static void __attribute__((unused))
+static void __attribute__ ((unused))
 run_dns_domain_tests (void)
 {
     printf ("--- Running tests for DNS domain extraction ---\n");
@@ -954,7 +954,7 @@ run_dns_domain_tests (void)
     printf ("  Small buffer handled\n");
 }
 
-static void __attribute__((unused))
+static void __attribute__ ((unused))
 run_dns_split_tunnel_tests (void)
 {
     printf ("--- Running tests for DNS split-tunnel configuration ---\n");
@@ -1013,7 +1013,7 @@ run_dns_split_tunnel_tests (void)
     printf ("  split-tunnel disabled: %s\n", split_tunnel ? "YES" : "NO");
 }
 
-static void __attribute__((unused))
+static void __attribute__ ((unused))
 run_edge_case_tests (void)
 {
     printf ("--- Running tests for edge cases ---\n");
@@ -1094,7 +1094,7 @@ run_edge_case_tests (void)
     TEST_ASSERT (1);
 }
 
-static void __attribute__((unused))
+static void __attribute__ ((unused))
 run_dns_latency_tests (void)
 {
     printf ("--- Running tests for DNS latency optimization ---\n");
@@ -1197,9 +1197,9 @@ run_dns_latency_tests (void)
 
     ip_addr_t extracted_ips[32];
     int ipv4_count, ipv6_count;
-    int ip_count = hev_dns_latency_extract_ips (
-        dns_response_multi, response_len, extracted_ips, 32, &ipv4_count,
-        &ipv6_count);
+    int ip_count = hev_dns_latency_extract_ips (dns_response_multi,
+                                                response_len, extracted_ips, 32,
+                                                &ipv4_count, &ipv6_count);
 
     TEST_ASSERT (ip_count == 3);
     TEST_ASSERT (ipv4_count == 3);
@@ -1289,8 +1289,7 @@ run_dns_latency_tests (void)
     printf ("\nTesting DNS response modification...\n");
 
     uint8_t modified_response[128];
-    memcpy (modified_response, dns_response_multi,
-            sizeof (dns_response_multi));
+    memcpy (modified_response, dns_response_multi, sizeof (dns_response_multi));
     size_t modified_len = response_len;
 
     // Select 8.8.8.8 as the best IP
@@ -1298,7 +1297,7 @@ run_dns_latency_tests (void)
     ipaddr_aton ("8.8.8.8", &best_ip);
 
     int mod_res = hev_dns_latency_modify_response (modified_response,
-                                                    &modified_len, &best_ip);
+                                                   &modified_len, &best_ip);
     TEST_ASSERT (mod_res == 0);
 
     // Verify the response was modified (should be shorter now)
@@ -1316,9 +1315,8 @@ run_dns_latency_tests (void)
     printf ("  NULL data handled\n");
 
     // Response too short
-    ip_count = hev_dns_latency_extract_ips (dns_response_multi, 5,
-                                            extracted_ips, 32, &ipv4_count,
-                                            &ipv6_count);
+    ip_count = hev_dns_latency_extract_ips (
+        dns_response_multi, 5, extracted_ips, 32, &ipv4_count, &ipv6_count);
     TEST_ASSERT (ip_count < 0);
     printf ("  Short response handled\n");
 
@@ -1427,9 +1425,10 @@ run_dns_cache_memory_lru_tests (void)
 
     // Get initial stats
     printf ("[DEBUG] Calling hev_dns_cache_get_stats...\n");
-    hev_dns_cache_get_stats (&total_entries, &poisoned, &hits, &memory, &max_memory);
-    printf ("  Initial: entries=%zu, memory=%zuKB, max=%zuMB\n",
-            total_entries, memory / 1024, max_memory / (1024 * 1024));
+    hev_dns_cache_get_stats (&total_entries, &poisoned, &hits, &memory,
+                             &max_memory);
+    printf ("  Initial: entries=%zu, memory=%zuKB, max=%zuMB\n", total_entries,
+            memory / 1024, max_memory / (1024 * 1024));
     TEST_ASSERT (max_memory == DNS_CACHE_MAX_MEMORY);
     TEST_ASSERT (max_memory == 3 * 1024 * 1024);
     printf ("    Memory limit is 3MB: OK\n");
@@ -1453,9 +1452,10 @@ run_dns_cache_memory_lru_tests (void)
     printf ("[DEBUG] Insert loop complete\n");
 
     printf ("[DEBUG] Calling hev_dns_cache_get_stats after inserts...\n");
-    hev_dns_cache_get_stats (&total_entries, &poisoned, &hits, &memory, &max_memory);
-    printf ("  After 10 inserts: entries=%zu, memory=%zuKB\n",
-            total_entries, memory / 1024);
+    hev_dns_cache_get_stats (&total_entries, &poisoned, &hits, &memory,
+                             &max_memory);
+    printf ("  After 10 inserts: entries=%zu, memory=%zuKB\n", total_entries,
+            memory / 1024);
     TEST_ASSERT (total_entries == 10);
     TEST_ASSERT (memory > 0);
     printf ("    Memory tracking works: OK\n");
@@ -1468,23 +1468,24 @@ run_dns_cache_memory_lru_tests (void)
     uint8_t *response;
     size_t response_len;
     printf ("[DEBUG] Looking up test5.example.com...\n");
-    int found = hev_dns_cache_lookup ("test5.example.com", &response,
-                                        &response_len);
+    int found =
+        hev_dns_cache_lookup ("test5.example.com", &response, &response_len);
     TEST_ASSERT (found == 1);
     printf ("    Cache hit for test5.example.com: OK\n");
 
     // Access entry 0 (should move to tail)
     printf ("[DEBUG] Looking up test0.example.com...\n");
-    found = hev_dns_cache_lookup ("test0.example.com", &response,
-                                   &response_len);
+    found =
+        hev_dns_cache_lookup ("test0.example.com", &response, &response_len);
     TEST_ASSERT (found == 1);
     printf ("    Cache hit for test0.example.com: OK\n");
 
     // Check stats updated
     printf ("[DEBUG] Getting stats after lookups...\n");
-    hev_dns_cache_get_stats (&total_entries, &poisoned, &hits, &memory, &max_memory);
-    printf ("  After lookups: entries=%zu, hits=%llu\n",
-            total_entries, (unsigned long long)hits);
+    hev_dns_cache_get_stats (&total_entries, &poisoned, &hits, &memory,
+                             &max_memory);
+    printf ("  After lookups: entries=%zu, hits=%llu\n", total_entries,
+            (unsigned long long)hits);
     TEST_ASSERT (hits >= 2);
     printf ("    Hit counter incremented: OK\n");
 
@@ -1509,7 +1510,8 @@ run_dns_cache_memory_lru_tests (void)
     printf ("[DEBUG] Second insert loop complete\n");
 
     printf ("[DEBUG] Getting final stats...\n");
-    hev_dns_cache_get_stats (&total_entries, &poisoned, &hits, &memory, &max_memory);
+    hev_dns_cache_get_stats (&total_entries, &poisoned, &hits, &memory,
+                             &max_memory);
     printf ("  After 20 total inserts: entries=%zu, memory=%zuKB/%zuMB\n",
             total_entries, memory / 1024, max_memory / (1024 * 1024));
     TEST_ASSERT (memory <= max_memory);

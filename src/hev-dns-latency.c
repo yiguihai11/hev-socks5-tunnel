@@ -35,32 +35,33 @@ static int ping_ipv4_available = -1;
 static int ping_ipv6_available = -1;
 
 /* DNS header structure */
-typedef struct {
+typedef struct
+{
     uint16_t id;
     uint16_t flags;
     uint16_t qdcount;
     uint16_t ancount;
     uint16_t nscount;
     uint16_t arcount;
-} __attribute__((packed)) DNSHeader;
+} __attribute__ ((packed)) DNSHeader;
 
 /* Helper: read big-endian uint16 */
 static inline uint16_t
-read_uint16(const uint8_t *p)
+read_uint16 (const uint8_t *p)
 {
     return (p[0] << 8) | p[1];
 }
 
 /* Helper: read big-endian uint32 */
 static inline uint32_t
-read_uint32(const uint8_t *p)
+read_uint32 (const uint8_t *p)
 {
     return (p[0] << 24) | (p[1] << 16) | (p[2] << 8) | p[3];
 }
 
 /* Helper: write big-endian uint16 */
 static inline void
-write_uint16(uint8_t *p, uint16_t v)
+write_uint16 (uint8_t *p, uint16_t v)
 {
     p[0] = (v >> 8) & 0xFF;
     p[1] = v & 0xFF;
@@ -68,8 +69,8 @@ write_uint16(uint8_t *p, uint16_t v)
 
 /* Parse DNS name with compression pointer support */
 static int
-parse_dns_name(const uint8_t *data, size_t data_len, size_t *offset,
-               char *name_out, size_t name_max)
+parse_dns_name (const uint8_t *data, size_t data_len, size_t *offset,
+                char *name_out, size_t name_max)
 {
     size_t pos = *offset;
     size_t name_len = 0;
@@ -109,7 +110,7 @@ parse_dns_name(const uint8_t *data, size_t data_len, size_t *offset,
 
         if (name_len > 0)
             name_out[name_len++] = '.';
-        memcpy(name_out + name_len, data + pos + 1, len);
+        memcpy (name_out + name_len, data + pos + 1, len);
         name_len += len;
         pos += len + 1;
     }
@@ -119,24 +120,24 @@ parse_dns_name(const uint8_t *data, size_t data_len, size_t *offset,
 
 /* Extract TTL from DNS response */
 static uint32_t
-extract_dns_ttl(const uint8_t *data, size_t len)
+extract_dns_ttl (const uint8_t *data, size_t len)
 {
-    if (len < sizeof(DNSHeader))
+    if (len < sizeof (DNSHeader))
         return 300; /* Default 5 minutes */
 
     DNSHeader *hdr = (DNSHeader *)data;
-    uint16_t ancount = ntohs(hdr->ancount);
+    uint16_t ancount = ntohs (hdr->ancount);
 
     if (ancount == 0)
         return 300;
 
-    size_t pos = sizeof(DNSHeader);
-    uint16_t qdcount = ntohs(hdr->qdcount);
+    size_t pos = sizeof (DNSHeader);
+    uint16_t qdcount = ntohs (hdr->qdcount);
 
     /* Skip query section */
     for (int i = 0; i < qdcount && pos < len; i++) {
         char domain[256];
-        if (parse_dns_name(data, len, &pos, domain, sizeof(domain)) < 0)
+        if (parse_dns_name (data, len, &pos, domain, sizeof (domain)) < 0)
             return 300;
         if (pos + 4 > len)
             return 300;
@@ -146,11 +147,11 @@ extract_dns_ttl(const uint8_t *data, size_t len)
     /* Read first answer TTL */
     if (ancount > 0 && pos < len) {
         char domain[256];
-        if (parse_dns_name(data, len, &pos, domain, sizeof(domain)) < 0)
+        if (parse_dns_name (data, len, &pos, domain, sizeof (domain)) < 0)
             return 300;
 
         if (pos + 10 <= len) {
-            uint32_t ttl = read_uint32(data + pos + 4);
+            uint32_t ttl = read_uint32 (data + pos + 4);
             return ttl > 0 ? ttl : 300;
         }
     }
@@ -159,7 +160,7 @@ extract_dns_ttl(const uint8_t *data, size_t len)
 }
 
 int
-hev_dns_latency_init(void)
+hev_dns_latency_init (void)
 {
     FILE *fp;
     int ret;
@@ -169,57 +170,61 @@ hev_dns_latency_init(void)
      * - 0 or 2 = command exists (2 means invalid usage, but command exists)
      * - 127 = command not found
      */
-    fp = popen("ping -h 2>&1 || true", "r");
+    fp = popen ("ping -h 2>&1 || true", "r");
     if (fp) {
-        ret = pclose(fp);
+        ret = pclose (fp);
         if (ret != 127) {
             ping_ipv4_available = 1;
-            LOG_I("dns-latency: ping command available for IPv4");
+            LOG_I ("dns-latency: ping command available for IPv4");
         } else {
             ping_ipv4_available = 0;
-            LOG_W("dns-latency: ping command NOT available for IPv4, ICMP testing disabled");
+            LOG_W (
+                "dns-latency: ping command NOT available for IPv4, ICMP testing disabled");
         }
     } else {
         ping_ipv4_available = 0;
-        LOG_W("dns-latency: ping command NOT available for IPv4, ICMP testing disabled");
+        LOG_W (
+            "dns-latency: ping command NOT available for IPv4, ICMP testing disabled");
     }
 
     /* Detect if 'ping6' command exists for IPv6 */
-    fp = popen("ping6 -h 2>&1 || true", "r");
+    fp = popen ("ping6 -h 2>&1 || true", "r");
     if (fp) {
-        ret = pclose(fp);
+        ret = pclose (fp);
         if (ret != 127) {
             ping_ipv6_available = 1;
-            LOG_I("dns-latency: ping6 command available for IPv6");
+            LOG_I ("dns-latency: ping6 command available for IPv6");
         } else {
             ping_ipv6_available = 0;
-            LOG_W("dns-latency: ping6 command NOT available for IPv6, ICMP testing disabled");
+            LOG_W (
+                "dns-latency: ping6 command NOT available for IPv6, ICMP testing disabled");
         }
     } else {
         ping_ipv6_available = 0;
-        LOG_W("dns-latency: ping6 command NOT available for IPv6, ICMP testing disabled");
+        LOG_W (
+            "dns-latency: ping6 command NOT available for IPv6, ICMP testing disabled");
     }
 
-    LOG_I("dns-latency: DNS latency optimization module initialized");
+    LOG_I ("dns-latency: DNS latency optimization module initialized");
     return 0;
 }
 
 void
-hev_dns_latency_fini(void)
+hev_dns_latency_fini (void)
 {
-    LOG_I("dns-latency: DNS latency optimization module finalized");
+    LOG_I ("dns-latency: DNS latency optimization module finalized");
 }
 
 int
-hev_dns_latency_extract_ips(const uint8_t *data, size_t len,
+hev_dns_latency_extract_ips (const uint8_t *data, size_t len,
                              ip_addr_t *ips_out, int max_ips,
                              int *ipv4_count_out, int *ipv6_count_out)
 {
-    if (len < sizeof(DNSHeader) || !ips_out || max_ips <= 0)
+    if (len < sizeof (DNSHeader) || !ips_out || max_ips <= 0)
         return -1;
 
     DNSHeader *hdr = (DNSHeader *)data;
-    uint16_t ancount = ntohs(hdr->ancount);
+    uint16_t ancount = ntohs (hdr->ancount);
 
     if (ancount == 0)
         return 0;
@@ -229,12 +234,12 @@ hev_dns_latency_extract_ips(const uint8_t *data, size_t len,
     int ipv6_count = 0;
 
     /* Skip query section */
-    size_t pos = sizeof(DNSHeader);
-    uint16_t qdcount = ntohs(hdr->qdcount);
+    size_t pos = sizeof (DNSHeader);
+    uint16_t qdcount = ntohs (hdr->qdcount);
 
     for (int i = 0; i < qdcount && pos < len; i++) {
         char domain[256];
-        if (parse_dns_name(data, len, &pos, domain, sizeof(domain)) < 0)
+        if (parse_dns_name (data, len, &pos, domain, sizeof (domain)) < 0)
             return -1;
         if (pos + 4 > len)
             return -1;
@@ -244,14 +249,14 @@ hev_dns_latency_extract_ips(const uint8_t *data, size_t len,
     /* Parse answer section */
     for (int i = 0; i < ancount && pos < len && count < max_ips; i++) {
         char domain[256];
-        if (parse_dns_name(data, len, &pos, domain, sizeof(domain)) < 0)
+        if (parse_dns_name (data, len, &pos, domain, sizeof (domain)) < 0)
             break;
 
         if (pos + 10 > len)
             break;
 
-        uint16_t rtype = read_uint16(data + pos);
-        uint16_t rdlen = read_uint16(data + pos + 8);
+        uint16_t rtype = read_uint16 (data + pos);
+        uint16_t rdlen = read_uint16 (data + pos + 8);
         pos += 10;
 
         if (pos + rdlen > len)
@@ -260,19 +265,20 @@ hev_dns_latency_extract_ips(const uint8_t *data, size_t len,
         /* A record (IPv4) */
         if (rtype == DNS_TYPE_A && rdlen == 4) {
             ip_addr_t ip;
-            IP_ADDR4(&ip, data[pos], data[pos + 1], data[pos + 2], data[pos + 3]);
+            IP_ADDR4 (&ip, data[pos], data[pos + 1], data[pos + 2],
+                      data[pos + 3]);
             ips_out[count++] = ip;
             ipv4_count++;
-            LOG_D("dns-latency: Extracted IPv4: %s", ipaddr_ntoa(&ip));
+            LOG_D ("dns-latency: Extracted IPv4: %s", ipaddr_ntoa (&ip));
         }
         /* AAAA record (IPv6) */
         else if (rtype == DNS_TYPE_AAAA && rdlen == 16) {
             ip_addr_t ip;
-            memcpy(ip_2_ip6(&ip)->addr, data + pos, 16);
+            memcpy (ip_2_ip6 (&ip)->addr, data + pos, 16);
             ip.type = IPADDR_TYPE_V6;
             ips_out[count++] = ip;
             ipv6_count++;
-            LOG_D("dns-latency: Extracted IPv6: %s", ipaddr_ntoa(&ip));
+            LOG_D ("dns-latency: Extracted IPv6: %s", ipaddr_ntoa (&ip));
         }
 
         pos += rdlen;
@@ -283,32 +289,32 @@ hev_dns_latency_extract_ips(const uint8_t *data, size_t len,
     if (ipv6_count_out)
         *ipv6_count_out = ipv6_count;
 
-    LOG_I("dns-latency: Extracted %d IPs (%d IPv4, %d IPv6)",
-           count, ipv4_count, ipv6_count);
+    LOG_I ("dns-latency: Extracted %d IPs (%d IPv4, %d IPv6)", count,
+           ipv4_count, ipv6_count);
 
     return count;
 }
 
 int
-hev_dns_latency_modify_response(uint8_t *data, size_t *len,
-                                const ip_addr_t *best_ip)
+hev_dns_latency_modify_response (uint8_t *data, size_t *len,
+                                 const ip_addr_t *best_ip)
 {
-    if (!data || !len || !best_ip || *len < sizeof(DNSHeader))
+    if (!data || !len || !best_ip || *len < sizeof (DNSHeader))
         return -1;
 
     DNSHeader *hdr = (DNSHeader *)data;
-    uint16_t ancount = ntohs(hdr->ancount);
+    uint16_t ancount = ntohs (hdr->ancount);
 
     if (ancount == 0)
         return 0;
 
     /* Skip query section */
-    size_t pos = sizeof(DNSHeader);
-    uint16_t qdcount = ntohs(hdr->qdcount);
+    size_t pos = sizeof (DNSHeader);
+    uint16_t qdcount = ntohs (hdr->qdcount);
 
     for (int i = 0; i < qdcount && pos < *len; i++) {
         char domain[256];
-        if (parse_dns_name(data, *len, &pos, domain, sizeof(domain)) < 0)
+        if (parse_dns_name (data, *len, &pos, domain, sizeof (domain)) < 0)
             return -1;
         if (pos + 4 > *len)
             return -1;
@@ -324,14 +330,14 @@ hev_dns_latency_modify_response(uint8_t *data, size_t *len,
     for (int i = 0; i < ancount && pos < *len; i++) {
         size_t answer_start = pos;
         char domain[256];
-        if (parse_dns_name(data, *len, &pos, domain, sizeof(domain)) < 0)
+        if (parse_dns_name (data, *len, &pos, domain, sizeof (domain)) < 0)
             break;
 
         if (pos + 10 > *len)
             break;
 
-        uint16_t rtype = read_uint16(data + pos);
-        uint16_t rdlen = read_uint16(data + pos + 8);
+        uint16_t rtype = read_uint16 (data + pos);
+        uint16_t rdlen = read_uint16 (data + pos + 8);
         pos += 10;
 
         if (pos + rdlen > *len)
@@ -339,17 +345,19 @@ hev_dns_latency_modify_response(uint8_t *data, size_t *len,
 
         /* Check if this answer matches best_ip */
         int match = 0;
-        if (IP_IS_V4(best_ip) && rtype == DNS_TYPE_A && rdlen == 4) {
+        if (IP_IS_V4 (best_ip) && rtype == DNS_TYPE_A && rdlen == 4) {
             ip_addr_t ip;
-            IP_ADDR4(&ip, data[pos], data[pos + 1], data[pos + 2], data[pos + 3]);
-            if (ip_addr_cmp(&ip, best_ip))
+            IP_ADDR4 (&ip, data[pos], data[pos + 1], data[pos + 2],
+                      data[pos + 3]);
+            if (ip_addr_cmp (&ip, best_ip))
                 match = 1;
-        } else if (IP_IS_V6(best_ip) && rtype == DNS_TYPE_AAAA && rdlen == 16) {
+        } else if (IP_IS_V6 (best_ip) && rtype == DNS_TYPE_AAAA &&
+                   rdlen == 16) {
             ip_addr_t ip;
-            memset(&ip, 0, sizeof(ip));
-            memcpy(ip_2_ip6(&ip)->addr, data + pos, 16);
+            memset (&ip, 0, sizeof (ip));
+            memcpy (ip_2_ip6 (&ip)->addr, data + pos, 16);
             ip.type = IPADDR_TYPE_V6;
-            if (ip_addr_cmp(&ip, best_ip))
+            if (ip_addr_cmp (&ip, best_ip))
                 match = 1;
         }
 
@@ -364,70 +372,71 @@ hev_dns_latency_modify_response(uint8_t *data, size_t *len,
     }
 
     if (!found) {
-        LOG_W("dns-latency: Best IP not found in DNS response");
+        LOG_W ("dns-latency: Best IP not found in DNS response");
         return -1;
     }
 
     /* Move the best answer to replace all answers */
     if (best_answer_start > first_answer_pos) {
-        memmove(data + first_answer_pos, data + best_answer_start, best_answer_len);
+        memmove (data + first_answer_pos, data + best_answer_start,
+                 best_answer_len);
     }
 
     /* Update length and ancount */
     *len = first_answer_pos + best_answer_len;
-    hdr->ancount = htons(1);
+    hdr->ancount = htons (1);
 
-    LOG_I("dns-latency: Modified DNS response to keep only %s (len=%zu)",
-           ipaddr_ntoa(best_ip), *len);
+    LOG_I ("dns-latency: Modified DNS response to keep only %s (len=%zu)",
+           ipaddr_ntoa (best_ip), *len);
 
     return 0;
 }
 
 static int
-tcp_connect_test(const ip_addr_t *ip, uint16_t port, int64_t *latency_us_out)
+tcp_connect_test (const ip_addr_t *ip, uint16_t port, int64_t *latency_us_out)
 {
     int sock = -1;
     int ret = -1;
     struct timespec start_time, end_time;
 
     /* Create socket based on IP type */
-    int family = IP_IS_V6(ip) ? AF_INET6 : AF_INET;
-    sock = socket(family, SOCK_STREAM, 0);
+    int family = IP_IS_V6 (ip) ? AF_INET6 : AF_INET;
+    sock = socket (family, SOCK_STREAM, 0);
     if (sock < 0) {
-        LOG_D("dns-latency: Failed to create socket: %s", strerror(errno));
+        LOG_D ("dns-latency: Failed to create socket: %s", strerror (errno));
         return -1;
     }
 
     /* Set non-blocking */
-    int flags = fcntl(sock, F_GETFL, 0);
-    fcntl(sock, F_SETFL, flags | O_NONBLOCK);
+    int flags = fcntl (sock, F_GETFL, 0);
+    fcntl (sock, F_SETFL, flags | O_NONBLOCK);
 
     /* Build address */
     struct sockaddr_storage addr;
-    memset(&addr, 0, sizeof(addr));
-    if (IP_IS_V6(ip)) {
+    memset (&addr, 0, sizeof (addr));
+    if (IP_IS_V6 (ip)) {
         struct sockaddr_in6 *a6 = (struct sockaddr_in6 *)&addr;
         a6->sin6_family = AF_INET6;
-        a6->sin6_port = htons(port);
-        memcpy(&a6->sin6_addr, ip_2_ip6(ip)->addr, 16);
+        a6->sin6_port = htons (port);
+        memcpy (&a6->sin6_addr, ip_2_ip6 (ip)->addr, 16);
     } else {
         struct sockaddr_in *a4 = (struct sockaddr_in *)&addr;
         a4->sin_family = AF_INET;
-        a4->sin_port = htons(port);
-        a4->sin_addr.s_addr = ip_2_ip4(ip)->addr;
+        a4->sin_port = htons (port);
+        a4->sin_addr.s_addr = ip_2_ip4 (ip)->addr;
     }
 
     /* Start timing */
-    clock_gettime(CLOCK_MONOTONIC, &start_time);
+    clock_gettime (CLOCK_MONOTONIC, &start_time);
 
     /* Connect */
-    int connect_ret = connect(sock, (struct sockaddr *)&addr,
-                              IP_IS_V6(ip) ? sizeof(struct sockaddr_in6)
-                                           : sizeof(struct sockaddr_in));
+    int connect_ret = connect (sock, (struct sockaddr *)&addr,
+                               IP_IS_V6 (ip) ? sizeof (struct sockaddr_in6) :
+                                               sizeof (struct sockaddr_in));
 
     if (connect_ret < 0 && errno != EINPROGRESS) {
-        LOG_D("dns-latency: TCP connect to %s:%d failed: %s",
-               ipaddr_ntoa(ip), port, strerror(errno));
+        LOG_D ("dns-latency: TCP connect to %s:%d failed: %s", ipaddr_ntoa (ip),
+               port, strerror (errno));
         goto cleanup;
     }
 
@@ -436,40 +445,41 @@ tcp_connect_test(const ip_addr_t *ip, uint16_t port, int64_t *latency_us_out)
     pfd.fd = sock;
     pfd.events = POLLOUT;
 
-    int poll_ret = poll(&pfd, 1, 500); /* 500ms timeout per port */
+    int poll_ret = poll (&pfd, 1, 500); /* 500ms timeout per port */
     if (poll_ret <= 0) {
-        LOG_D("dns-latency: TCP connect to %s:%d timeout/no event",
-               ipaddr_ntoa(ip), port);
+        LOG_D ("dns-latency: TCP connect to %s:%d timeout/no event",
+               ipaddr_ntoa (ip), port);
         goto cleanup;
     }
 
     /* Check for errors */
     int error = 0;
-    socklen_t len = sizeof(error);
-    if (getsockopt(sock, SOL_SOCKET, SO_ERROR, &error, &len) < 0 || error != 0) {
-        LOG_D("dns-latency: TCP connect to %s:%d failed: %s",
-               ipaddr_ntoa(ip), port, strerror(error));
+    socklen_t len = sizeof (error);
+    if (getsockopt (sock, SOL_SOCKET, SO_ERROR, &error, &len) < 0 ||
+        error != 0) {
+        LOG_D ("dns-latency: TCP connect to %s:%d failed: %s", ipaddr_ntoa (ip),
+               port, strerror (error));
         goto cleanup;
     }
 
     /* Calculate latency */
-    clock_gettime(CLOCK_MONOTONIC, &end_time);
+    clock_gettime (CLOCK_MONOTONIC, &end_time);
     *latency_us_out = (end_time.tv_sec - start_time.tv_sec) * 1000000 +
                       (end_time.tv_nsec - start_time.tv_nsec) / 1000;
 
-    LOG_I("dns-latency: TCP connect to %s:%d succeeded, latency=%lld us",
-           ipaddr_ntoa(ip), port, (long long)*latency_us_out);
+    LOG_I ("dns-latency: TCP connect to %s:%d succeeded, latency=%lld us",
+           ipaddr_ntoa (ip), port, (long long)*latency_us_out);
 
     ret = 0;
 
 cleanup:
     if (sock >= 0)
-        close(sock);
+        close (sock);
     return ret;
 }
 
 static int
-icmp_ping_test(const ip_addr_t *ip, int64_t *latency_us_out)
+icmp_ping_test (const ip_addr_t *ip, int64_t *latency_us_out)
 {
     /* Use system ping command instead of raw socket (requires root) */
     char ip_str[INET6_ADDRSTRLEN];
@@ -478,116 +488,117 @@ icmp_ping_test(const ip_addr_t *ip, int64_t *latency_us_out)
     int ret;
 
     /* Check if ping command is available */
-    if (IP_IS_V6(ip)) {
+    if (IP_IS_V6 (ip)) {
         if (ping_ipv6_available == 0) {
-            LOG_D("dns-latency: ping6 not available, skipping ICMP test for IPv6");
+            LOG_D (
+                "dns-latency: ping6 not available, skipping ICMP test for IPv6");
             return -1;
         }
     } else {
         if (ping_ipv4_available == 0) {
-            LOG_D("dns-latency: ping not available, skipping ICMP test for IPv4");
+            LOG_D (
+                "dns-latency: ping not available, skipping ICMP test for IPv4");
             return -1;
         }
     }
 
-    ipaddr_ntoa_r(ip, ip_str, sizeof(ip_str));
+    ipaddr_ntoa_r (ip, ip_str, sizeof (ip_str));
 
     /* Build ping command:
      * - ping -c 1 -W 1 <IPv4> for IPv4 addresses
      * - ping6 -c 1 -W 1 <IPv6> for IPv6 addresses
      */
-    if (IP_IS_V6(ip)) {
-        snprintf(cmd, sizeof(cmd), "ping6 -c 1 -W 1 %s", ip_str);
+    if (IP_IS_V6 (ip)) {
+        snprintf (cmd, sizeof (cmd), "ping6 -c 1 -W 1 %s", ip_str);
     } else {
-        snprintf(cmd, sizeof(cmd), "ping -c 1 -W 1 %s", ip_str);
+        snprintf (cmd, sizeof (cmd), "ping -c 1 -W 1 %s", ip_str);
     }
 
-    LOG_D("dns-latency: Running ICMP ping: %s", cmd);
+    LOG_D ("dns-latency: Running ICMP ping: %s", cmd);
 
     /* Start timing */
-    clock_gettime(CLOCK_MONOTONIC, &start_time);
+    clock_gettime (CLOCK_MONOTONIC, &start_time);
 
     /* Execute ping command */
-    FILE *fp = popen(cmd, "r");
+    FILE *fp = popen (cmd, "r");
     if (!fp) {
-        LOG_D("dns-latency: Failed to execute ping command: %s", strerror(errno));
+        LOG_D ("dns-latency: Failed to execute ping command: %s",
+               strerror (errno));
         return -1;
     }
 
     /* Read output (we don't need it, just wait for completion) */
     char buffer[256];
-    while (fgets(buffer, sizeof(buffer), fp) != NULL) {
+    while (fgets (buffer, sizeof (buffer), fp) != NULL) {
         /* Discard output */
     }
 
-    ret = pclose(fp);
+    ret = pclose (fp);
 
     /* End timing */
-    clock_gettime(CLOCK_MONOTONIC, &end_time);
+    clock_gettime (CLOCK_MONOTONIC, &end_time);
 
     /* Check exit status */
     if (ret == 0) {
         *latency_us_out = (end_time.tv_sec - start_time.tv_sec) * 1000000 +
                           (end_time.tv_nsec - start_time.tv_nsec) / 1000;
-        LOG_I("dns-latency: ICMP ping to %s succeeded, latency=%lld us",
+        LOG_I ("dns-latency: ICMP ping to %s succeeded, latency=%lld us",
                ip_str, (long long)*latency_us_out);
         return 0;
     }
 
-    LOG_D("dns-latency: ICMP ping to %s failed (exit=%d)", ip_str, ret);
+    LOG_D ("dns-latency: ICMP ping to %s failed (exit=%d)", ip_str, ret);
     return -1;
 }
 
 int
-hev_dns_latency_test_ip(const ip_addr_t *ip,
-                        DnsLatencyResult *result_out,
-                        int timeout_ms)
+hev_dns_latency_test_ip (const ip_addr_t *ip, DnsLatencyResult *result_out,
+                         int timeout_ms)
 {
     if (!ip || !result_out)
         return -1;
 
-    memset(result_out, 0, sizeof(DnsLatencyResult));
-    ip_addr_copy(result_out->ip, *ip);
+    memset (result_out, 0, sizeof (DnsLatencyResult));
+    ip_addr_copy (result_out->ip, *ip);
 
     /* Try TCP 443 first */
-    if (tcp_connect_test(ip, 443, &result_out->latency_us) == 0) {
+    if (tcp_connect_test (ip, 443, &result_out->latency_us) == 0) {
         result_out->method = DNS_LATENCY_METHOD_TCP443;
         result_out->success = 1;
         return 0;
     }
 
     /* Try TCP 80 */
-    if (tcp_connect_test(ip, 80, &result_out->latency_us) == 0) {
+    if (tcp_connect_test (ip, 80, &result_out->latency_us) == 0) {
         result_out->method = DNS_LATENCY_METHOD_TCP80;
         result_out->success = 1;
         return 0;
     }
 
     /* Try ICMP ping */
-    if (icmp_ping_test(ip, &result_out->latency_us) == 0) {
+    if (icmp_ping_test (ip, &result_out->latency_us) == 0) {
         result_out->method = DNS_LATENCY_METHOD_ICMP;
         result_out->success = 1;
         return 0;
     }
 
-    LOG_W("dns-latency: All latency tests failed for %s", ipaddr_ntoa(ip));
+    LOG_W ("dns-latency: All latency tests failed for %s", ipaddr_ntoa (ip));
     result_out->success = 0;
     return -1;
 }
 
 int
-hev_dns_latency_test_ip_all(const ip_addr_t *ip,
-                            DnsLatencyResult *results_out,
-                            int timeout_ms)
+hev_dns_latency_test_ip_all (const ip_addr_t *ip, DnsLatencyResult *results_out,
+                             int timeout_ms)
 {
     if (!ip || !results_out)
         return -1;
 
     /* Test TCP 443 */
-    memset(&results_out[0], 0, sizeof(DnsLatencyResult));
-    ip_addr_copy(results_out[0].ip, *ip);
+    memset (&results_out[0], 0, sizeof (DnsLatencyResult));
+    ip_addr_copy (results_out[0].ip, *ip);
     results_out[0].method = DNS_LATENCY_METHOD_TCP443;
-    if (tcp_connect_test(ip, 443, &results_out[0].latency_us) == 0) {
+    if (tcp_connect_test (ip, 443, &results_out[0].latency_us) == 0) {
         results_out[0].success = 1;
     } else {
         results_out[0].success = 0;
@@ -595,10 +606,10 @@ hev_dns_latency_test_ip_all(const ip_addr_t *ip,
     }
 
     /* Test TCP 80 */
-    memset(&results_out[1], 0, sizeof(DnsLatencyResult));
-    ip_addr_copy(results_out[1].ip, *ip);
+    memset (&results_out[1], 0, sizeof (DnsLatencyResult));
+    ip_addr_copy (results_out[1].ip, *ip);
     results_out[1].method = DNS_LATENCY_METHOD_TCP80;
-    if (tcp_connect_test(ip, 80, &results_out[1].latency_us) == 0) {
+    if (tcp_connect_test (ip, 80, &results_out[1].latency_us) == 0) {
         results_out[1].success = 1;
     } else {
         results_out[1].success = 0;
@@ -606,10 +617,10 @@ hev_dns_latency_test_ip_all(const ip_addr_t *ip,
     }
 
     /* Test ICMP ping */
-    memset(&results_out[2], 0, sizeof(DnsLatencyResult));
-    ip_addr_copy(results_out[2].ip, *ip);
+    memset (&results_out[2], 0, sizeof (DnsLatencyResult));
+    ip_addr_copy (results_out[2].ip, *ip);
     results_out[2].method = DNS_LATENCY_METHOD_ICMP;
-    if (icmp_ping_test(ip, &results_out[2].latency_us) == 0) {
+    if (icmp_ping_test (ip, &results_out[2].latency_us) == 0) {
         results_out[2].success = 1;
     } else {
         results_out[2].success = 0;
@@ -620,7 +631,8 @@ hev_dns_latency_test_ip_all(const ip_addr_t *ip,
 }
 
 /* Context for async optimization task */
-typedef struct _DnsLatencyOptimizeContext {
+typedef struct _DnsLatencyOptimizeContext
+{
     uint8_t *response_data;
     size_t response_len;
     char domain[256];
@@ -632,7 +644,7 @@ typedef struct _DnsLatencyOptimizeContext {
 
 /* Async optimization task */
 static void
-dns_latency_optimize_task(void *data)
+dns_latency_optimize_task (void *data)
 {
     DnsLatencyOptimizeContext *ctx = (DnsLatencyOptimizeContext *)data;
     ip_addr_t ips[32]; /* Max 32 IPs */
@@ -642,46 +654,53 @@ dns_latency_optimize_task(void *data)
     int64_t best_tcp_latency = INT64_MAX;
     int tcp_success_count = 0;
 
-    LOG_I("dns-latency: Starting latency optimization for domain: %s", ctx->domain);
+    LOG_I ("dns-latency: Starting latency optimization for domain: %s",
+           ctx->domain);
 
     /* Extract all IPs */
     int ipv4_count, ipv6_count;
-    ip_count = hev_dns_latency_extract_ips(ctx->response_data, ctx->response_len,
-                                            ips, 32, &ipv4_count, &ipv6_count);
+    ip_count = hev_dns_latency_extract_ips (ctx->response_data,
+                                            ctx->response_len, ips, 32,
+                                            &ipv4_count, &ipv6_count);
 
     if (ip_count <= 0) {
-        LOG_W("dns-latency: No IPs extracted from DNS response for %s", ctx->domain);
+        LOG_W ("dns-latency: No IPs extracted from DNS response for %s",
+               ctx->domain);
         goto cleanup;
     }
 
     if (ip_count == 1) {
-        LOG_I("dns-latency: Only 1 IP in response, no optimization needed: %s",
-               ipaddr_ntoa(&ips[0]));
+        LOG_I ("dns-latency: Only 1 IP in response, no optimization needed: %s",
+               ipaddr_ntoa (&ips[0]));
         /* Still cache the response for consistency */
-        uint32_t ttl = extract_dns_ttl(ctx->response_data, ctx->response_len);
-        hev_dns_cache_insert(ctx->domain, ctx->response_data, ctx->response_len, ttl, 0);
+        uint32_t ttl = extract_dns_ttl (ctx->response_data, ctx->response_len);
+        hev_dns_cache_insert (ctx->domain, ctx->response_data,
+                              ctx->response_len, ttl, 0);
         goto send_response;
     }
 
     /* First round: Test TCP latency for all IPs */
-    int timeout_ms = hev_config_get_dns_latency_timeout_ms();
+    int timeout_ms = hev_config_get_dns_latency_timeout_ms ();
     int per_ip_timeout = timeout_ms / ip_count;
 
-    LOG_I("dns-latency: Testing TCP latency for %d IPs (timeout=%dms each)",
+    LOG_I ("dns-latency: Testing TCP latency for %d IPs (timeout=%dms each)",
            ip_count, per_ip_timeout);
 
     for (int i = 0; i < ip_count; i++) {
-        if (hev_dns_latency_test_ip(&ips[i], &results[i], per_ip_timeout) == 0) {
-            if (results[i].success && results[i].method <= DNS_LATENCY_METHOD_TCP80) {
+        if (hev_dns_latency_test_ip (&ips[i], &results[i], per_ip_timeout) ==
+            0) {
+            if (results[i].success &&
+                results[i].method <= DNS_LATENCY_METHOD_TCP80) {
                 /* TCP test successful (443 or 80) */
                 tcp_success_count++;
                 if (results[i].latency_us < best_tcp_latency) {
                     best_tcp_latency = results[i].latency_us;
                     best_tcp_idx = i;
                 }
-                LOG_I("dns-latency: IP %s TCP latency=%lld us (port=%d)",
-                       ipaddr_ntoa(&ips[i]), (long long)results[i].latency_us,
-                       results[i].method == DNS_LATENCY_METHOD_TCP443 ? 443 : 80);
+                LOG_I ("dns-latency: IP %s TCP latency=%lld us (port=%d)",
+                       ipaddr_ntoa (&ips[i]), (long long)results[i].latency_us,
+                       results[i].method == DNS_LATENCY_METHOD_TCP443 ? 443 :
+                                                                        80);
             }
         }
     }
@@ -693,64 +712,70 @@ dns_latency_optimize_task(void *data)
         /* Use best TCP result */
         best_idx = best_tcp_idx;
         best_latency = best_tcp_latency;
-        LOG_I("dns-latency: Using best TCP result: %s with latency=%lld us",
-               ipaddr_ntoa(&ips[best_idx]), (long long)best_latency);
+        LOG_I ("dns-latency: Using best TCP result: %s with latency=%lld us",
+               ipaddr_ntoa (&ips[best_idx]), (long long)best_latency);
     } else {
         /* All TCP tests failed, try ICMP ping */
-        LOG_W("dns-latency: All TCP tests failed, trying ICMP ping...");
+        LOG_W ("dns-latency: All TCP tests failed, trying ICMP ping...");
 
         for (int i = 0; i < ip_count; i++) {
-            if (hev_dns_latency_test_ip(&ips[i], &results[i], per_ip_timeout) == 0) {
-                if (results[i].success && results[i].method == DNS_LATENCY_METHOD_ICMP) {
+            if (hev_dns_latency_test_ip (&ips[i], &results[i],
+                                         per_ip_timeout) == 0) {
+                if (results[i].success &&
+                    results[i].method == DNS_LATENCY_METHOD_ICMP) {
                     if (results[i].latency_us < best_latency) {
                         best_latency = results[i].latency_us;
                         best_idx = i;
                     }
-                    LOG_I("dns-latency: IP %s ICMP latency=%lld us",
-                           ipaddr_ntoa(&ips[i]), (long long)results[i].latency_us);
+                    LOG_I ("dns-latency: IP %s ICMP latency=%lld us",
+                           ipaddr_ntoa (&ips[i]),
+                           (long long)results[i].latency_us);
                 }
             }
         }
     }
 
     if (best_idx < 0) {
-        LOG_W("dns-latency: No reachable IP found for %s, sending original response",
-               ctx->domain);
+        LOG_W (
+            "dns-latency: No reachable IP found for %s, sending original response",
+            ctx->domain);
         goto send_response;
     }
 
-    LOG_I("dns-latency: Best IP for %s is %s with latency=%lld us",
-           ctx->domain, ipaddr_ntoa(&ips[best_idx]), (long long)best_latency);
+    LOG_I ("dns-latency: Best IP for %s is %s with latency=%lld us",
+           ctx->domain, ipaddr_ntoa (&ips[best_idx]), (long long)best_latency);
 
     /* Modify DNS response to keep only the best IP */
-    uint8_t *modified_response = hev_malloc(ctx->response_len);
+    uint8_t *modified_response = hev_malloc (ctx->response_len);
     if (!modified_response) {
-        LOG_E("dns-latency: Failed to allocate buffer for modified response");
+        LOG_E ("dns-latency: Failed to allocate buffer for modified response");
         goto send_response;
     }
 
-    memcpy(modified_response, ctx->response_data, ctx->response_len);
+    memcpy (modified_response, ctx->response_data, ctx->response_len);
     size_t modified_len = ctx->response_len;
 
-    if (hev_dns_latency_modify_response(modified_response, &modified_len,
-                                        &ips[best_idx]) == 0) {
+    if (hev_dns_latency_modify_response (modified_response, &modified_len,
+                                         &ips[best_idx]) == 0) {
         /* Cache the optimized response */
-        uint32_t ttl = extract_dns_ttl(modified_response, modified_len);
-        hev_dns_cache_insert(ctx->domain, modified_response, modified_len, ttl, 0);
+        uint32_t ttl = extract_dns_ttl (modified_response, modified_len);
+        hev_dns_cache_insert (ctx->domain, modified_response, modified_len, ttl,
+                              0);
 
         /* Send optimized response */
-        struct pbuf *p = pbuf_alloc(PBUF_TRANSPORT, modified_len, PBUF_RAM);
+        struct pbuf *p = pbuf_alloc (PBUF_TRANSPORT, modified_len, PBUF_RAM);
         if (p) {
-            memcpy(p->payload, modified_response, modified_len);
-            udp_sendto(ctx->pcb, p, &ctx->client_ip, ctx->client_port);
-            pbuf_free(p);
-            LOG_I("dns-latency: Sent optimized DNS response to client (%zu bytes)",
-                   modified_len);
+            memcpy (p->payload, modified_response, modified_len);
+            udp_sendto (ctx->pcb, p, &ctx->client_ip, ctx->client_port);
+            pbuf_free (p);
+            LOG_I (
+                "dns-latency: Sent optimized DNS response to client (%zu bytes)",
+                modified_len);
         }
 
-        hev_free(modified_response);
+        hev_free (modified_response);
     } else {
-        hev_free(modified_response);
+        hev_free (modified_response);
         goto send_response;
     }
 
@@ -759,74 +784,81 @@ dns_latency_optimize_task(void *data)
 send_response:
     /* Send original response if optimization failed */
     {
-        struct pbuf *p = pbuf_alloc(PBUF_TRANSPORT, ctx->response_len, PBUF_RAM);
+        struct pbuf *p =
+            pbuf_alloc (PBUF_TRANSPORT, ctx->response_len, PBUF_RAM);
         if (p) {
-            memcpy(p->payload, ctx->response_data, ctx->response_len);
-            udp_sendto(ctx->pcb, p, &ctx->client_ip, ctx->client_port);
-            pbuf_free(p);
-            LOG_I("dns-latency: Sent original DNS response to client (%zu bytes)",
-                   ctx->response_len);
+            memcpy (p->payload, ctx->response_data, ctx->response_len);
+            udp_sendto (ctx->pcb, p, &ctx->client_ip, ctx->client_port);
+            pbuf_free (p);
+            LOG_I (
+                "dns-latency: Sent original DNS response to client (%zu bytes)",
+                ctx->response_len);
         }
     }
 
 cleanup:
     if (ctx->response_data)
-        hev_free(ctx->response_data);
-    hev_object_unref(HEV_OBJECT(ctx->base));
-    hev_free(ctx);
+        hev_free (ctx->response_data);
+    hev_object_unref (HEV_OBJECT (ctx->base));
+    hev_free (ctx);
 
-    LOG_I("dns-latency: Optimization task finished for domain: %s", ctx->domain);
+    LOG_I ("dns-latency: Optimization task finished for domain: %s",
+           ctx->domain);
 }
 
 int
-hev_dns_latency_optimize_response_async(
-    const uint8_t *response_data, size_t response_len,
-    const char *domain, struct udp_pcb *pcb,
-    const ip_addr_t *client_ip, uint16_t client_port,
-    HevSocks5 *base)
+hev_dns_latency_optimize_response_async (const uint8_t *response_data,
+                                         size_t response_len,
+                                         const char *domain,
+                                         struct udp_pcb *pcb,
+                                         const ip_addr_t *client_ip,
+                                         uint16_t client_port, HevSocks5 *base)
 {
-    if (!response_data || response_len == 0 || !domain || !pcb || !client_ip || !base) {
-        LOG_E("dns-latency: Invalid parameters for async optimization");
+    if (!response_data || response_len == 0 || !domain || !pcb || !client_ip ||
+        !base) {
+        LOG_E ("dns-latency: Invalid parameters for async optimization");
         return -1;
     }
 
     /* Allocate context */
-    DnsLatencyOptimizeContext *ctx = hev_malloc0(sizeof(DnsLatencyOptimizeContext));
+    DnsLatencyOptimizeContext *ctx =
+        hev_malloc0 (sizeof (DnsLatencyOptimizeContext));
     if (!ctx) {
-        LOG_E("dns-latency: Failed to allocate optimization context");
+        LOG_E ("dns-latency: Failed to allocate optimization context");
         return -1;
     }
 
     /* Copy response data */
-    ctx->response_data = hev_malloc(response_len);
+    ctx->response_data = hev_malloc (response_len);
     if (!ctx->response_data) {
-        hev_free(ctx);
-        LOG_E("dns-latency: Failed to allocate response buffer");
+        hev_free (ctx);
+        LOG_E ("dns-latency: Failed to allocate response buffer");
         return -1;
     }
-    memcpy(ctx->response_data, response_data, response_len);
+    memcpy (ctx->response_data, response_data, response_len);
     ctx->response_len = response_len;
 
-    strncpy(ctx->domain, domain, sizeof(ctx->domain) - 1);
+    strncpy (ctx->domain, domain, sizeof (ctx->domain) - 1);
     ctx->pcb = pcb;
-    ip_addr_copy(ctx->client_ip, *client_ip);
+    ip_addr_copy (ctx->client_ip, *client_ip);
     ctx->client_port = client_port;
     ctx->base = base;
-    hev_object_ref(HEV_OBJECT(base));
+    hev_object_ref (HEV_OBJECT (base));
 
     /* Create and run async task */
-    int stack_size = hev_config_get_misc_task_stack_size();
-    HevTask *task = hev_task_new(stack_size);
+    int stack_size = hev_config_get_misc_task_stack_size ();
+    HevTask *task = hev_task_new (stack_size);
     if (!task) {
-        hev_free(ctx->response_data);
-        hev_object_unref(HEV_OBJECT(base));
-        hev_free(ctx);
-        LOG_E("dns-latency: Failed to create optimization task");
+        hev_free (ctx->response_data);
+        hev_object_unref (HEV_OBJECT (base));
+        hev_free (ctx);
+        LOG_E ("dns-latency: Failed to create optimization task");
         return 0; /* Return 0 to let caller continue normal flow */
     }
 
-    hev_task_run(task, dns_latency_optimize_task, ctx);
-    LOG_I("dns-latency: Started async optimization task for domain: %s", domain);
+    hev_task_run (task, dns_latency_optimize_task, ctx);
+    LOG_I ("dns-latency: Started async optimization task for domain: %s",
+           domain);
 
     return 1; /* Return 1 to indicate async task started */
 }

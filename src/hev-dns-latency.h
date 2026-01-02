@@ -22,21 +22,23 @@ extern "C" {
 typedef struct _HevSocks5 HevSocks5;
 
 /* DNS record types */
-#define DNS_TYPE_A    1
+#define DNS_TYPE_A 1
 #define DNS_TYPE_AAAA 28
 
 /* IP latency test method */
-typedef enum {
+typedef enum
+{
     DNS_LATENCY_METHOD_TCP443 = 0,
-    DNS_LATENCY_METHOD_TCP80  = 1,
-    DNS_LATENCY_METHOD_ICMP   = 2
+    DNS_LATENCY_METHOD_TCP80 = 1,
+    DNS_LATENCY_METHOD_ICMP = 2
 } DnsLatencyTestMethod;
 
 /* IP latency test result */
-typedef struct _DnsLatencyResult {
-    ip_addr_t ip;               /* lwIP ip_addr_t supports IPv4/IPv6 */
+typedef struct _DnsLatencyResult
+{
+    ip_addr_t ip; /* lwIP ip_addr_t supports IPv4/IPv6 */
     DnsLatencyTestMethod method;
-    int64_t latency_us;         /* microseconds */
+    int64_t latency_us; /* microseconds */
     int success;
 } DnsLatencyResult;
 
@@ -47,14 +49,14 @@ typedef struct _DnsLatencyResult {
  *
  * Returns: 0 on success, -1 on failure
  */
-int hev_dns_latency_init(void);
+int hev_dns_latency_init (void);
 
 /**
  * hev_dns_latency_fini:
  *
  * Cleanup DNS latency optimization module
  */
-void hev_dns_latency_fini(void);
+void hev_dns_latency_fini (void);
 
 /**
  * hev_dns_latency_extract_ips:
@@ -69,7 +71,7 @@ void hev_dns_latency_fini(void);
  *
  * Returns: number of IPs extracted, -1 on error
  */
-int hev_dns_latency_extract_ips(const uint8_t *data, size_t len,
+int hev_dns_latency_extract_ips (const uint8_t *data, size_t len,
                                  ip_addr_t *ips_out, int max_ips,
                                  int *ipv4_count_out, int *ipv6_count_out);
 
@@ -83,8 +85,8 @@ int hev_dns_latency_extract_ips(const uint8_t *data, size_t len,
  *
  * Returns: 0 on success, -1 on error
  */
-int hev_dns_latency_modify_response(uint8_t *data, size_t *len,
-                                   const ip_addr_t *best_ip);
+int hev_dns_latency_modify_response (uint8_t *data, size_t *len,
+                                     const ip_addr_t *best_ip);
 
 /**
  * hev_dns_latency_test_ip:
@@ -96,9 +98,8 @@ int hev_dns_latency_modify_response(uint8_t *data, size_t *len,
  *
  * Returns: 0 on success (result in result_out), -1 on failure
  */
-int hev_dns_latency_test_ip(const ip_addr_t *ip,
-                            DnsLatencyResult *result_out,
-                            int timeout_ms);
+int hev_dns_latency_test_ip (const ip_addr_t *ip, DnsLatencyResult *result_out,
+                             int timeout_ms);
 
 /**
  * hev_dns_latency_test_ip_all:
@@ -111,9 +112,8 @@ int hev_dns_latency_test_ip(const ip_addr_t *ip,
  *
  * Returns: 0 on success, -1 on failure
  */
-int hev_dns_latency_test_ip_all(const ip_addr_t *ip,
-                                DnsLatencyResult *results_out,
-                                int timeout_ms);
+int hev_dns_latency_test_ip_all (const ip_addr_t *ip,
+                                 DnsLatencyResult *results_out, int timeout_ms);
 
 /**
  * hev_dns_latency_optimize_response_async:
@@ -137,10 +137,9 @@ int hev_dns_latency_test_ip_all(const ip_addr_t *ip,
  *          0 if failed to start (caller should continue normal flow),
  *          -1 on error
  */
-int hev_dns_latency_optimize_response_async(
-    const uint8_t *response_data, size_t response_len,
-    const char *domain, struct udp_pcb *pcb,
-    const ip_addr_t *client_ip, uint16_t client_port,
+int hev_dns_latency_optimize_response_async (
+    const uint8_t *response_data, size_t response_len, const char *domain,
+    struct udp_pcb *pcb, const ip_addr_t *client_ip, uint16_t client_port,
     HevSocks5 *base);
 
 #ifdef __cplusplus

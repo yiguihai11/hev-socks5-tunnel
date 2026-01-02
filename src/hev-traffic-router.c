@@ -199,9 +199,10 @@ hev_traffic_router_fini (void)
     size_t total, poisoned, memory, max_memory;
     uint64_t hits;
     hev_dns_cache_get_stats (&total, &poisoned, &hits, &memory, &max_memory);
-    LOG_I ("router: DNS cache stats - total:%zu, poisoned:%zu, hits:%llu, memory:%zu/%zuMB",
-           total, poisoned, (unsigned long long)hits, memory / (1024 * 1024),
-           max_memory / (1024 * 1024));
+    LOG_I (
+        "router: DNS cache stats - total:%zu, poisoned:%zu, hits:%llu, memory:%zu/%zuMB",
+        total, poisoned, (unsigned long long)hits, memory / (1024 * 1024),
+        max_memory / (1024 * 1024));
 
     hev_dns_cache_fini ();
 
