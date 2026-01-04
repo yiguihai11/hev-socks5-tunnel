@@ -175,7 +175,7 @@ static char dns_fwd_target_ip4[64];
 static char dns_fwd_target_ip6[64];
 
 /* chnroutes */
-static int chnroutes_enabled = 1; /* 默认启用 */
+static int chnroutes_enabled = 0; /* 默认禁用 */
 static char chnroutes_file_path[1024];
 
 /* smart-proxy */
@@ -190,7 +190,7 @@ static int acl_enabled = 0; /* 默认禁用 */
 static char acl_file_path[1024];
 
 /* dns-split-tunnel */
-static int dns_split_tunnel = 1; /* 默认启用 */
+static int dns_split_tunnel = 0; /* 默认禁用 */
 static char *foreign_dns_servers[32]; /* 所有DNS服务器（混合IPv4和IPv6） */
 static int foreign_dns_count = 0;
 static char *foreign_dns_v4[16]; /* 自动分类后的IPv4列表 */

@@ -62,7 +62,7 @@ socks5:
     # Socket mark (UDP连接专用)
 #   mark: 456
 
-#dns-forwarder:
+dns-forwarder:
   # Enable DNS forwarder feature (default: false)
   # When enabled, DNS queries to virtual-ip are redirected to target-ip
   enabled: false
@@ -83,8 +83,8 @@ socks5:
 #  target-ip6: '[2606:4700:4700::1111]:53'
 
 dns-split-tunnel:
-  # 启用 DNS 分流功能
-  split-tunnel: true
+  # 启用 DNS 分流功能 (default: false)
+  split-tunnel: false
 
   # 国外 DNS 服务器列表（自动分类 IPv4/IPv6）
   # 当查询国内 DNS (如 119.29.29.29) 检测到污染时，
@@ -110,11 +110,11 @@ chnroutes:
   # When enabled, traffic to IPs within the specified file will be considered "domestic".
   # This allows for different routing decisions, e.g., domestic traffic can be connected
   # directly, while other traffic goes through the SOCKS5 proxy.
-  enabled: true
+  enabled: false
   # Path to the chnroutes file containing Chinese IP ranges.
   file-path: "conf/chnroutes.txt"
 
-#smart-proxy:
+smart-proxy:
   # Enable smart-proxy feature (default: false)
   # When enabled, provides intelligent fallback for non-domestic TCP traffic:
   # 1. First tries direct connection
