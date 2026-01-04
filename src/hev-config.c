@@ -464,14 +464,10 @@ hev_config_parse_dns_split_tunnel (yaml_document_t *doc, yaml_node_t *base)
 
         node = yaml_document_get_node (doc, pair->value);
 
-        if (0 == strcmp (key, "split-tunnel")) {
+        if (0 == strcmp (key, "enabled") || 0 == strcmp (key, "split-tunnel")) {
             if (YAML_SCALAR_NODE == node->type) {
                 const char *value = (const char *)node->data.scalar.value;
-                if (0 == strcmp (value, "true") || 0 == strcmp (value, "1") ||
-                    0 == strcmp (value, "yes"))
-                    dns_split_tunnel = 1;
-                else
-                    dns_split_tunnel = 0;
+                dns_split_tunnel = yaml_parse_bool (value);
                 LOG_I ("config: dns-split-tunnel = %d", dns_split_tunnel);
             }
         } else if (0 == strcmp (key, "foreign-dns")) {

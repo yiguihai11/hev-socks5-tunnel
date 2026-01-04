@@ -84,7 +84,7 @@ dns-forwarder:
 
 dns-split-tunnel:
   # 启用 DNS 分流功能 (default: false)
-  split-tunnel: false
+  enabled: false
 
   # 国外 DNS 服务器列表（自动分类 IPv4/IPv6）
   # 当查询国内 DNS (如 119.29.29.29) 检测到污染时，
