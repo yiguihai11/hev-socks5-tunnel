@@ -464,7 +464,7 @@ hev_config_parse_dns_split_tunnel (yaml_document_t *doc, yaml_node_t *base)
 
         node = yaml_document_get_node (doc, pair->value);
 
-        if (0 == strcmp (key, "enabled") || 0 == strcmp (key, "split-tunnel")) {
+        if (0 == strcmp (key, "enabled")) {
             if (YAML_SCALAR_NODE == node->type) {
                 const char *value = (const char *)node->data.scalar.value;
                 dns_split_tunnel = yaml_parse_bool (value);
