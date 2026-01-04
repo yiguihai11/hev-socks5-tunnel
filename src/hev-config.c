@@ -168,6 +168,7 @@ static int limit_nofile = 65535;
 static int log_level = HEV_LOGGER_WARN;
 
 /* dns-forwarder */
+static int dns_forwarder_enabled = 0; /* 默认禁用 */
 static char dns_fwd_virtual_ip4[64];
 static char dns_fwd_virtual_ip6[64];
 static char dns_fwd_target_ip4[64];
@@ -178,14 +179,14 @@ static int chnroutes_enabled = 1; /* 默认启用 */
 static char chnroutes_file_path[1024];
 
 /* smart-proxy */
-static int smart_proxy_enabled = 1; /* 默认启用 */
+static int smart_proxy_enabled = 0; /* 默认禁用 */
 static int smart_proxy_timeout_ms;
 static int smart_proxy_blocked_ip_expiry_minutes;
 static int *smart_proxy_probe_ports = NULL;
 static int smart_proxy_probe_ports_count = 0;
 
 /* acl */
-static int acl_enabled = 1; /* 默认启用 */
+static int acl_enabled = 0; /* 默认禁用 */
 static char acl_file_path[1024];
 
 /* dns-split-tunnel */
@@ -423,7 +424,9 @@ hev_config_parse_dns_forwarder (yaml_document_t *doc, yaml_node_t *base)
             break;
         value = (const char *)node->data.scalar.value;
 
-        if (0 == strcmp (key, "virtual-ip4"))
+        if (0 == strcmp (key, "enabled"))
+            dns_forwarder_enabled = yaml_parse_bool (value);
+        else if (0 == strcmp (key, "virtual-ip4"))
             strncpy (dns_fwd_virtual_ip4, value,
                      sizeof (dns_fwd_virtual_ip4) - 1);
         else if (0 == strcmp (key, "virtual-ip6"))
@@ -1091,6 +1094,8 @@ hev_config_get_misc_log_level (void)
 const char *
 hev_config_get_dns_forwarder_virtual_ip4 (void)
 {
+    if (!dns_forwarder_enabled)
+        return NULL;
     if (!dns_fwd_virtual_ip4[0])
         return NULL;
     return dns_fwd_virtual_ip4;
@@ -1099,6 +1104,8 @@ hev_config_get_dns_forwarder_virtual_ip4 (void)
 const char *
 hev_config_get_dns_forwarder_virtual_ip6 (void)
 {
+    if (!dns_forwarder_enabled)
+        return NULL;
     if (!dns_fwd_virtual_ip6[0])
         return NULL;
     return dns_fwd_virtual_ip6;
@@ -1107,6 +1114,8 @@ hev_config_get_dns_forwarder_virtual_ip6 (void)
 const char *
 hev_config_get_dns_forwarder_target_ip4 (void)
 {
+    if (!dns_forwarder_enabled)
+        return NULL;
     if (!dns_fwd_target_ip4[0])
         return NULL;
     return dns_fwd_target_ip4;
@@ -1115,6 +1124,8 @@ hev_config_get_dns_forwarder_target_ip4 (void)
 const char *
 hev_config_get_dns_forwarder_target_ip6 (void)
 {
+    if (!dns_forwarder_enabled)
+        return NULL;
     if (!dns_fwd_target_ip6[0])
         return NULL;
     return dns_fwd_target_ip6;

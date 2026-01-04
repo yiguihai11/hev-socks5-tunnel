@@ -63,6 +63,10 @@ socks5:
 #   mark: 456
 
 #dns-forwarder:
+  # Enable DNS forwarder feature (default: false)
+  # When enabled, DNS queries to virtual-ip are redirected to target-ip
+  enabled: false
+
   # Hijack DNS queries sent to this IPv4 address inside the tunnel.
 #  virtual-ip4: 8.8.8.8
   # Hijack DNS queries sent to this IPv6 address inside the tunnel.
@@ -111,6 +115,13 @@ chnroutes:
   file-path: "conf/chnroutes.txt"
 
 #smart-proxy:
+  # Enable smart-proxy feature (default: false)
+  # When enabled, provides intelligent fallback for non-domestic TCP traffic:
+  # 1. First tries direct connection
+  # 2. If timeout, falls back to SOCKS5 proxy
+  # 3. Temporarily blocks slow IPs for future connections
+  enabled: false
+
   # Enables a "smart" fallback mechanism for non-domestic TCP traffic.
   # When a TCP connection to a non-domestic IP is attempted:
   # 1. It first tries to connect directly.
@@ -136,6 +147,10 @@ chnroutes:
 #    - 443
 
 #acl:
+  # Enable ACL feature (default: false)
+  # When enabled, blocks IP addresses and hostnames/SNI listed in the ACL file
+  enabled: false
+
   # Path to the ACL file containing IP addresses and hostnames/SNI to block.
   # Each line in the file can be an IP address (IPv4 or IPv6) or a hostname/SNI.
   # Lines starting with '#' are treated as comments.
