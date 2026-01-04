@@ -486,7 +486,8 @@ tunnel_init (int extern_tun_fd)
         int nonblock = 1;
 
         if (name || ipv4 || ipv6 || multi_queue) {
-            LOG_W ("socks5 tunnel: external TUN fd detected, ignoring tunnel config (name/ipv4/ipv6/multi-queue)");
+            LOG_W (
+                "socks5 tunnel: external TUN fd detected, ignoring tunnel config (name/ipv4/ipv6/multi-queue)");
         }
 
         res = ioctl (extern_tun_fd, FIONBIO, (char *)&nonblock);
