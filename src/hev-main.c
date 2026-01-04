@@ -102,7 +102,7 @@ hev_socks5_tunnel_main_inner (int tun_fd)
     nofile = hev_config_get_misc_limit_nofile ();
     res = set_limit_nofile (nofile);
     if (res < 0)
-        LOG_E ("set limit nofile");
+        LOG_E ("set limit nofile: %s", strerror (errno));
 
     pid_file = hev_config_get_misc_pid_file ();
     if (pid_file)
