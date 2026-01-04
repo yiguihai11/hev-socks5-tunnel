@@ -85,12 +85,14 @@ int hev_config_get_chnroutes_enabled (void);
 const char *hev_config_get_chnroutes_file_path (void);
 
 /* smart-proxy */
+int hev_config_get_smart_proxy_enabled (void);
 int hev_config_get_smart_proxy_timeout_ms (void);
 int hev_config_get_smart_proxy_blocked_ip_expiry_minutes (void);
 int hev_config_get_smart_proxy_probe_ports (int **ports);
 int hev_config_is_smart_proxy_probe_port (int port);
 
 /* acl */
+int hev_config_get_acl_enabled (void);
 const char *hev_config_get_acl_file_path (void);
 
 /* dns-split-tunnel */

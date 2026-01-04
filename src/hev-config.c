@@ -178,12 +178,14 @@ static int chnroutes_enabled = 1; /* 默认启用 */
 static char chnroutes_file_path[1024];
 
 /* smart-proxy */
+static int smart_proxy_enabled = 1; /* 默认启用 */
 static int smart_proxy_timeout_ms;
 static int smart_proxy_blocked_ip_expiry_minutes;
 static int *smart_proxy_probe_ports = NULL;
 static int smart_proxy_probe_ports_count = 0;
 
 /* acl */
+static int acl_enabled = 1; /* 默认启用 */
 static char acl_file_path[1024];
 
 /* dns-split-tunnel */
@@ -629,7 +631,12 @@ hev_config_parse_smart_proxy (yaml_document_t *doc, yaml_node_t *base)
 
         node = yaml_document_get_node (doc, pair->value);
 
-        if (0 == strcmp (key, "timeout-ms")) {
+        if (0 == strcmp (key, "enabled")) {
+            if (node && YAML_SCALAR_NODE == node->type) {
+                const char *value = (const char *)node->data.scalar.value;
+                smart_proxy_enabled = yaml_parse_bool (value);
+            }
+        } else if (0 == strcmp (key, "timeout-ms")) {
             if (node && YAML_SCALAR_NODE == node->type) {
                 const char *value = (const char *)node->data.scalar.value;
                 smart_proxy_timeout_ms = strtoul (value, NULL, 10);
@@ -706,7 +713,9 @@ hev_config_parse_acl (yaml_document_t *doc, yaml_node_t *base)
             break;
         value = (const char *)node->data.scalar.value;
 
-        if (0 == strcmp (key, "file-path"))
+        if (0 == strcmp (key, "enabled"))
+            acl_enabled = yaml_parse_bool (value);
+        else if (0 == strcmp (key, "file-path"))
             strncpy (acl_file_path, value, sizeof (acl_file_path) - 1);
     }
 
@@ -1128,6 +1137,12 @@ hev_config_get_chnroutes_file_path (void)
 
 /* smart-proxy */
 int
+hev_config_get_smart_proxy_enabled (void)
+{
+    return smart_proxy_enabled;
+}
+
+int
 hev_config_get_smart_proxy_timeout_ms (void)
 {
     return smart_proxy_timeout_ms;
@@ -1152,6 +1167,9 @@ hev_config_is_smart_proxy_probe_port (int port)
 {
     int i;
 
+    if (!smart_proxy_enabled)
+        return 0;
+
     for (i = 0; i < smart_proxy_probe_ports_count; i++) {
         if (smart_proxy_probe_ports[i] == port)
             return 1;
@@ -1160,6 +1178,12 @@ hev_config_is_smart_proxy_probe_port (int port)
 }
 
 /* acl */
+int
+hev_config_get_acl_enabled (void)
+{
+    return acl_enabled;
+}
+
 const char *
 hev_config_get_acl_file_path (void)
 {
