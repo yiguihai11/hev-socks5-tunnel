@@ -477,8 +477,17 @@ tunnel_init (int extern_tun_fd)
     int multi_queue, res;
     unsigned int mtu;
 
+    name = hev_config_get_tunnel_name ();
+    ipv4 = hev_config_get_tunnel_ipv4_address ();
+    ipv6 = hev_config_get_tunnel_ipv6_address ();
+    multi_queue = hev_config_get_tunnel_multi_queue ();
+
     if (extern_tun_fd >= 0) {
         int nonblock = 1;
+
+        if (name || ipv4 || ipv6 || multi_queue) {
+            LOG_W ("socks5 tunnel: external TUN fd detected, ignoring tunnel config (name/ipv4/ipv6/multi-queue)");
+        }
 
         res = ioctl (extern_tun_fd, FIONBIO, (char *)&nonblock);
         if (res < 0) {
@@ -490,8 +499,6 @@ tunnel_init (int extern_tun_fd)
         return 0;
     }
 
-    name = hev_config_get_tunnel_name ();
-    multi_queue = hev_config_get_tunnel_multi_queue ();
     tun_fd = hev_tunnel_open (name, multi_queue);
     if (tun_fd < 0) {
         LOG_E ("socks5 tunnel open (%s)", strerror (errno));
@@ -505,7 +512,6 @@ tunnel_init (int extern_tun_fd)
         return -1;
     }
 
-    ipv4 = hev_config_get_tunnel_ipv4_address ();
     if (ipv4) {
         res = hev_tunnel_set_ipv4 (ipv4, 32);
         if (res < 0) {
@@ -514,7 +520,6 @@ tunnel_init (int extern_tun_fd)
         }
     }
 
-    ipv6 = hev_config_get_tunnel_ipv6_address ();
     if (ipv6) {
         res = hev_tunnel_set_ipv6 (ipv6, 128);
         if (res < 0) {

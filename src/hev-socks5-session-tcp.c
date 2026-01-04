@@ -233,7 +233,8 @@ hev_socks5_session_tcp_bind (HevSocks5 *self, int fd,
 
         res = set_sock_mark (fd, mark);
         if (res < 0) {
-            LOG_E ("%p socks5 session tcp: failed to set socket mark", self);
+            LOG_E ("%p socks5 session tcp: failed to set socket mark=%u: %s",
+                   self, mark, strerror (errno));
             return -1;
         }
         LOG_D ("%p socks5 session tcp: socket mark set to %u", self, mark);
