@@ -1009,10 +1009,11 @@ run_smart_proxy_task (void *data)
                 /* initial_data_received is true but buffer is empty means
                  * backward task already consumed the data and sent it to client.
                  * This is normal for short HTTP connections. */
-                LOG_I ("%p session: ✅ Smart proxy SUCCESS for port %d: "
-                       "Data was received and forwarded to client (buffer consumed, "
-                       "short HTTP connection, %ld ms)",
-                       self, pcb->local_port, elapsed_ms);
+                LOG_I (
+                    "%p session: ✅ Smart proxy SUCCESS for port %d: "
+                    "Data was received and forwarded to client (buffer consumed, "
+                    "short HTTP connection, %ld ms)",
+                    self, pcb->local_port, elapsed_ms);
                 is_valid_response = 1;
             }
 
