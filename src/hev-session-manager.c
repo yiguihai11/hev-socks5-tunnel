@@ -868,6 +868,8 @@ run_smart_proxy_task (void *data)
     socklen_t saddr_len;
     char src_ip[INET6_ADDRSTRLEN];
     char dst_ip[INET6_ADDRSTRLEN];
+    ip_addr_t dst_ip_copy;
+    u16_t dst_port_copy;
     int tcp_buffer_size;
     int fd = -1;
     int timeout;
@@ -886,6 +888,10 @@ run_smart_proxy_task (void *data)
      */
 
     get_session_addresses (pcb, src_ip, dst_ip);
+
+    /* Save target IP and port for fallback (pcb may be freed later) */
+    dst_ip_copy = pcb->local_ip;
+    dst_port_copy = pcb->local_port;
 
     LOG_D ("%p session: smart proxy task run %s:%d -> %s:%d", self, src_ip,
            pcb->remote_port, dst_ip, pcb->local_port);
@@ -1072,26 +1078,36 @@ cleanup_splice:
     goto exit_cleanup;
 
 fallback_socks5:
-    LOG_I ("%p session: Smart proxy falling back to SOCKS5 for %s:%d -> %s:%d",
-           self, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
+    {
+        /* Use saved IP/port (pcb may be freed or reused) */
+        char fallback_dst_ip[INET6_ADDRSTRLEN];
+        ipaddr_ntoa_r (&dst_ip_copy, fallback_dst_ip,
+                       sizeof (fallback_dst_ip));
 
-    if (self->buffer) {
-        LOG_D ("%p session: Smart proxy buffer will be reused by SOCKS5", self);
-    }
+        LOG_I ("%p session: Smart proxy falling back to SOCKS5 for %s:%d -> %s:%d",
+               self, src_ip, pcb ? pcb->remote_port : 0, fallback_dst_ip,
+               dst_port_copy);
 
-    hev_socks5_session_run (s);
+        if (self->buffer) {
+            LOG_D ("%p session: Smart proxy buffer will be reused by SOCKS5",
+                   self);
+        }
 
-    LOG_I ("%p session: SOCKS5 proxy session ended %s:%d -> %s:%d", self,
-           src_ip, pcb->remote_port, dst_ip, pcb->local_port);
+        hev_socks5_session_run (s);
 
-    if (gfw_detected) {
-        LOG_I (
-            "%p session: ✅ Direct failed but proxy succeeded - adding to blacklist",
-            self);
-        if (self->detected_hostname[0]) {
-            hev_filter_blacklist_add_domain (self->detected_hostname);
-        } else {
-            hev_filter_blacklist_add_ip (&pcb->local_ip);
+        LOG_I ("%p session: SOCKS5 proxy session ended %s:%d -> %s:%d", self,
+               src_ip, pcb ? pcb->remote_port : 0, fallback_dst_ip,
+               dst_port_copy);
+
+        if (gfw_detected) {
+            LOG_I (
+                "%p session: ✅ Direct failed but proxy succeeded - adding to blacklist",
+                self);
+            if (self->detected_hostname[0]) {
+                hev_filter_blacklist_add_domain (self->detected_hostname);
+            } else {
+                hev_filter_blacklist_add_ip (&dst_ip_copy);
+            }
         }
     }
 
