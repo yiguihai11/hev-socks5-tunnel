@@ -382,8 +382,8 @@ event_task_entry (void *data)
     for (; node; node = hev_list_node_next (node)) {
         HevSocks5SessionData *sd;
         sd = container_of (node, HevSocks5SessionData, node);
-        LOG_D ("socks5 tunnel: terminating session %d (self=%p)", terminated_count,
-               sd->self);
+        LOG_D ("socks5 tunnel: terminating session %d (self=%p)",
+               terminated_count, sd->self);
         /* 跳过 NULL 会话，这些会话可能在初始化过程中被添加但未完成 */
         if (sd->self) {
             hev_socks5_session_terminate (sd->self);
