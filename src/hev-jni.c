@@ -47,7 +47,7 @@ static JavaVM *java_vm;
 static pthread_t work_thread;
 static pthread_mutex_t mutex;
 static pthread_key_t current_jni_env;
-static int force_quit; /* Force quit flag */
+static pthread_cond_t cond; /* Condition variable for timeout */
 
 static void native_start_service (JNIEnv *env, jobject thiz, jstring conig_path,
                                   jint fd);
@@ -85,6 +85,7 @@ JNI_OnLoad (JavaVM *vm, void *reserved)
 
     pthread_key_create (&current_jni_env, detach_current_thread);
     pthread_mutex_init (&mutex, NULL);
+    pthread_cond_init (&cond, NULL);
 
     return JNI_VERSION_1_4;
 }
@@ -105,6 +106,12 @@ thread_handler (void *data)
 
     free (tdata->path);
     free (tdata);
+
+    /* Signal that thread has finished */
+    pthread_mutex_lock (&mutex);
+    is_working = 0;
+    pthread_cond_signal (&cond);
+    pthread_mutex_unlock (&mutex);
 
     return NULL;
 }
@@ -141,6 +148,7 @@ native_start_service (JNIEnv *env, jobject thiz, jstring config_path, jint fd)
         goto exit;
     }
 
+    /* is_working is set to 1 by thread_handler on start */
     is_working = 1;
 exit:
     pthread_mutex_unlock (&mutex);
@@ -151,9 +159,7 @@ native_stop_service (JNIEnv *env, jobject thiz)
 {
     struct timespec timeout;
     int ret;
-    int wait_count = 0;
-    const int max_wait_ms = STOP_TIMEOUT_MS;
-    const int check_interval_ms = 100;
+    struct timeval tv;
 
     pthread_mutex_lock (&mutex);
 
@@ -162,70 +168,49 @@ native_stop_service (JNIEnv *env, jobject thiz)
         goto exit;
     }
 
-    LOG_I ("jni: stopping native service with %d ms timeout", max_wait_ms);
+    LOG_I ("jni: stopping native service with %d ms timeout", STOP_TIMEOUT_MS);
 
     /* Send quit signal to C program */
-    force_quit = 0;
     hev_socks5_tunnel_quit ();
 
-    /* Wait for thread to finish with timeout */
-    /* pthread_join with timeout using multiple checks */
-    for (wait_count = 0; wait_count < (max_wait_ms / check_interval_ms);
-         wait_count++) {
-        /* Try to join with non-blocking check */
-        ret = pthread_tryjoin_np (work_thread, NULL);
-        if (ret == 0) {
-            LOG_I ("jni: native thread exited gracefully");
-            is_working = 0;
-            goto exit;
-        }
+    /* Calculate timeout for pthread_cond_timedwait */
+    gettimeofday (&tv, NULL);
+    timeout.tv_sec = tv.tv_sec + (STOP_TIMEOUT_MS / 1000);
+    timeout.tv_nsec = (tv.tv_usec + (STOP_TIMEOUT_MS % 1000) * 1000) * 1000;
+    if (timeout.tv_nsec >= 1000000000) {
+        timeout.tv_sec++;
+        timeout.tv_nsec -= 1000000000;
+    }
 
-        if (ret != EBUSY) {
-            LOG_W ("jni: pthread_tryjoin_np error: %d", ret);
+    /* Wait for thread to finish with timeout */
+    /* We use pthread_cond_timedwait instead of pthread_tryjoin_np */
+    while (is_working) {
+        ret = pthread_cond_timedwait (&cond, &mutex, &timeout);
+        if (ret == ETIMEDOUT) {
+            LOG_W ("jni: native thread did not exit after %d ms timeout",
+                   STOP_TIMEOUT_MS);
+            break;
+        } else if (ret != 0) {
+            LOG_W ("jni: pthread_cond_timedwait error: %d", ret);
             break;
         }
-
-        /* Thread still running, wait a bit */
-        usleep (check_interval_ms * 1000);
-
-        /* Log progress every second */
-        if ((wait_count * check_interval_ms) % 1000 == 0) {
-            LOG_D ("jni: waiting for thread to exit... (%d ms elapsed)",
-                   wait_count * check_interval_ms);
-        }
+        /* Thread exited (is_working was set to 0 and cond was signaled) */
     }
 
-    /* Timeout reached, force quit */
-    LOG_W ("jni: native thread did not exit after %d ms, forcing shutdown",
-           max_wait_ms);
-
-    force_quit = 1;
-
-    /* Send SIGTERM to thread group */
-    pthread_kill (work_thread, SIGTERM);
-
-    /* Final wait with shorter timeout */
-    for (wait_count = 0; wait_count < 10; wait_count++) {
-        ret = pthread_tryjoin_np (work_thread, NULL);
-        if (ret == 0) {
-            LOG_I ("jni: native thread exited after SIGTERM");
-            is_working = 0;
-            goto exit;
-        }
-        usleep (100000); /* 100ms */
-    }
-
-    /* Last resort: cancel the thread */
-    LOG_E ("jni: native thread did not respond to SIGTERM, cancelling");
-    ret = pthread_cancel (work_thread);
-    if (ret == 0) {
-        pthread_join (work_thread, NULL);
-        LOG_W ("jni: native thread was cancelled");
+    if (is_working) {
+        /* Timeout reached - thread is still running */
+        /* We can't forcefully kill it on Android without pthread_cancel */
+        /* Just log the error and return */
+        LOG_E (
+            "jni: native thread still running after timeout - may cause issues");
     } else {
-        LOG_E ("jni: failed to cancel thread: %d", ret);
+        /* Thread exited gracefully, now join it */
+        pthread_mutex_unlock (&mutex);
+        pthread_join (work_thread, NULL);
+        pthread_mutex_lock (&mutex);
+        LOG_I ("jni: native thread exited gracefully");
     }
 
-    is_working = 0;
 exit:
     pthread_mutex_unlock (&mutex);
 }
