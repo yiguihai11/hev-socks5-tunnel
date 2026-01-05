@@ -437,10 +437,11 @@ run_domain_first_task (void *data)
         self->pcb = NULL;
 
         /* Hand over to the next session manager */
+        const char *hostname_to_pass = hostname_found ? http_hostname : NULL;
         if (next_action == NEXT_ACTION_DIRECT) {
             LOG_I ("%p session: Route: Direct", self);
             hev_session_manager_start_task (pcb, saved_queue,
-                                            HEV_SESSION_DIRECT);
+                                            HEV_SESSION_DIRECT, hostname_to_pass);
         } else { /* NEXT_ACTION_SOCKS5 */
             /* Priority 4: Smart proxy for foreign IPs on probe ports */
             int smart_proxy_enabled =
@@ -455,11 +456,13 @@ run_domain_first_task (void *data)
                           !is_gfw_blocked)) {
                 LOG_I ("%p session: Route: Smart Proxy (probe mode)", self);
                 hev_session_manager_start_task (pcb, saved_queue,
-                                                HEV_SESSION_SMART_PROXY);
+                                                HEV_SESSION_SMART_PROXY,
+                                                hostname_to_pass);
             } else {
                 LOG_I ("%p session: Route: SOCKS5", self);
                 hev_session_manager_start_task (pcb, saved_queue,
-                                                HEV_SESSION_SOCKS5);
+                                                HEV_SESSION_SOCKS5,
+                                                hostname_to_pass);
             }
         }
     }
@@ -508,7 +511,7 @@ static struct
 /* Internal helper to start a session with a specific task entry */
 void
 hev_session_manager_start_task (struct tcp_pcb *pcb, struct pbuf *queue,
-                                HevSessionType session_type)
+                                HevSessionType session_type, const char *hostname)
 {
     HevSocks5SessionTCP *tcp;
     HevTask *task;
@@ -541,6 +544,14 @@ hev_session_manager_start_task (struct tcp_pcb *pcb, struct pbuf *queue,
     /* Transfer saved queue data to new session */
     if (queue) {
         tcp->queue = queue;
+    }
+
+    /* Transfer detected hostname to new session (for blacklist usage) */
+    if (hostname && hostname[0]) {
+        snprintf (tcp->detected_hostname, sizeof (tcp->detected_hostname), "%s",
+                  hostname);
+        LOG_D ("%p session: Transferred hostname '%s' to new session", tcp,
+               hostname);
     }
 
     get_session_addresses (pcb, src_ip, dst_ip);

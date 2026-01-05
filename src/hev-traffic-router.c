@@ -213,7 +213,7 @@ hev_traffic_router_handle_tcp (struct tcp_pcb *pcb)
      * All TCP connections are routed through domain-first for unified
      * handling of ACL (IP/Port/Domain), domestic check, and Smart Proxy.
      */
-    hev_session_manager_start_task (pcb, NULL, HEV_SESSION_DOMAIN_FIRST);
+    hev_session_manager_start_task (pcb, NULL, HEV_SESSION_DOMAIN_FIRST, NULL);
     return 1;
 }
 
