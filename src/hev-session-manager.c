@@ -325,7 +325,8 @@ run_domain_first_task (void *data)
 
     get_session_addresses (pcb, src_ip, dst_ip);
 
-    LOG_D ("%p session: domain-first task entry", self);
+    LOG_I ("%p session: Routing %s:%d -> %s:%d", self, src_ip, pcb->remote_port,
+           dst_ip, pcb->local_port);
 
     /*
      * Phase 1: Data Sniffing
@@ -392,29 +393,22 @@ run_domain_first_task (void *data)
 
     switch (final_action) {
     case HEV_ACL_ACTION_ALLOW:
-        LOG_I ("%p session: Domain-first ACL ALLOW → Direct connect to %s:%d",
-               self, dst_ip, pcb->local_port);
+        LOG_D ("%p session: ACL ALLOW -> Direct", self);
         next_action = NEXT_ACTION_DIRECT;
         break;
 
     case HEV_ACL_ACTION_BLOCK:
-        LOG_W (
-            "%p session: Domain-first ACL BLOCK → Reject connection to %s:%d",
-            self, dst_ip, pcb->local_port);
+        LOG_W ("%p session: ACL BLOCK -> Reject", self);
         next_action = NEXT_ACTION_BLOCK;
         break;
 
     case HEV_ACL_ACTION_DEFAULT:
     default:
         if (hev_filter_is_domestic (&pcb->local_ip)) {
-            LOG_I (
-                "%p session: Domain-first ACL DEFAULT + Domestic IP → Direct connect to %s:%d",
-                self, dst_ip, pcb->local_port);
+            LOG_D ("%p session: Domestic IP -> Direct", self);
             next_action = NEXT_ACTION_DIRECT;
         } else {
-            LOG_I (
-                "%p session: Domain-first ACL DEFAULT + Foreign IP → SOCKS5 proxy to %s:%d",
-                self, dst_ip, pcb->local_port);
+            LOG_D ("%p session: Foreign IP -> SOCKS5", self);
             next_action = NEXT_ACTION_SOCKS5;
         }
         break;
@@ -444,8 +438,8 @@ run_domain_first_task (void *data)
 
         /* Hand over to the next session manager */
         if (next_action == NEXT_ACTION_DIRECT) {
-            hev_session_manager_start_task (pcb, saved_queue,
-                                            HEV_SESSION_DIRECT);
+            LOG_I ("%p session: Route: Direct", self);
+            hev_session_manager_start_task (pcb, saved_queue, HEV_SESSION_DIRECT);
         } else { /* NEXT_ACTION_SOCKS5 */
             /* Priority 4: Smart proxy for foreign IPs on probe ports */
             int smart_proxy_enabled =
@@ -456,22 +450,12 @@ run_domain_first_task (void *data)
                 &pcb->local_ip, hostname_found ? http_hostname : NULL,
                 pcb->local_port);
 
-            if (unlikely (smart_proxy_enabled && is_probe_port &&
-                          !is_gfw_blocked)) {
-                LOG_I (
-                    "%p session: Domain-first → SMART_PROXY (probe port, not GFW blocked, trying direct first)",
-                    self);
-                hev_session_manager_start_task (pcb, saved_queue,
-                                                HEV_SESSION_SMART_PROXY);
+            if (unlikely (smart_proxy_enabled && is_probe_port && !is_gfw_blocked)) {
+                LOG_I ("%p session: Route: Smart Proxy (probe mode)", self);
+                hev_session_manager_start_task (pcb, saved_queue, HEV_SESSION_SMART_PROXY);
             } else {
-                const char *reason =
-                    is_gfw_blocked ? "GFW blocked" :
-                                     (!is_probe_port ? "not a probe port" :
-                                                       "smart proxy disabled");
-                LOG_I ("%p session: Domain-first → SOCKS5 proxy (%s) to %s:%d",
-                       self, reason, dst_ip, pcb->local_port);
-                hev_session_manager_start_task (pcb, saved_queue,
-                                                HEV_SESSION_SOCKS5);
+                LOG_I ("%p session: Route: SOCKS5", self);
+                hev_session_manager_start_task (pcb, saved_queue, HEV_SESSION_SOCKS5);
             }
         }
     }
@@ -480,8 +464,6 @@ run_domain_first_task (void *data)
     hev_socks5_tunnel_delete_session (
         hev_socks5_session_get_node (HEV_SOCKS5_SESSION (self)));
     hev_object_unref (HEV_OBJECT (self));
-
-    LOG_D ("%p session: domain-first task exit", self);
 }
 
 /* ============================================================================

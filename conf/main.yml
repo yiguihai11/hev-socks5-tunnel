@@ -65,22 +65,22 @@ socks5:
 dns-forwarder:
   # Enable DNS forwarder feature (default: false)
   # When enabled, DNS queries to virtual-ip are redirected to target-ip
-  enabled: false
+  enabled: true
 
   # Hijack DNS queries sent to this IPv4 address inside the tunnel.
-#  virtual-ip4: 8.8.8.8
+  virtual-ip4: 8.8.8.8
   # Hijack DNS queries sent to this IPv6 address inside the tunnel.
-#  virtual-ip6: '2001:4860:4860::8844'
+  virtual-ip6: '2001:4860:4860::8844'
 
   # Forward IPv4 DNS queries to this target.
   # Port is optional, defaults to 53.
-#  target-ip4: 127.0.0.1:1053
+  target-ip4: 127.0.0.1:1053
   # target-ip4: 1.1.1.1:53
 
   # Forward IPv6 DNS queries to this target.
   # Port is optional, defaults to 53.
   # target-ip6: '[2606:4700:4700::1111]'
-#  target-ip6: '[2606:4700:4700::1111]:53'
+  target-ip6: '[2606:4700:4700::1111]:53'
 
 dns-split-tunnel:
   # 启用 DNS 分流功能 (default: false)
@@ -110,7 +110,7 @@ chnroutes:
   # When enabled, traffic to IPs within the specified file will be considered "domestic".
   # This allows for different routing decisions, e.g., domestic traffic can be connected
   # directly, while other traffic goes through the SOCKS5 proxy.
-  enabled: false
+  enabled: true
   # Path to the chnroutes file containing Chinese IP ranges.
   file-path: "conf/chnroutes.txt"
 
@@ -120,7 +120,7 @@ smart-proxy:
   # 1. First tries direct connection
   # 2. If timeout, falls back to SOCKS5 proxy
   # 3. Temporarily blocks slow IPs for future connections
-  enabled: false
+  enabled: true
 
   # Enables a "smart" fallback mechanism for non-domestic TCP traffic.
   # When a TCP connection to a non-domestic IP is attempted:
@@ -135,18 +135,18 @@ smart-proxy:
   # Feature is enabled if both timeout-ms and blocked-ip-expiry-minutes are set and non-zero.
 
   # Timeout in milliseconds for direct connection attempts.
-#  timeout-ms: 2000
+  timeout-ms: 1300
   # Expiry time in minutes for temporarily blocked IPs.
-#  blocked-ip-expiry-minutes: 360
+  blocked-ip-expiry-minutes: 360
 
   # List of ports to enable protocol detection (TLS SNI / HTTP Host)
   # Only connections to these ports will trigger smart-proxy probe.
   # Common ports: 80 (HTTP), 443 (HTTPS), 8080 (HTTP Alt), 8443 (HTTPS Alt)
-#  probe-ports:
-#    - 80
-#    - 443
+  probe-ports:
+    - 80
+    - 443
 
-#acl:
+acl:
   # Enable ACL feature (default: false)
   # When enabled, blocks IP addresses and hostnames/SNI listed in the ACL file
   enabled: false
@@ -154,7 +154,7 @@ smart-proxy:
   # Path to the ACL file containing IP addresses and hostnames/SNI to block.
   # Each line in the file can be an IP address (IPv4 or IPv6) or a hostname/SNI.
   # Lines starting with '#' are treated as comments.
-#  file-path: "conf/acl.txt"
+  file-path: "conf/acl.txt"
 
 #mapdns:
   # Mapped DNS listen address (IPv4, optional)
