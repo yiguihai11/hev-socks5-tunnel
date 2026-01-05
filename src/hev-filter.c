@@ -1461,8 +1461,7 @@ blacklist_add_internal (HevBlacklistEntryType type, const ip_addr_t *ip_addr,
     int ttl_seconds;
 
     /* 获取配置的TTL */
-    ttl_seconds =
-        hev_config_get_smart_proxy_blocked_ip_expiry_minutes () * 60;
+    ttl_seconds = hev_config_get_smart_proxy_blocked_ip_expiry_minutes () * 60;
     if (ttl_seconds <= 0) {
         ttl_seconds = 3600; /* 默认1小时 */
     }
@@ -1516,8 +1515,8 @@ blacklist_add_internal (HevBlacklistEntryType type, const ip_addr_t *ip_addr,
         LOG_I ("filter: Added IP %s to blacklist (ttl=%dm)", ip_str,
                ttl_seconds / 60);
     } else {
-        LOG_I ("filter: Added domain '%s' to blacklist (ttl=%dm)",
-               hostname, ttl_seconds / 60);
+        LOG_I ("filter: Added domain '%s' to blacklist (ttl=%dm)", hostname,
+               ttl_seconds / 60);
     }
 
     return entry->id; /* 返回ID字符串 */
@@ -1577,8 +1576,7 @@ hev_filter_blacklist_check_entry (HevBlacklistEntryType type,
         }
         break;
     case HEV_BLACKLIST_ENTRY_DOMAIN:
-        snprintf (desc, sizeof (desc), "domain '%s'",
-                  hostname ? hostname : "");
+        snprintf (desc, sizeof (desc), "domain '%s'", hostname ? hostname : "");
         break;
     }
 

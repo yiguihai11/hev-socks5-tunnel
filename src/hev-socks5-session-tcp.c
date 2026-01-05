@@ -109,8 +109,9 @@ tcp_splice_b (HevSocks5SessionTCP *self)
             else
                 res = -1;
         } else {
-            LOG_D ("%p socks5 session tcp: backward received %zd bytes (iovc=%d)",
-                   self, s, iovc);
+            LOG_D (
+                "%p socks5 session tcp: backward received %zd bytes (iovc=%d)",
+                self, s, iovc);
             hev_ring_buffer_write_finish (self->buffer, s);
             self->initial_data_received = 1;
         }

@@ -1051,14 +1051,16 @@ hev_dns_cache_check_only (struct udp_pcb *pcb, struct pbuf *p,
 
     /* 提取域名 */
     char domain[256];
-    int extract_result = extract_dns_domain (p->payload, p->len, domain, sizeof (domain));
+    int extract_result =
+        extract_dns_domain (p->payload, p->len, domain, sizeof (domain));
     if (extract_result < 0) {
-        LOG_D ("dns-cache: Failed to extract domain from DNS query (len=%d)", p->len);
+        LOG_D ("dns-cache: Failed to extract domain from DNS query (len=%d)",
+               p->len);
         return 0;
     }
 
     LOG_D ("dns-cache: Checking cache for domain: %s (domain_len=%zu)", domain,
-            strlen (domain));
+           strlen (domain));
 
     /* 检查缓存 */
     uint8_t *cached_response = NULL;
@@ -1079,7 +1081,7 @@ hev_dns_cache_check_only (struct udp_pcb *pcb, struct pbuf *p,
 
     /* 缓存未命中 */
     LOG_D ("dns-cache: Cache miss for domain: %s (domain_len=%zu)", domain,
-            strlen (domain));
+           strlen (domain));
     return 0;
 }
 

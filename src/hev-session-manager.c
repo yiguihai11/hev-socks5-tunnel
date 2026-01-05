@@ -610,7 +610,8 @@ tcp_direct_splice_f (HevSocks5SessionTCP *self, HevIdleTimer *timer)
             if (timer)
                 idle_timer_update (timer);
 
-            LOG_D ("%p [SPLICE] forward sent %zd bytes (iovc=%d)", self, s, iovc);
+            LOG_D ("%p [SPLICE] forward sent %zd bytes (iovc=%d)", self, s,
+                   iovc);
 
             hev_task_mutex_lock (self->mutex);
             self->queue = pbuf_free_header (self->queue, s);

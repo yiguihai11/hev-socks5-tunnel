@@ -174,7 +174,8 @@ run_blacklist_tests (void)
     printf ("\nTesting blacklist statistics...\n");
     size_t total_entries, active_entries;
 
-    hev_filter_blacklist_get_stats (&total_entries, &active_entries, NULL, NULL);
+    hev_filter_blacklist_get_stats (&total_entries, &active_entries, NULL,
+                                    NULL);
 
     TEST_ASSERT (total_entries >= 2);
     TEST_ASSERT (active_entries >= 2);
