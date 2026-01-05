@@ -20,7 +20,8 @@
 extern "C" {
 #endif
 
-typedef enum _HevSessionType {
+typedef enum _HevSessionType
+{
     HEV_SESSION_SOCKS5,
     HEV_SESSION_DIRECT,
     HEV_SESSION_SMART_PROXY,
@@ -28,7 +29,7 @@ typedef enum _HevSessionType {
 } HevSessionType;
 
 void hev_session_manager_start_task (struct tcp_pcb *pcb, struct pbuf *queue,
-                                    HevSessionType session_type);
+                                     HevSessionType session_type);
 void hev_session_manager_start_direct_udp (struct udp_pcb *pcb,
                                            const ip_addr_t *addr, u16_t port,
                                            const ip_addr_t *orig_addr,
