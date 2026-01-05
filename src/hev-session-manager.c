@@ -1119,15 +1119,24 @@ fallback_socks5: {
     LOG_I ("%p session: SOCKS5 proxy session ended %s:%d -> %s:%d", self,
            src_ip, pcb ? pcb->remote_port : 0, fallback_dst_ip, dst_port_copy);
 
-    if (gfw_detected) {
+    /* Only add to blacklist if: (1) direct failed AND (2) SOCKS5 succeeded */
+    if (gfw_detected && self->socks5_success) {
         LOG_I (
             "%p session: ✅ Direct failed but proxy succeeded - adding to blacklist",
             self);
         if (self->detected_hostname[0]) {
             hev_filter_blacklist_add_domain (self->detected_hostname);
+            LOG_I ("%p session: ✅ Added domain '%s' to blacklist", self,
+                   self->detected_hostname);
         } else {
             hev_filter_blacklist_add_ip (&dst_ip_copy);
+            LOG_I ("%p session: ✅ Added IP '%s' to blacklist", self,
+                   fallback_dst_ip);
         }
+    } else if (gfw_detected && !self->socks5_success) {
+        LOG_W (
+            "%p session: ⚠️  Direct failed but proxy also failed - NOT blacklisting (uncertain if GFW blocked)",
+            self);
     }
 }
 

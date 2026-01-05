@@ -36,6 +36,7 @@ struct _HevSocks5SessionTCP
     int pcb_eof;
     int is_smart_proxy_probe;
     int initial_data_received;
+    int socks5_success; /* SOCKS5 successfully transferred data */
     char detected_hostname[256];
 };
 

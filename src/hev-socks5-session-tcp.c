@@ -318,6 +318,13 @@ hev_socks5_session_tcp_splice (HevSocks5Session *base)
         "%p socks5 session tcp splice: completed (forward_cycles=%zu, backward_cycles=%zu)",
         self, total_forward, total_backward);
 
+    /* Mark SOCKS5 as successful if any data was transferred */
+    if (total_forward > 0 || total_backward > 0) {
+        self->socks5_success = 1;
+        LOG_D ("%p socks5 session tcp: marked as successful (data transferred)",
+               self);
+    }
+
     return 0;
 }
 
