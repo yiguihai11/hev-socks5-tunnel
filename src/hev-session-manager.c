@@ -439,7 +439,8 @@ run_domain_first_task (void *data)
         /* Hand over to the next session manager */
         if (next_action == NEXT_ACTION_DIRECT) {
             LOG_I ("%p session: Route: Direct", self);
-            hev_session_manager_start_task (pcb, saved_queue, HEV_SESSION_DIRECT);
+            hev_session_manager_start_task (pcb, saved_queue,
+                                            HEV_SESSION_DIRECT);
         } else { /* NEXT_ACTION_SOCKS5 */
             /* Priority 4: Smart proxy for foreign IPs on probe ports */
             int smart_proxy_enabled =
@@ -450,12 +451,15 @@ run_domain_first_task (void *data)
                 &pcb->local_ip, hostname_found ? http_hostname : NULL,
                 pcb->local_port);
 
-            if (unlikely (smart_proxy_enabled && is_probe_port && !is_gfw_blocked)) {
+            if (unlikely (smart_proxy_enabled && is_probe_port &&
+                          !is_gfw_blocked)) {
                 LOG_I ("%p session: Route: Smart Proxy (probe mode)", self);
-                hev_session_manager_start_task (pcb, saved_queue, HEV_SESSION_SMART_PROXY);
+                hev_session_manager_start_task (pcb, saved_queue,
+                                                HEV_SESSION_SMART_PROXY);
             } else {
                 LOG_I ("%p session: Route: SOCKS5", self);
-                hev_session_manager_start_task (pcb, saved_queue, HEV_SESSION_SOCKS5);
+                hev_session_manager_start_task (pcb, saved_queue,
+                                                HEV_SESSION_SOCKS5);
             }
         }
     }
