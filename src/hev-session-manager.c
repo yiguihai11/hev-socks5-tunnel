@@ -996,11 +996,23 @@ run_smart_proxy_task (void *data)
             int iovc = hev_ring_buffer_reading (self->buffer, iov);
             int is_valid_response = 0;
 
+            /* Case 1: Buffer still has data (long connection) */
             if (iovc > 0 && iov[0].iov_len >= 16) {
                 LOG_I ("%p session: ✅ Smart proxy SUCCESS for port %d: "
-                       "Received %zu bytes from %s (data received in %ld ms)",
+                       "Received %zu bytes from %s (data in buffer, %ld ms)",
                        self, pcb->local_port, iov[0].iov_len, dst_ip,
                        elapsed_ms);
+                is_valid_response = 1;
+            }
+            /* Case 2: Buffer consumed but data was received (short HTTP connection) */
+            else if (iovc == 0) {
+                /* initial_data_received is true but buffer is empty means
+                 * backward task already consumed the data and sent it to client.
+                 * This is normal for short HTTP connections. */
+                LOG_I ("%p session: ✅ Smart proxy SUCCESS for port %d: "
+                       "Data was received and forwarded to client (buffer consumed, "
+                       "short HTTP connection, %ld ms)",
+                       self, pcb->local_port, elapsed_ms);
                 is_valid_response = 1;
             }
 
