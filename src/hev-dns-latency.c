@@ -87,8 +87,8 @@ add_task (HevTask *task)
             dns_latency_tasks[i].active = 1;
             dns_latency_task_count++;
             task_unlock ();
-            LOG_D ("dns-latency: Added task %p to tracking list (count=%d)", task,
-                   dns_latency_task_count);
+            LOG_D ("dns-latency: Added task %p to tracking list (count=%d)",
+                   task, dns_latency_task_count);
             return 0;
         }
     }
@@ -302,8 +302,9 @@ hev_dns_latency_fini (void)
 
     /* Signal shutdown */
     __atomic_store_n (&dns_latency_shutdown, 1, __ATOMIC_RELEASE);
-    LOG_I ("dns-latency: Shutdown signaled, waiting for %d active tasks to complete",
-           dns_latency_task_count);
+    LOG_I (
+        "dns-latency: Shutdown signaled, waiting for %d active tasks to complete",
+        dns_latency_task_count);
 
     /* Wait for all tasks to complete */
     while (dns_latency_task_count > 0 && total_wait_ms < max_wait_ms) {
@@ -328,7 +329,8 @@ hev_dns_latency_fini (void)
                 }
                 task_unlock ();
 
-                hev_task_yield (HEV_TASK_YIELD); /* Give other tasks chance to exit */
+                hev_task_yield (
+                    HEV_TASK_YIELD); /* Give other tasks chance to exit */
                 break; /* Start over since list changed */
             }
         }
@@ -345,7 +347,8 @@ hev_dns_latency_fini (void)
             "dns-latency: %d tasks still active after %d ms shutdown timeout",
             dns_latency_task_count, total_wait_ms);
     } else {
-        LOG_I ("dns-latency: All %d tasks completed during shutdown", wait_count);
+        LOG_I ("dns-latency: All %d tasks completed during shutdown",
+               wait_count);
     }
 
     dns_latency_initialized = 0;
@@ -1009,8 +1012,9 @@ hev_dns_latency_optimize_response_async (const uint8_t *response_data,
 
     /* Check if shutdown is in progress */
     if (is_shutdown ()) {
-        LOG_D ("dns-latency: Shutdown in progress, skipping optimization for %s",
-               domain);
+        LOG_D (
+            "dns-latency: Shutdown in progress, skipping optimization for %s",
+            domain);
         return 0; /* Let caller continue normal flow */
     }
 

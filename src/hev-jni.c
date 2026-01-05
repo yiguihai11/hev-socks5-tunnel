@@ -38,7 +38,7 @@
 #define STR_ARG(c) #c
 #define N_ELEMENTS(arr) (sizeof (arr) / sizeof ((arr)[0]))
 
-#define STOP_TIMEOUT_MS 5000  /* 5 seconds timeout for graceful shutdown */
+#define STOP_TIMEOUT_MS 5000 /* 5 seconds timeout for graceful shutdown */
 
 typedef struct _ThreadData ThreadData;
 
@@ -53,7 +53,7 @@ static JavaVM *java_vm;
 static pthread_t work_thread;
 static pthread_mutex_t mutex;
 static pthread_key_t current_jni_env;
-static int force_quit;  /* Force quit flag */
+static int force_quit; /* Force quit flag */
 
 static void native_start_service (JNIEnv *env, jobject thiz, jstring conig_path,
                                   jint fd);
