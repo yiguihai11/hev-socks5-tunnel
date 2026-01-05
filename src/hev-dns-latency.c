@@ -14,6 +14,7 @@
 #include <time.h>
 #include <fcntl.h>
 #include <poll.h>
+#include <pthread.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -47,8 +48,8 @@ static struct
 } dns_latency_tasks[MAX_TASKS];
 static int dns_latency_task_count = 0;
 
-/* Mutex for task list access (simple spinlock since we use hev-task) */
-static int dns_latency_task_lock = 0;
+/* Mutex for task list access - using pthread_mutex for compatibility */
+static pthread_mutex_t dns_latency_task_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 /* DNS header structure */
 typedef struct
@@ -61,18 +62,17 @@ typedef struct
     uint16_t arcount;
 } __attribute__ ((packed)) DNSHeader;
 
-/* Simple spinlock for task list */
+/* Simple mutex lock for task list */
 static inline void
 task_lock (void)
 {
-    while (__atomic_test_and_set (&dns_latency_task_lock, __ATOMIC_ACQUIRE))
-        hev_task_yield (HEV_TASK_YIELD);
+    pthread_mutex_lock (&dns_latency_task_mutex);
 }
 
 static inline void
 task_unlock (void)
 {
-    __atomic_clear (&dns_latency_task_lock, __ATOMIC_RELEASE);
+    pthread_mutex_unlock (&dns_latency_task_mutex);
 }
 
 /* Add task to tracking list */
@@ -122,7 +122,7 @@ remove_task (HevTask *task)
 static inline int
 is_shutdown (void)
 {
-    return __atomic_load_n (&dns_latency_shutdown, __ATOMIC_ACQUIRE);
+    return dns_latency_shutdown;
 }
 
 /* Helper: read big-endian uint16 */
@@ -301,7 +301,7 @@ hev_dns_latency_fini (void)
     }
 
     /* Signal shutdown */
-    __atomic_store_n (&dns_latency_shutdown, 1, __ATOMIC_RELEASE);
+    dns_latency_shutdown = 1;
     LOG_I (
         "dns-latency: Shutdown signaled, waiting for %d active tasks to complete",
         dns_latency_task_count);
