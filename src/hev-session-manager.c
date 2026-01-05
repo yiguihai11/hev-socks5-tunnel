@@ -1077,39 +1077,35 @@ cleanup_splice:
 
     goto exit_cleanup;
 
-fallback_socks5:
-    {
-        /* Use saved IP/port (pcb may be freed or reused) */
-        char fallback_dst_ip[INET6_ADDRSTRLEN];
-        ipaddr_ntoa_r (&dst_ip_copy, fallback_dst_ip,
-                       sizeof (fallback_dst_ip));
+fallback_socks5: {
+    /* Use saved IP/port (pcb may be freed or reused) */
+    char fallback_dst_ip[INET6_ADDRSTRLEN];
+    ipaddr_ntoa_r (&dst_ip_copy, fallback_dst_ip, sizeof (fallback_dst_ip));
 
-        LOG_I ("%p session: Smart proxy falling back to SOCKS5 for %s:%d -> %s:%d",
-               self, src_ip, pcb ? pcb->remote_port : 0, fallback_dst_ip,
-               dst_port_copy);
+    LOG_I ("%p session: Smart proxy falling back to SOCKS5 for %s:%d -> %s:%d",
+           self, src_ip, pcb ? pcb->remote_port : 0, fallback_dst_ip,
+           dst_port_copy);
 
-        if (self->buffer) {
-            LOG_D ("%p session: Smart proxy buffer will be reused by SOCKS5",
-                   self);
-        }
+    if (self->buffer) {
+        LOG_D ("%p session: Smart proxy buffer will be reused by SOCKS5", self);
+    }
 
-        hev_socks5_session_run (s);
+    hev_socks5_session_run (s);
 
-        LOG_I ("%p session: SOCKS5 proxy session ended %s:%d -> %s:%d", self,
-               src_ip, pcb ? pcb->remote_port : 0, fallback_dst_ip,
-               dst_port_copy);
+    LOG_I ("%p session: SOCKS5 proxy session ended %s:%d -> %s:%d", self,
+           src_ip, pcb ? pcb->remote_port : 0, fallback_dst_ip, dst_port_copy);
 
-        if (gfw_detected) {
-            LOG_I (
-                "%p session: ✅ Direct failed but proxy succeeded - adding to blacklist",
-                self);
-            if (self->detected_hostname[0]) {
-                hev_filter_blacklist_add_domain (self->detected_hostname);
-            } else {
-                hev_filter_blacklist_add_ip (&dst_ip_copy);
-            }
+    if (gfw_detected) {
+        LOG_I (
+            "%p session: ✅ Direct failed but proxy succeeded - adding to blacklist",
+            self);
+        if (self->detected_hostname[0]) {
+            hev_filter_blacklist_add_domain (self->detected_hostname);
+        } else {
+            hev_filter_blacklist_add_ip (&dst_ip_copy);
         }
     }
+}
 
 exit_cleanup:
     cleanup_session (s, node);
