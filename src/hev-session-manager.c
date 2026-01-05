@@ -776,8 +776,8 @@ run_direct_connect_task (void *data)
         goto exit_cleanup;
     }
 
-    LOG_I ("%p [DIRECT] Connected %s:%d -> %s:%d", self,
-           src_ip, pcb->remote_port, dst_ip, pcb->local_port);
+    LOG_I ("%p [DIRECT] Connected %s:%d -> %s:%d", self, src_ip,
+           pcb->remote_port, dst_ip, pcb->local_port);
 
     /* Allocate ring buffer */
     tcp_buffer_size = hev_config_get_misc_tcp_buffer_size ();
@@ -923,18 +923,16 @@ run_smart_proxy_task (void *data)
     hev_socks5_set_timeout (s, timeout);
     connect_start = get_current_time_ms ();
 
-    LOG_D (
-        "%p [SMART-PROXY] Attempting TCP handshake to %s:%d (timeout=%dms)",
-        self, dst_ip, pcb->local_port, timeout);
+    LOG_D ("%p [SMART-PROXY] Attempting TCP handshake to %s:%d (timeout=%dms)",
+           self, dst_ip, pcb->local_port, timeout);
 
     if (hev_task_io_socket_connect (fd, (struct sockaddr *)&saddr, saddr_len,
                                     hev_socks5_task_io_yielder, s) < 0) {
         time_t connect_duration_ms = get_current_time_ms () - connect_start;
 
-        LOG_W (
-            "%p [SMART-PROXY] TCP handshake FAILED to %s:%d after %ld ms, "
-            "fallback to SOCKS5 (will blacklist if proxy succeeds)",
-            self, dst_ip, pcb->local_port, connect_duration_ms);
+        LOG_W ("%p [SMART-PROXY] TCP handshake FAILED to %s:%d after %ld ms, "
+               "fallback to SOCKS5 (will blacklist if proxy succeeds)",
+               self, dst_ip, pcb->local_port, connect_duration_ms);
 
         gfw_detected = 1;
         cleanup_socket (s, task, fd);
@@ -963,8 +961,7 @@ run_smart_proxy_task (void *data)
     stack_size = hev_config_get_misc_task_stack_size ();
     task_b = hev_task_new (stack_size);
     if (!task_b) {
-        LOG_E ("%p [SMART-PROXY] Failed to create backward splice task",
-               self);
+        LOG_E ("%p [SMART-PROXY] Failed to create backward splice task", self);
         goto cleanup_splice;
     }
 
@@ -1082,17 +1079,15 @@ cleanup_splice:
                    "(detected issue, fallback to SOCKS5)",
                    self, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
         } else if (probe_success) {
-            LOG_I (
-                "%p [SMART-PROXY] Direct connect ended %s:%d -> %s:%d "
-                "(duration=%ld ms, probe was successful)",
-                self, src_ip, pcb->remote_port, dst_ip, pcb->local_port,
-                session_duration);
+            LOG_I ("%p [SMART-PROXY] Direct connect ended %s:%d -> %s:%d "
+                   "(duration=%ld ms, probe was successful)",
+                   self, src_ip, pcb->remote_port, dst_ip, pcb->local_port,
+                   session_duration);
         } else {
-            LOG_I (
-                "%p [SMART-PROXY] Direct connect ended %s:%d -> %s:%d "
-                "(duration=%ld ms)",
-                self, src_ip, pcb->remote_port, dst_ip, pcb->local_port,
-                session_duration);
+            LOG_I ("%p [SMART-PROXY] Direct connect ended %s:%d -> %s:%d "
+                   "(duration=%ld ms)",
+                   self, src_ip, pcb->remote_port, dst_ip, pcb->local_port,
+                   session_duration);
         }
     }
 
@@ -1107,9 +1102,8 @@ fallback_socks5: {
     char fallback_dst_ip[INET6_ADDRSTRLEN];
     ipaddr_ntoa_r (&dst_ip_copy, fallback_dst_ip, sizeof (fallback_dst_ip));
 
-    LOG_I ("%p [SMART-PROXY] Falling back to SOCKS5 for %s:%d -> %s:%d",
-           self, src_ip, pcb ? pcb->remote_port : 0, fallback_dst_ip,
-           dst_port_copy);
+    LOG_I ("%p [SMART-PROXY] Falling back to SOCKS5 for %s:%d -> %s:%d", self,
+           src_ip, pcb ? pcb->remote_port : 0, fallback_dst_ip, dst_port_copy);
 
     if (self->buffer) {
         LOG_D ("%p [SMART-PROXY] Buffer will be reused by SOCKS5", self);
@@ -1227,8 +1221,8 @@ direct_udp_cleanup (HevDirectUDPSession *session)
     }
 
     if (dropped_packets > 0) {
-        LOG_W ("%p [UDP] dropped %d queued packets during cleanup",
-               session, dropped_packets);
+        LOG_W ("%p [UDP] dropped %d queued packets during cleanup", session,
+               dropped_packets);
     }
 
     if (session->dns_query)
@@ -1251,9 +1245,8 @@ direct_udp_recv_handler (void *arg, struct udp_pcb *pcb, struct pbuf *p,
     HevUDPPacket *pkt;
 
     if (!p) {
-        LOG_D (
-            "%p [UDP] recv_handler got NULL pbuf, closing send direction",
-            session);
+        LOG_D ("%p [UDP] recv_handler got NULL pbuf, closing send direction",
+               session);
         session->alive &= ~UDP_ALIVE_SEND;
         if (session->task_main)
             hev_task_wakeup (session->task_main);
@@ -1263,9 +1256,8 @@ direct_udp_recv_handler (void *arg, struct udp_pcb *pcb, struct pbuf *p,
     session->last_activity = get_current_time_seconds ();
 
     if (session->queue_count > 100) {
-        LOG_W (
-            "%p [UDP] queue full (%d packets), dropping packet of %d bytes",
-            session, session->queue_count, p->tot_len);
+        LOG_W ("%p [UDP] queue full (%d packets), dropping packet of %d bytes",
+               session, session->queue_count, p->tot_len);
         pbuf_free (p);
         return;
     }
@@ -1307,8 +1299,7 @@ direct_udp_recv_task (void *data)
 
     s5 = HEV_SOCKS5 (hev_socks5_client_udp_new (HEV_SOCKS5_TYPE_NONE));
     if (!s5) {
-        LOG_E ("%p [UDP] recv task failed to create dummy socks5",
-               session);
+        LOG_E ("%p [UDP] recv task failed to create dummy socks5", session);
         session->alive &= ~UDP_ALIVE_RECV;
         return;
     }
@@ -1486,12 +1477,11 @@ direct_udp_recv_task (void *data)
                                               &session->orig_dest_ip,
                                               session->orig_dest_port);
                     if (err != ERR_OK) {
-                        LOG_E ("%p [UDP] udp_sendfrom failed: %d",
-                               session, err);
+                        LOG_E ("%p [UDP] udp_sendfrom failed: %d", session,
+                               err);
                     } else {
-                        LOG_D (
-                            "%p [UDP] forwarded %d bytes to client %s:%d",
-                            session, received, src_ip, session->src_port);
+                        LOG_D ("%p [UDP] forwarded %d bytes to client %s:%d",
+                               session, received, src_ip, session->src_port);
                     }
                 } else {
                     LOG_W ("%p [UDP] pcb is NULL, cannot forward packet",
@@ -1510,8 +1500,8 @@ direct_udp_recv_task (void *data)
     hev_task_del_fd (task, fd);
     close (fd);
 
-    LOG_D ("%p [UDP] recv task end (received %zu packets, %zu bytes)",
-           session, total_received_packets, total_received_bytes);
+    LOG_D ("%p [UDP] recv task end (received %zu packets, %zu bytes)", session,
+           total_received_packets, total_received_bytes);
 }
 
 static void
@@ -1529,8 +1519,7 @@ run_direct_udp_task (void *data)
 
     s5 = HEV_SOCKS5 (hev_socks5_client_udp_new (HEV_SOCKS5_TYPE_NONE));
     if (!s5) {
-        LOG_E ("%p [UDP] send task failed to create dummy socks5",
-               session);
+        LOG_E ("%p [UDP] send task failed to create dummy socks5", session);
         goto cleanup;
     }
 
@@ -1570,8 +1559,8 @@ run_direct_udp_task (void *data)
         LOG_D ("%p [UDP] target is IPv6: %s:%d", session, dst_ip,
                session->dest_port);
     } else {
-        LOG_D ("%p [UDP] target is IPv4 (mapped to IPv6): %s:%d",
-               session, dst_ip, session->dest_port);
+        LOG_D ("%p [UDP] target is IPv4 (mapped to IPv6): %s:%d", session,
+               dst_ip, session->dest_port);
     }
 
     stack_size = hev_config_get_misc_task_stack_size ();
@@ -1719,8 +1708,7 @@ hev_session_manager_start_direct_udp (struct udp_pcb *pcb,
         hev_list_add_tail (&session->packet_queue, &pkt->node);
         session->queue_count = 1;
     } else {
-        LOG_W ("%p [UDP] failed to allocate first packet structure",
-               session);
+        LOG_W ("%p [UDP] failed to allocate first packet structure", session);
         pbuf_free (p);
     }
 
