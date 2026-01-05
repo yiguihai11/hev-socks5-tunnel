@@ -440,8 +440,8 @@ run_domain_first_task (void *data)
         const char *hostname_to_pass = hostname_found ? http_hostname : NULL;
         if (next_action == NEXT_ACTION_DIRECT) {
             LOG_I ("%p session: Route: Direct", self);
-            hev_session_manager_start_task (pcb, saved_queue,
-                                            HEV_SESSION_DIRECT, hostname_to_pass);
+            hev_session_manager_start_task (
+                pcb, saved_queue, HEV_SESSION_DIRECT, hostname_to_pass);
         } else { /* NEXT_ACTION_SOCKS5 */
             /* Priority 4: Smart proxy for foreign IPs on probe ports */
             int smart_proxy_enabled =
@@ -460,9 +460,8 @@ run_domain_first_task (void *data)
                                                 hostname_to_pass);
             } else {
                 LOG_I ("%p session: Route: SOCKS5", self);
-                hev_session_manager_start_task (pcb, saved_queue,
-                                                HEV_SESSION_SOCKS5,
-                                                hostname_to_pass);
+                hev_session_manager_start_task (
+                    pcb, saved_queue, HEV_SESSION_SOCKS5, hostname_to_pass);
             }
         }
     }
@@ -511,7 +510,8 @@ static struct
 /* Internal helper to start a session with a specific task entry */
 void
 hev_session_manager_start_task (struct tcp_pcb *pcb, struct pbuf *queue,
-                                HevSessionType session_type, const char *hostname)
+                                HevSessionType session_type,
+                                const char *hostname)
 {
     HevSocks5SessionTCP *tcp;
     HevTask *task;
