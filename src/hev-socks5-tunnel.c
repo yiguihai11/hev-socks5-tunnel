@@ -378,15 +378,19 @@ event_task_entry (void *data)
 
     /* 终止所有会话 */
     node = hev_list_first (&session_set);
-    int session_count = 0;
+    int terminated_count = 0;
     for (; node; node = hev_list_node_next (node)) {
         HevSocks5SessionData *sd;
         sd = container_of (node, HevSocks5SessionData, node);
-        LOG_D ("socks5 tunnel: terminating session %d (self=%p)", session_count,
+        LOG_D ("socks5 tunnel: terminating session %d (self=%p)", terminated_count,
                sd->self);
-        hev_socks5_session_terminate (sd->self);
+        /* 跳过 NULL 会话，这些会话可能在初始化过程中被添加但未完成 */
+        if (sd->self) {
+            hev_socks5_session_terminate (sd->self);
+            terminated_count++;
+        }
     }
-    LOG_I ("socks5 tunnel: terminated %d sessions", session_count);
+    LOG_I ("socks5 tunnel: terminated %d sessions", terminated_count);
 
     /* 不要等待会话退出，直接继续关闭其他任务
      * 会话任务会在自然退出时清理自己 */
