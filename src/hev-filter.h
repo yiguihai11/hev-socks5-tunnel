@@ -306,58 +306,21 @@ void hev_filter_reset_stats (void);
 typedef enum
 {
     HEV_BLACKLIST_ENTRY_IP = 1, /* IP地址黑名单 */
-    HEV_BLACKLIST_ENTRY_PORT = 2, /* 端口黑名单 */
-    HEV_BLACKLIST_ENTRY_SNI = 3, /* SNI/主机名黑名单 */
-    HEV_BLACKLIST_ENTRY_DOMAIN = 4 /* 域名黑名单 */
+    HEV_BLACKLIST_ENTRY_DOMAIN = 2 /* 域名黑名单 */
 } HevBlacklistEntryType;
 
-/* 黑名单条目来源 */
-typedef enum
-{
-    HEV_BLACKLIST_SOURCE_MANUAL = 1, /* 手动添加 */
-    HEV_BLACKLIST_SOURCE_ACL = 2, /* ACL规则 */
-    HEV_BLACKLIST_SOURCE_CHNROUTES = 3, /* 中国路由规则 */
-    HEV_BLACKLIST_SOURCE_AUTO = 4, /* 自动检测（如异常行为） */
-    HEV_BLACKLIST_SOURCE_API = 5 /* API接口添加 */
-} HevBlacklistSource;
-
 /**
- * Enhanced Blacklist Entry
+ * Blacklist Entry (精简版)
  */
 typedef struct _HevBlacklistEntry
 {
     struct _HevBlacklistEntry *next;
-
-    /* 基本信息 */
     HevBlacklistEntryType type;
-    HevBlacklistSource source;
-    char id[64]; /* 唯一标识符 */
-
-    /* 网络信息 */
     ip_addr_t ip_addr;
-    int port;
-    char hostname[256]; /* SNI/主机名/域名 */
-
-    /* 时间信息 */
-    time_t added_time; /* 添加时间 */
-    time_t expiry_time; /* 过期时间 */
-    time_t last_seen; /* 最后访问时间 */
-    time_t first_seen; /* 首次发现时间 */
-
-    /* 统计信息 */
-    uint64_t hit_count; /* 命中次数 */
-    uint64_t bytes_blocked; /* 阻止的字节数 */
-    uint32_t session_count; /* 关联的会话数量 */
-
-    /* 元数据 */
-    char reason[128]; /* 添加原因 */
-    char source_info[64]; /* 来源详细信息 */
-    int severity; /* 严重级别 1-10 */
-    int is_active; /* 是否激活 */
-
-    /* TTL 管理 */
-    int ttl_seconds; /* 生存时间（秒） */
-    int auto_refresh; /* 是否自动刷新 */
+    char hostname[256];
+    time_t expiry_time; /* 过期时间，0 表示永不过期 */
+    uint64_t hit_count; /* 命中统计 (用于调试) */
+    char id[32]; /* 条目唯一标识符 (指针地址字符串) */
 } HevBlacklistEntry;
 
 /* 兼容性定义 */

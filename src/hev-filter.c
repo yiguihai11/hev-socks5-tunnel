@@ -11,14 +11,6 @@
 #define _DEFAULT_SOURCE
 #endif
 
-/* FreeBSD compatibility */
-#if defined(__FreeBSD__)
-#define __BSD_VISIBLE 1
-#ifndef AF_INET6
-#define AF_INET6 28
-#endif
-#endif
-
 #include <sys/types.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -48,7 +40,6 @@ typedef struct _RadixNode
     struct _RadixNode *left; /* 0 bit */
     struct _RadixNode *right; /* 1 bit */
     uint8_t is_leaf; /* Leaf node flag */
-    uint8_t blocked; /* Blocked flag for ACL (legacy, for chnroutes) */
     HevACLAction action; /* ACL action: ALLOW, BLOCK, or DEFAULT */
 } RadixNode;
 
@@ -170,10 +161,6 @@ static HevACLRule *acl_domain_suffix[1024] = { NULL }; /* .example.com */
 
 /* ============================================================================ */
 
-/* 黑名单统计 */
-static uint64_t total_hits = 0;
-static uint64_t total_blocked_bytes = 0;
-
 static void
 radix_tree_insert_ipv4 (uint32_t ip, uint8_t prefix, HevACLAction action)
 {
@@ -193,11 +180,10 @@ radix_tree_insert_ipv4 (uint32_t ip, uint8_t prefix, HevACLAction action)
     }
 
     (*current)->is_leaf = 1;
-    (*current)->blocked = (action == HEV_ACL_ACTION_BLOCK);
     (*current)->action = action;
 }
 
-static void __attribute__ ((unused))
+static void
 radix_tree_insert_ipv6 (const uint8_t *ip, uint8_t prefix, HevACLAction action)
 {
     RadixNode **current = &acl_ipv6_tree;
@@ -219,7 +205,6 @@ radix_tree_insert_ipv6 (const uint8_t *ip, uint8_t prefix, HevACLAction action)
     }
 
     (*current)->is_leaf = 1;
-    (*current)->blocked = (action == HEV_ACL_ACTION_BLOCK);
     (*current)->action = action;
 }
 
@@ -352,42 +337,13 @@ create_acl_rule (HevACLAction action, HevACLType type, const char *pattern)
 /* 前向声明 */
 static uint32_t hostname_hash (const char *hostname);
 
-/* 生成唯一ID */
-static void
-generate_entry_id (char *id, size_t id_size, HevBlacklistEntryType type,
-                   const ip_addr_t *ip_addr, int port, const char *hostname)
-{
-    struct timespec ts;
-    clock_gettime (CLOCK_REALTIME, &ts);
-
-    switch (type) {
-    case HEV_BLACKLIST_ENTRY_IP:
-        if (ip_addr) {
-            char ip_str[INET6_ADDRSTRLEN];
-            ipaddr_ntoa_r (ip_addr, ip_str, sizeof (ip_str));
-            snprintf (id, id_size, "ip_%s_%ld", ip_str, ts.tv_nsec);
-        }
-        break;
-    case HEV_BLACKLIST_ENTRY_PORT:
-        snprintf (id, id_size, "port_%d_%ld", port, ts.tv_nsec);
-        break;
-    case HEV_BLACKLIST_ENTRY_SNI:
-    case HEV_BLACKLIST_ENTRY_DOMAIN:
-        if (hostname) {
-            snprintf (id, id_size, "%s_%s_%ld",
-                      (type == HEV_BLACKLIST_ENTRY_SNI) ? "sni" : "domain",
-                      hostname, ts.tv_nsec);
-        }
-        break;
-    }
-}
-
-/* 多类型哈希函数 */
+/* 多类型哈希函数 (简化版) */
 static unsigned int
 blacklist_hash_multi (HevBlacklistEntryType type, const ip_addr_t *ip_addr,
                       int port, const char *hostname)
 {
     unsigned int hash = 0;
+    (void)port; /* unused */
 
     hash = (hash << 5) + type; /* 包含类型 */
 
@@ -407,14 +363,7 @@ blacklist_hash_multi (HevBlacklistEntryType type, const ip_addr_t *ip_addr,
         }
     }
 
-    if (type == HEV_BLACKLIST_ENTRY_PORT) {
-        hash ^= port * 0x9e3779b9;
-        hash = (hash << 7) | (hash >> 25);
-    }
-
-    if ((type == HEV_BLACKLIST_ENTRY_SNI ||
-         type == HEV_BLACKLIST_ENTRY_DOMAIN) &&
-        hostname) {
+    if (type == HEV_BLACKLIST_ENTRY_DOMAIN && hostname) {
         uint32_t h_hash = hostname_hash (hostname);
         hash ^= h_hash * 0x85ebca6b;
     }
@@ -429,10 +378,6 @@ type_to_string (HevBlacklistEntryType type)
     switch (type) {
     case HEV_BLACKLIST_ENTRY_IP:
         return "IP";
-    case HEV_BLACKLIST_ENTRY_PORT:
-        return "Port";
-    case HEV_BLACKLIST_ENTRY_SNI:
-        return "SNI";
     case HEV_BLACKLIST_ENTRY_DOMAIN:
         return "Domain";
     default:
@@ -914,8 +859,6 @@ hev_filter_init (void)
     memset (hostname_table, 0, sizeof (hostname_table));
     memset (blacklist_table, 0, sizeof (blacklist_table));
     blacklist_count = 0;
-    total_hits = 0;
-    total_blocked_bytes = 0;
 
     hev_task_mutex_init (&blacklist_mutex);
 
@@ -1356,13 +1299,8 @@ hev_filter_is_blocked_hostname (const char *hostname)
 int
 hev_filter_is_blocked_port (int port)
 {
-    /* 端口只有动态黑名单检查 */
-    if (hev_filter_blacklist_check_entry (HEV_BLACKLIST_ENTRY_PORT, NULL, port,
-                                          NULL)) {
-        LOG_D ("filter: Port %d blocked by dynamic blacklist", port);
-        return 1;
-    }
-
+    /* 端口黑名单功能已移除，精简版不支持 */
+    (void)port;
     return 0;
 }
 
@@ -1406,25 +1344,11 @@ hev_filter_is_gfw_blocked (const ip_addr_t *ip, const char *hostname, int port)
         return 1;
     }
 
-    /* 检查SNI是否被GFW封锁 */
-    if (hostname && hev_filter_blacklist_check_entry (HEV_BLACKLIST_ENTRY_SNI,
-                                                      NULL, 0, hostname)) {
-        LOG_D ("filter: SNI '%s' is GFW blocked (routing decision)", hostname);
-        return 1;
-    }
-
     /* 检查域名是否被GFW封锁 */
     if (hostname && hev_filter_blacklist_check_entry (
                         HEV_BLACKLIST_ENTRY_DOMAIN, NULL, 0, hostname)) {
         LOG_D ("filter: Domain '%s' is GFW blocked (routing decision)",
                hostname);
-        return 1;
-    }
-
-    /* 检查端口是否被封锁 */
-    if (port > 0 && hev_filter_blacklist_check_entry (HEV_BLACKLIST_ENTRY_PORT,
-                                                      NULL, port, NULL)) {
-        LOG_D ("filter: Port %d is GFW blocked (routing decision)", port);
         return 1;
     }
 
@@ -1534,11 +1458,10 @@ blacklist_add_internal (HevBlacklistEntryType type, const ip_addr_t *ip_addr,
     unsigned int hash;
     time_t now;
     char ip_str[INET6_ADDRSTRLEN] = { 0 };
-    const char *reason = "Smart proxy";
-    const char *source_str = "Auto";
+    int ttl_seconds;
 
     /* 获取配置的TTL */
-    int ttl_seconds =
+    ttl_seconds =
         hev_config_get_smart_proxy_blocked_ip_expiry_minutes () * 60;
     if (ttl_seconds <= 0) {
         ttl_seconds = 3600; /* 默认1小时 */
@@ -1549,8 +1472,7 @@ blacklist_add_internal (HevBlacklistEntryType type, const ip_addr_t *ip_addr,
         LOG_E ("filter: IP type requires valid IP address");
         return NULL;
     }
-    if ((type == HEV_BLACKLIST_ENTRY_SNI ||
-         type == HEV_BLACKLIST_ENTRY_DOMAIN) &&
+    if (type == HEV_BLACKLIST_ENTRY_DOMAIN &&
         (!hostname || strlen (hostname) == 0)) {
         LOG_E ("filter: Domain type requires valid hostname");
         return NULL;
@@ -1564,42 +1486,20 @@ blacklist_add_internal (HevBlacklistEntryType type, const ip_addr_t *ip_addr,
 
     now = get_current_time_seconds ();
 
-    /* 初始化基本字段 */
+    /* 初始化字段 */
     entry->type = type;
-    entry->source = HEV_BLACKLIST_SOURCE_AUTO;
-    entry->added_time = now;
     entry->expiry_time = now + ttl_seconds;
-    entry->first_seen = now;
-    entry->last_seen = now;
-    entry->severity = 5;
-    entry->is_active = 1;
-    entry->ttl_seconds = ttl_seconds;
-    entry->auto_refresh = 0;
+    entry->hit_count = 0;
+    snprintf (entry->id, sizeof (entry->id), "%p", (void *)entry);
 
     /* 初始化网络信息 */
     if (type == HEV_BLACKLIST_ENTRY_IP && ip_addr) {
         ip_addr_copy (entry->ip_addr, *ip_addr);
         ipaddr_ntoa_r (ip_addr, ip_str, sizeof (ip_str));
     }
-    if ((type == HEV_BLACKLIST_ENTRY_SNI ||
-         type == HEV_BLACKLIST_ENTRY_DOMAIN) &&
-        hostname) {
+    if (type == HEV_BLACKLIST_ENTRY_DOMAIN && hostname) {
         safe_str_copy (entry->hostname, hostname, sizeof (entry->hostname));
     }
-
-    /* 初始化统计字段 */
-    entry->hit_count = 0;
-    entry->bytes_blocked = 0;
-    entry->session_count = 0;
-
-    /* 初始化元数据 */
-    safe_str_copy (entry->reason, reason, sizeof (entry->reason));
-    snprintf (entry->source_info, sizeof (entry->source_info), "%s",
-              source_str);
-
-    /* 生成唯一ID */
-    generate_entry_id (entry->id, sizeof (entry->id), type, ip_addr, 0,
-                       hostname);
 
     /* 计算哈希值并插入 */
     hash = blacklist_hash_multi (type, ip_addr, 0, hostname);
@@ -1613,14 +1513,14 @@ blacklist_add_internal (HevBlacklistEntryType type, const ip_addr_t *ip_addr,
 
     /* 记录日志 */
     if (type == HEV_BLACKLIST_ENTRY_IP) {
-        LOG_I ("filter: Added IP %s to blacklist (id=%s, ttl=%dm)", ip_str,
-               entry->id, ttl_seconds / 60);
+        LOG_I ("filter: Added IP %s to blacklist (ttl=%dm)", ip_str,
+               ttl_seconds / 60);
     } else {
-        LOG_I ("filter: Added domain '%s' to blacklist (id=%s, ttl=%dm)",
-               hostname, entry->id, ttl_seconds / 60);
+        LOG_I ("filter: Added domain '%s' to blacklist (ttl=%dm)",
+               hostname, ttl_seconds / 60);
     }
 
-    return entry->id;
+    return entry->id; /* 返回ID字符串 */
 }
 
 /* Simplified blacklist add function for IP addresses */
@@ -1664,12 +1564,8 @@ hev_filter_blacklist_check_entry (HevBlacklistEntryType type,
     if (type == HEV_BLACKLIST_ENTRY_IP && !ip_addr) {
         return 0;
     }
-    if ((type == HEV_BLACKLIST_ENTRY_SNI ||
-         type == HEV_BLACKLIST_ENTRY_DOMAIN) &&
+    if (type == HEV_BLACKLIST_ENTRY_DOMAIN &&
         (!hostname || strlen (hostname) == 0)) {
-        return 0;
-    }
-    if (type == HEV_BLACKLIST_ENTRY_PORT && port <= 0) {
         return 0;
     }
 
@@ -1680,13 +1576,8 @@ hev_filter_blacklist_check_entry (HevBlacklistEntryType type,
             ipaddr_ntoa_r (ip_addr, desc, sizeof (desc));
         }
         break;
-    case HEV_BLACKLIST_ENTRY_PORT:
-        snprintf (desc, sizeof (desc), "port %d", port);
-        break;
-    case HEV_BLACKLIST_ENTRY_SNI:
     case HEV_BLACKLIST_ENTRY_DOMAIN:
-        snprintf (desc, sizeof (desc), "%s '%s'",
-                  (type == HEV_BLACKLIST_ENTRY_SNI) ? "SNI" : "domain",
+        snprintf (desc, sizeof (desc), "domain '%s'",
                   hostname ? hostname : "");
         break;
     }
@@ -1723,10 +1614,6 @@ hev_filter_blacklist_check_entry (HevBlacklistEntryType type,
         case HEV_BLACKLIST_ENTRY_IP:
             match = ip_addr && ip_addr_cmp (&entry->ip_addr, ip_addr);
             break;
-        case HEV_BLACKLIST_ENTRY_PORT:
-            match = entry->port == port;
-            break;
-        case HEV_BLACKLIST_ENTRY_SNI:
         case HEV_BLACKLIST_ENTRY_DOMAIN:
             match = hostname && strcasecmp (entry->hostname, hostname) == 0;
             break;
@@ -1735,10 +1622,7 @@ hev_filter_blacklist_check_entry (HevBlacklistEntryType type,
         if (match) {
             found = 1;
             found_entry = entry;
-            entry->last_seen = now;
             entry->hit_count++;
-            entry->is_active = 1;
-            total_hits++;
         }
 
         prev = entry;
@@ -1750,8 +1634,8 @@ hev_filter_blacklist_check_entry (HevBlacklistEntryType type,
     /* 释放过期条目 */
     while (to_delete) {
         HevBlacklistEntry *next = to_delete->next;
-        LOG_D ("filter: Removed expired %s entry (id=%s)",
-               type_to_string (to_delete->type), to_delete->id);
+        LOG_D ("filter: Removed expired %s entry",
+               type_to_string (to_delete->type));
         hev_free (to_delete);
         to_delete = next;
     }
@@ -1763,9 +1647,9 @@ hev_filter_blacklist_check_entry (HevBlacklistEntryType type,
 
     if (found && found_entry) {
         time_t time_remaining = found_entry->expiry_time - now;
-        LOG_D ("filter: %s found in blacklist (id=%s, hits=%lu, expires in %ld "
+        LOG_D ("filter: %s found in blacklist (hits=%lu, expires in %ld "
                "seconds)",
-               desc, found_entry->id, found_entry->hit_count, time_remaining);
+               desc, found_entry->hit_count, time_remaining);
     }
 
     return found;
@@ -1836,10 +1720,9 @@ hev_filter_blacklist_remove_entry (const char *id)
                 blacklist_count--;
                 removed = 1;
 
-                LOG_I ("filter: Removed %s entry (id=%s, %s, hits=%lu)",
-                       type_to_string (entry->type), entry->id,
-                       entry->hostname[0] ? entry->hostname :
-                                            (entry->port > 0 ? "port" : "IP"),
+                LOG_I ("filter: Removed %s entry (%s, hits=%lu)",
+                       type_to_string (entry->type),
+                       entry->hostname[0] ? entry->hostname : "IP",
                        entry->hit_count);
 
                 hev_free (entry);
@@ -1860,45 +1743,14 @@ hev_filter_blacklist_remove_entry (const char *id)
     return removed ? 0 : -1;
 }
 
-/* 更新命中统计 */
+/* 更新命中统计 (简化版) */
 int
 hev_filter_blacklist_update_hit (const char *id, uint64_t bytes)
 {
-    int updated = 0;
-
-    if (!id) {
-        return -1;
-    }
-
-    hev_task_mutex_lock (&blacklist_mutex);
-
-    /* 线性搜索条目 */
-    for (int i = 0; i < BLACKLIST_HASH_SIZE; i++) {
-        HevBlacklistEntry *current = blacklist_table[i];
-        while (current) {
-            if (strcmp (current->id, id) == 0) {
-                current->hit_count++;
-                current->bytes_blocked += bytes;
-                current->last_seen = get_current_time_seconds ();
-                total_hits++;
-                total_blocked_bytes += bytes;
-                updated = 1;
-                break;
-            }
-            current = current->next;
-        }
-        if (updated) {
-            break;
-        }
-    }
-
-    hev_task_mutex_unlock (&blacklist_mutex);
-
-    if (updated) {
-        LOG_D ("filter: Updated hit stats for entry %s (bytes=%lu)", id, bytes);
-    }
-
-    return updated ? 0 : -1;
+    (void)id;
+    (void)bytes;
+    /* 精简版不支持按ID更新，命中计数在check时自动更新 */
+    return 0;
 }
 
 /* 清空黑名单 */
@@ -1922,12 +1774,10 @@ hev_filter_blacklist_clear (void)
     }
 
     blacklist_count = 0;
-    total_hits = 0;
-    total_blocked_bytes = 0;
 
     hev_task_mutex_unlock (&blacklist_mutex);
 
-    LOG_I ("filter: Cleared %d enhanced blacklist entries", cleared_count);
+    LOG_I ("filter: Cleared %d blacklist entries", cleared_count);
 }
 
 /* 获取黑名单条目数量 */
@@ -1952,7 +1802,7 @@ hev_filter_blacklist_get_stats (size_t *total_entries, size_t *active_entries,
     for (int i = 0; i < BLACKLIST_HASH_SIZE; i++) {
         HevBlacklistEntry *current = blacklist_table[i];
         while (current) {
-            if (now <= current->expiry_time && current->is_active) {
+            if (now <= current->expiry_time) {
                 active++;
             }
             current = current->next;
@@ -1965,10 +1815,9 @@ hev_filter_blacklist_get_stats (size_t *total_entries, size_t *active_entries,
         *total_entries = blacklist_count;
     if (active_entries)
         *active_entries = active;
-    if (total_hits_out)
-        *total_hits_out = total_hits;
-    if (total_blocked_out)
-        *total_blocked_out = total_blocked_bytes;
+    /* 精简版不支持 total_hits 和 total_blocked_bytes */
+    (void)total_hits_out;
+    (void)total_blocked_out;
 }
 
 /* ============================================================================
@@ -2117,14 +1966,14 @@ HevACLAction
 hev_acl_check_final_decision (HevACLResult *stage1_result,
                               HevACLResult *stage2_result)
 {
-    /* Stage 1 (IP/Port/CIDR) is checked first */
-    if (stage1_result && stage1_result->matched) {
-        return stage1_result->action;
-    }
-
-    /* Stage 2 (domain) is only checked if Stage 1 didn't match */
+    /* Stage 2 (domain) has higher priority than Stage 1 (IP/Port/CIDR) */
     if (stage2_result && stage2_result->matched) {
         return stage2_result->action;
+    }
+
+    /* Stage 1 (IP/Port/CIDR) is checked only if Stage 2 didn't match */
+    if (stage1_result && stage1_result->matched) {
+        return stage1_result->action;
     }
 
     /* Default: use DEFAULT behavior (SOCKS5 proxy) */

@@ -11,6 +11,14 @@
 #define __HEV_TEST_H__
 
 /**
+ * g_is_test_mode:
+ *
+ * Global flag to indicate test mode. When set to 1, certain features
+ * like background tasks are disabled to prevent crashes in test environment.
+ */
+extern int g_is_test_mode;
+
+/**
  * hev_test_run:
  *
  * Runs all built-in tests and reports the results.

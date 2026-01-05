@@ -65,7 +65,7 @@ socks5:
 dns-forwarder:
   # Enable DNS forwarder feature (default: false)
   # When enabled, DNS queries to virtual-ip are redirected to target-ip
-  enabled: true
+  enabled: false
 
   # Hijack DNS queries sent to this IPv4 address inside the tunnel.
   virtual-ip4: 8.8.8.8
@@ -84,7 +84,7 @@ dns-forwarder:
 
 dns-split-tunnel:
   # 启用 DNS 分流功能 (default: false)
-  enabled: false
+  enabled: true
 
   # 国外 DNS 服务器列表（自动分类 IPv4/IPv6）
   # 当查询国内 DNS (如 119.29.29.29) 检测到污染时，
@@ -99,7 +99,7 @@ dns-split-tunnel:
 # 当干净的 DNS 响应包含多个 IP 时，自动测速并选择延迟最低的 IP
 dns-latency-optimize:
   # 启用 DNS 延迟优化（默认禁用）
-  enabled: false
+  enabled: true
 
   # 总测速超时时间（毫秒）
   # 如果所有 IP 测速都超时，将返回原始 DNS 响应
@@ -149,33 +149,33 @@ smart-proxy:
 acl:
   # Enable ACL feature (default: false)
   # When enabled, blocks IP addresses and hostnames/SNI listed in the ACL file
-  enabled: false
+  enabled: true
 
   # Path to the ACL file containing IP addresses and hostnames/SNI to block.
   # Each line in the file can be an IP address (IPv4 or IPv6) or a hostname/SNI.
   # Lines starting with '#' are treated as comments.
   file-path: "conf/acl.txt"
 
-#mapdns:
+mapdns:
   # Mapped DNS listen address (IPv4, optional)
-# address: 198.18.0.2
+  address: 198.18.0.2
   # Mapped DNS listen address (IPv6, optional, for pure IPv6 environment)
-# address6: fd00::1
+  address6: fd00::1
   # Mapped DNS port
-# port: 53
+  port: 53
   # Mapped IP network base (IPv4)
-# network: 240.0.0.0
+  network: 240.0.0.0
   # Mapped IP network mask (IPv4)
-# netmask: 240.0.0.0
+  netmask: 240.0.0.0
   # Mapped IP network prefix (IPv6, optional, default: fd00::)
-# network6: fd00::
+  network6: fd00::
   # IPv6 prefix length (optional, default: 96)
   # /96 = 32-bit index (4.2B entries)
   # /112 = 16-bit index (65K entries)
   # /120 = 8-bit index (256 entries)
-# prefixlen: 96
+  prefixlen: 96
   # Mapped DNS cache size
-# cache-size: 10000
+  cache-size: 10000
 
 misc:
   # task stack size (bytes)
@@ -187,13 +187,13 @@ misc:
   # number of udp buffers in splice, 1500 bytes per buffer.
   udp-copy-buffer-nums: 10
   # maximum session count (0: unlimited)
-# max-session-count: 0
+  max-session-count: 0
   # connect timeout (ms)
-# connect-timeout: 10000
+  connect-timeout: 10000
   # TCP read-write timeout (ms)
-# tcp-read-write-timeout: 300000
+  tcp-read-write-timeout: 300000
   # UDP read-write timeout (ms)
-# udp-read-write-timeout: 60000
+  udp-read-write-timeout: 60000
   # stdout, stderr or file-path
   log-file: stdout
   # debug, info, warn or error

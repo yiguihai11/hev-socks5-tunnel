@@ -25,41 +25,41 @@
 # --- 域名规则 (Domain Rules) ---
 
 # 阻止访问所有 a.com 的子域名，例如 test.a.com, data.a.com
-block *.a.com
+#block *.a.com
 
 # 阻止访问 b.com
-block b.com
+#block b.com
 
 # 允许访问 example.org 及其所有子域名并强制直连
-allow *.example.org
+#allow *.example.org
 
 
 # --- IP 地址规则 (IP Address Rules) ---
 
 # 阻止特定的恶意 IP 地址
-block 1.2.3.4
+#block 1.2.3.4
 
 # 允许某个特定的 IP 地址直连 (即使它可能是国外 IP)
-allow 8.8.9.9
+#allow 8.8.9.9
 
 
 # --- CIDR 网段规则 ---
 
 # 阻止来自某个特定子网的所有流量
-block 192.168.100.0/24
+#block 192.168.100.0/24
 
 # 允许某个内部服务网段总是直连
-allow 10.0.0.0/8
+#allow 10.0.0.0/8
 
 
 # --- 端口规则 (Port Rules) ---
 
 # 阻止所有非标准的 SSH 端口
-block port 2222
+#block port 2222
 
 # 允许所有 80 端口的流量直连 (我们刚刚修复了与此相关的 bug)
 # 如果没有这一条，非国内 IP 的 80 端口流量会默认走 SOCKS5 代理
-allow port 80
+#allow port 80
 
 # 允许 443 端口直连
-allow port 443
+#allow port 443

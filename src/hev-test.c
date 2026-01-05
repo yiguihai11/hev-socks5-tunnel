@@ -152,14 +152,13 @@ run_blacklist_tests (void)
     TEST_ASSERT (entry->type == HEV_BLACKLIST_ENTRY_IP);
     TEST_ASSERT (entry->hit_count == 1); // Should be incremented by check
 
-    // Test: Update hit statistics
+    // Test: Update hit statistics (精简版不支持, 只返回0)
     int update_res = hev_filter_blacklist_update_hit (entry_id, 1024);
     TEST_ASSERT (update_res == 0);
 
-    // Verify statistics updated
+    // Verify hit_count still only incremented by check
     entry = hev_filter_blacklist_get_entry (entry_id);
-    TEST_ASSERT (entry->hit_count == 2);
-    TEST_ASSERT (entry->bytes_blocked == 1024);
+    TEST_ASSERT (entry->hit_count == 1);
 
     // Test: Domain blacklist
     printf ("\nTesting domain blacklist...\n");
@@ -174,15 +173,11 @@ run_blacklist_tests (void)
     // Test: Statistics
     printf ("\nTesting blacklist statistics...\n");
     size_t total_entries, active_entries;
-    uint64_t total_hits, total_blocked;
 
-    hev_filter_blacklist_get_stats (&total_entries, &active_entries,
-                                    &total_hits, &total_blocked);
+    hev_filter_blacklist_get_stats (&total_entries, &active_entries, NULL, NULL);
 
     TEST_ASSERT (total_entries >= 2);
     TEST_ASSERT (active_entries >= 2);
-    TEST_ASSERT (total_hits >= 2);
-    TEST_ASSERT (total_blocked >= 1024);
 
     // Test: Entry removal
     printf ("\nTesting entry removal...\n");
@@ -1530,6 +1525,7 @@ hev_test_run (void)
     g_is_test_mode = 1; // Set test mode flag
 
     const char *test_config = "smart-proxy:\n"
+                              "  enabled: true\n"
                               "  timeout-ms: 2000\n"
                               "  blocked-ip-expiry-minutes: 1\n"
                               "  probe-ports:\n"

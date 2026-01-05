@@ -28,6 +28,7 @@
 #include "hev-filter.h"
 #include "hev-utils.h"
 #include "hev-dns-cache.h"
+#include "hev-test.h"
 #include <hev-socks5-misc.h>
 
 /* DNS 缓存分片锁配置 */
@@ -478,6 +479,12 @@ dns_cache_cleaner_task (void *data)
 static void
 start_cache_cleaner_if_needed (void)
 {
+    /* 测试模式下不启动后台清理任务，避免任务系统未初始化导致崩溃 */
+    if (g_is_test_mode) {
+        cache_cleaner_started = 1; /* 标记为已启动，避免重复检查 */
+        return;
+    }
+
     if (!cache_cleaner_started) {
         cache_cleaner_running = 1;
         cache_cleaner_started = 1;
@@ -1044,12 +1051,14 @@ hev_dns_cache_check_only (struct udp_pcb *pcb, struct pbuf *p,
 
     /* 提取域名 */
     char domain[256];
-    if (extract_dns_domain (p->payload, p->len, domain, sizeof (domain)) < 0) {
-        LOG_D ("dns-cache: Failed to extract domain from DNS query");
+    int extract_result = extract_dns_domain (p->payload, p->len, domain, sizeof (domain));
+    if (extract_result < 0) {
+        LOG_D ("dns-cache: Failed to extract domain from DNS query (len=%d)", p->len);
         return 0;
     }
 
-    LOG_D ("dns-cache: Checking cache for domain: %s", domain);
+    LOG_D ("dns-cache: Checking cache for domain: %s (domain_len=%zu)", domain,
+            strlen (domain));
 
     /* 检查缓存 */
     uint8_t *cached_response = NULL;
@@ -1069,7 +1078,8 @@ hev_dns_cache_check_only (struct udp_pcb *pcb, struct pbuf *p,
     }
 
     /* 缓存未命中 */
-    LOG_D ("dns-cache: Cache miss for domain: %s", domain);
+    LOG_D ("dns-cache: Cache miss for domain: %s (domain_len=%zu)", domain,
+            strlen (domain));
     return 0;
 }
 

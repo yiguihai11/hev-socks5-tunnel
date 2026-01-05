@@ -531,6 +531,7 @@ hev_config_parse_dns_latency_optimize (yaml_document_t *doc, yaml_node_t *base)
 {
     yaml_node_pair_t *pair;
 
+    LOG_I ("config: Parsing dns-latency-optimize section");
     CHECK_YAML_MAPPING (base);
     for (pair = base->data.mapping.pairs.start;
          pair < base->data.mapping.pairs.top; pair++) {
@@ -801,6 +802,7 @@ hev_config_parse_doc (yaml_document_t *doc)
         key = (const char *)node->data.scalar.value;
         node = yaml_document_get_node (doc, pair->value);
 
+        LOG_I ("config: Found key '%s'", key);
         if (0 == strcmp (key, "tunnel"))
             res = hev_config_parse_tunnel (doc, node);
         else if (0 == strcmp (key, "socks5"))

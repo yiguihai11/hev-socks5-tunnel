@@ -581,13 +581,14 @@ hev_session_manager_start_task (struct tcp_pcb *pcb, struct pbuf *queue,
 static int
 tcp_direct_splice_f (HevSocks5SessionTCP *self, HevIdleTimer *timer)
 {
-    struct iovec iov[64];
+    struct iovec iov[128]; /* 增加到 128 以批量处理更多 pbuf */
     struct pbuf *p;
     int iovc = 0;
     int res = 1;
 
     if (self->queue) {
-        for (p = self->queue; p && (iovc < 64); p = p->next, iovc++) {
+        /* 批量收集所有可用的 pbuf */
+        for (p = self->queue; p && (iovc < 128); p = p->next, iovc++) {
             iov[iovc].iov_base = p->payload;
             iov[iovc].iov_len = p->len;
         }
@@ -609,7 +610,7 @@ tcp_direct_splice_f (HevSocks5SessionTCP *self, HevIdleTimer *timer)
             if (timer)
                 idle_timer_update (timer);
 
-            LOG_D ("%p [SPLICE] forward sent %zd bytes", self, s);
+            LOG_D ("%p [SPLICE] forward sent %zd bytes (iovc=%d)", self, s, iovc);
 
             hev_task_mutex_lock (self->mutex);
             self->queue = pbuf_free_header (self->queue, s);
@@ -629,7 +630,7 @@ tcp_direct_splice_f (HevSocks5SessionTCP *self, HevIdleTimer *timer)
 static int
 tcp_direct_splice_b (HevSocks5SessionTCP *self, HevIdleTimer *timer)
 {
-    struct iovec iov[2];
+    struct iovec iov[16]; /* 增加到 16 以批量处理更多数据 */
     err_t err = ERR_OK;
     int res = 1, iovc;
 
@@ -646,7 +647,8 @@ tcp_direct_splice_b (HevSocks5SessionTCP *self, HevIdleTimer *timer)
             if (timer)
                 idle_timer_update (timer);
 
-            LOG_D ("%p [SPLICE] backward received %zd bytes", self, s);
+            LOG_D ("%p [SPLICE] backward received %zd bytes (iovc=%d)", self, s,
+                   iovc);
 
             hev_ring_buffer_write_finish (self->buffer, s);
             self->initial_data_received = 1;
@@ -659,6 +661,7 @@ tcp_direct_splice_b (HevSocks5SessionTCP *self, HevIdleTimer *timer)
         if (iovc) {
             ssize_t s = 0;
             int i;
+            /* 批量写入 lwIP PCB，减少 tcp_output 调用次数 */
             for (i = 0; i < iovc; i++) {
                 void *ptr = iov[i].iov_base;
                 size_t len = iov[i].iov_len;
@@ -666,7 +669,7 @@ tcp_direct_splice_b (HevSocks5SessionTCP *self, HevIdleTimer *timer)
                 s += len;
             }
             hev_ring_buffer_read_finish (self->buffer, s);
-            err |= tcp_output (self->pcb);
+            err |= tcp_output (self->pcb); /* 只调用一次 tcp_output */
             res = 1;
         } else if (res < 0) {
             LOG_D ("%p [SPLICE] backward EOF, shutting down pcb write", self);
