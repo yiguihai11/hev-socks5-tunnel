@@ -98,8 +98,6 @@ hev_socks5_tunnel_main_inner (int tun_fd)
         return -4;
     }
 
-    hev_session_manager_init ();
-
     nofile = hev_config_get_misc_limit_nofile ();
     res = set_limit_nofile (nofile);
     if (res < 0)
@@ -111,7 +109,6 @@ hev_socks5_tunnel_main_inner (int tun_fd)
 
     res = hev_task_system_init ();
     if (res < 0) {
-        hev_session_manager_fini ();
         hev_traffic_router_fini ();
         hev_filter_fini ();
         hev_socks5_logger_fini ();
@@ -124,7 +121,6 @@ hev_socks5_tunnel_main_inner (int tun_fd)
     res = hev_dns_latency_init ();
     if (res < 0) {
         hev_task_system_fini ();
-        hev_session_manager_fini ();
         hev_traffic_router_fini ();
         hev_filter_fini ();
         hev_socks5_logger_fini ();
@@ -136,7 +132,6 @@ hev_socks5_tunnel_main_inner (int tun_fd)
     if (res < 0) {
         hev_dns_latency_fini ();
         hev_task_system_fini ();
-        hev_session_manager_fini ();
         hev_traffic_router_fini ();
         hev_filter_fini ();
         hev_socks5_logger_fini ();
@@ -161,16 +156,13 @@ hev_socks5_tunnel_main_inner (int tun_fd)
     // 4. 清理 DNS 延迟优化模块
     hev_dns_latency_fini ();
 
-    // 5. 清理会话管理器
-    hev_session_manager_fini ();
-
-    // 6. 清理流量路由器 (依赖 filter)
+    // 5. 清理流量路由器 (依赖 filter)
     hev_traffic_router_fini ();
 
-    // 7. 清理过滤器 (最早加载数据的组件)
+    // 6. 清理过滤器 (最早加载数据的组件)
     hev_filter_fini ();
 
-    // 8. 清理日志系统
+    // 7. 清理日志系统
     hev_socks5_logger_fini ();
     hev_logger_fini ();
 

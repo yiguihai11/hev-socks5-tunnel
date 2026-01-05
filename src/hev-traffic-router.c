@@ -162,19 +162,6 @@ handle_dns_forward_hijack (const ip_addr_t *addr, u16_t port,
     return 0;
 }
 
-static void
-terminate_pcb_task (void *data)
-{
-    struct tcp_pcb *pcb = data;
-    LOG_D ("router: Terminating PCB %p in deferred task", pcb);
-    tcp_arg (pcb, NULL);
-    tcp_recv (pcb, NULL);
-    tcp_sent (pcb, NULL);
-    tcp_err (pcb, NULL);
-    tcp_abort (pcb);
-    LOG_D ("router: PCB %p terminated.", pcb);
-}
-
 int
 hev_traffic_router_init (void)
 {
@@ -215,7 +202,6 @@ hev_traffic_router_handle_tcp (struct tcp_pcb *pcb)
     const ip_addr_t *local_ip = &pcb->local_ip;
     char dst_ip[INET6_ADDRSTRLEN];
     char src_ip[INET6_ADDRSTRLEN];
-    int is_probe_port;
 
     ipaddr_ntoa_r (local_ip, dst_ip, sizeof (dst_ip));
     ipaddr_ntoa_r (&pcb->remote_ip, src_ip, sizeof (src_ip));
@@ -223,59 +209,11 @@ hev_traffic_router_handle_tcp (struct tcp_pcb *pcb)
     LOG_D ("%p router: TCP routing decision for %s:%d -> %s:%d", pcb, src_ip,
            pcb->remote_port, dst_ip, pcb->local_port);
 
-    // --- Priority 1: ACL IP block check ---
-    if (unlikely (hev_filter_is_blocked_ip (local_ip))) {
-        LOG_W (
-            "%p router: TCP connection blocked to IP: %s:%d (from %s:%d) by ACL. Deferring termination.",
-            pcb, dst_ip, pcb->local_port, src_ip, pcb->remote_port);
-        int stack_size = hev_config_get_misc_task_stack_size ();
-        hev_task_run (hev_task_new (stack_size), terminate_pcb_task,
-                      pcb); // Create a new task to terminate the PCB
-        return 1;
-    }
-
-    /* Check if this is a probe port (for domain-first routing) */
-    is_probe_port = hev_config_is_smart_proxy_probe_port (pcb->local_port);
-
-    // --- Priority 2: Domain-first routing for probe ports ---
-    // Domain-first sends fake reply to quickly get hostname, then decides routing
-    if (unlikely (is_probe_port)) {
-        LOG_I (
-            "%p router: TCP routing %s:%d -> %s:%d via DOMAIN-FIRST (probe port, quick hostname detection)",
-            pcb, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
-        hev_session_manager_start_domain_first_tcp (pcb);
-        return 1;
-    }
-
-    // --- Priority 3: chnroutes (domestic IP check) for non-probe ports ---
-    if (hev_filter_is_domestic (local_ip)) {
-        LOG_I (
-            "%p router: TCP routing %s:%d -> %s:%d via DIRECT (domestic IP, non-probe port)",
-            pcb, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
-        hev_session_manager_start_direct_tcp (pcb, NULL);
-        return 1;
-    }
-
-    // --- Priority 4: Smart proxy for foreign IPs ---
-    int is_blacklisted = hev_filter_blacklist_check_ip (local_ip);
-    int smart_proxy_enabled =
-        hev_config_get_smart_proxy_timeout_ms () > 0 &&
-        hev_config_get_smart_proxy_blocked_ip_expiry_minutes () > 0;
-
-    if (unlikely (smart_proxy_enabled && !is_blacklisted)) {
-        LOG_I (
-            "%p router: TCP routing %s:%d -> %s:%d via SMART_PROXY (foreign IP, non-probe port, trying direct first)",
-            pcb, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
-        hev_session_manager_start_smart_proxy (pcb);
-        return 1;
-    }
-
-    // --- Priority 5: Fallback to SOCKS5 ---
-    const char *reason = is_blacklisted ? "IP is blacklisted" :
-                                          "smart proxy disabled";
-    LOG_I ("%p router: TCP routing %s:%d -> %s:%d via SOCKS5 (%s)", pcb, src_ip,
-           pcb->remote_port, dst_ip, pcb->local_port, reason);
-    hev_session_manager_start_socks5_tcp (pcb, NULL);
+    /*
+     * All TCP connections are routed through domain-first for unified
+     * handling of ACL (IP/Port/Domain), domestic check, and Smart Proxy.
+     */
+    hev_session_manager_start_task (pcb, NULL, HEV_SESSION_DOMAIN_FIRST);
     return 1;
 }
 

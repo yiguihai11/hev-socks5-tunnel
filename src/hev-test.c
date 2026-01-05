@@ -27,10 +27,6 @@ int hev_config_get_smart_proxy_blocked_ip_expiry_minutes (void);
 const char *hev_config_get_dns_forwarder_virtual_ip4 (void);
 const char *hev_config_get_dns_forwarder_target_ip4 (void);
 
-// Forward declarations for session manager functions
-void hev_session_manager_init (void);
-void hev_session_manager_fini (void);
-
 // Forward declarations for config functions
 int hev_config_get_misc_task_stack_size (void);
 int hev_config_get_misc_tcp_buffer_size (void);

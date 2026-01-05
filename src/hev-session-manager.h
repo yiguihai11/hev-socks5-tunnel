@@ -20,16 +20,15 @@
 extern "C" {
 #endif
 
-void hev_session_manager_init (void);
-void hev_session_manager_fini (void);
+typedef enum _HevSessionType {
+    HEV_SESSION_SOCKS5,
+    HEV_SESSION_DIRECT,
+    HEV_SESSION_SMART_PROXY,
+    HEV_SESSION_DOMAIN_FIRST,
+} HevSessionType;
 
-void hev_session_manager_start_socks5_tcp (struct tcp_pcb *pcb,
-                                           struct pbuf *queue);
-void hev_session_manager_start_direct_tcp (struct tcp_pcb *pcb,
-                                           struct pbuf *queue);
-void hev_session_manager_start_smart_proxy (struct tcp_pcb *pcb);
-/* Domain-first routing: parse SNI/Host first, then decide routing */
-void hev_session_manager_start_domain_first_tcp (struct tcp_pcb *pcb);
+void hev_session_manager_start_task (struct tcp_pcb *pcb, struct pbuf *queue,
+                                    HevSessionType session_type);
 void hev_session_manager_start_direct_udp (struct udp_pcb *pcb,
                                            const ip_addr_t *addr, u16_t port,
                                            const ip_addr_t *orig_addr,
