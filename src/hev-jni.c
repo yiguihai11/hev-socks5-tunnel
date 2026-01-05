@@ -1,11 +1,5 @@
-/*
- ============================================================================
- Name        : hev-jni.c
- Author      : hev <r@hev.cc>
- Copyright   : Copyright (c) 2019 - 2023 hev
- Description : Jave Native Interface
- ============================================================================
- */
+/* Enable GNU extensions for pthread_tryjoin_np and pthread_cancel */
+#define _GNU_SOURCE
 
 #ifdef ANDROID
 
