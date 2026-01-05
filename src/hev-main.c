@@ -150,11 +150,12 @@ hev_socks5_tunnel_main_inner (int tun_fd)
     // 2. 清理 lwIP 相关资源 (在 tunnel_fini 之后,因为 tunnel 依赖 lwIP)
     // lwIP 没有显式的 fini 函数,资源在 tunnel_fini 中处理
 
-    // 3. 清理任务系统
-    hev_task_system_fini ();
-
-    // 4. 清理 DNS 延迟优化模块
+    // 3. 清理 DNS 延迟优化模块 (必须在 task_system_fini 之前!)
+    // DNS 延迟模块创建了异步任务,需要等待这些任务完成
     hev_dns_latency_fini ();
+
+    // 4. 清理任务系统 (在 dns_latency_fini 之后)
+    hev_task_system_fini ();
 
     // 5. 清理流量路由器 (依赖 filter)
     hev_traffic_router_fini ();

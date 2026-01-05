@@ -1125,11 +1125,11 @@ fallback_socks5: {
             self);
         if (self->detected_hostname[0]) {
             hev_filter_blacklist_add_domain (self->detected_hostname);
-            LOG_I ("%p [SMART-PROXY] Added domain '%s' to blacklist", self,
+            LOG_W ("%p [SMART-PROXY] Added domain '%s' to blacklist", self,
                    self->detected_hostname);
         } else {
             hev_filter_blacklist_add_ip (&dst_ip_copy);
-            LOG_I ("%p [SMART-PROXY] Added IP '%s' to blacklist", self,
+            LOG_W ("%p [SMART-PROXY] Added IP '%s' to blacklist", self,
                    fallback_dst_ip);
         }
     } else if (gfw_detected && !self->socks5_success) {
@@ -1704,6 +1704,8 @@ hev_session_manager_start_direct_udp (struct udp_pcb *pcb,
     session->orig_dest_port = orig_port;
     ip_addr_copy (session->src_ip, pcb->remote_ip);
     session->src_port = pcb->remote_port;
+
+    session->session_start = get_current_time_seconds ();
 
     pkt = hev_malloc (sizeof (HevUDPPacket));
     if (pkt) {

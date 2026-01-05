@@ -11,11 +11,14 @@
 
 #include <jni.h>
 #include <pthread.h>
+#include <time.h>
+#include <errno.h>
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "hev-main.h"
 #include "hev-logger.h"
@@ -35,6 +38,8 @@
 #define STR_ARG(c) #c
 #define N_ELEMENTS(arr) (sizeof (arr) / sizeof ((arr)[0]))
 
+#define STOP_TIMEOUT_MS 5000  /* 5 seconds timeout for graceful shutdown */
+
 typedef struct _ThreadData ThreadData;
 
 struct _ThreadData
@@ -48,6 +53,7 @@ static JavaVM *java_vm;
 static pthread_t work_thread;
 static pthread_mutex_t mutex;
 static pthread_key_t current_jni_env;
+static int force_quit;  /* Force quit flag */
 
 static void native_start_service (JNIEnv *env, jobject thiz, jstring conig_path,
                                   jint fd);
@@ -149,13 +155,81 @@ exit:
 static void
 native_stop_service (JNIEnv *env, jobject thiz)
 {
+    struct timespec timeout;
+    int ret;
+    int wait_count = 0;
+    const int max_wait_ms = STOP_TIMEOUT_MS;
+    const int check_interval_ms = 100;
+
     pthread_mutex_lock (&mutex);
 
-    if (!is_working)
+    if (!is_working) {
+        LOG_D ("jni: service not working, nothing to stop");
         goto exit;
+    }
 
+    LOG_I ("jni: stopping native service with %d ms timeout", max_wait_ms);
+
+    /* Send quit signal to C program */
+    force_quit = 0;
     hev_socks5_tunnel_quit ();
-    pthread_join (work_thread, NULL);
+
+    /* Wait for thread to finish with timeout */
+    /* pthread_join with timeout using multiple checks */
+    for (wait_count = 0; wait_count < (max_wait_ms / check_interval_ms);
+         wait_count++) {
+        /* Try to join with non-blocking check */
+        ret = pthread_tryjoin_np (work_thread, NULL);
+        if (ret == 0) {
+            LOG_I ("jni: native thread exited gracefully");
+            is_working = 0;
+            goto exit;
+        }
+
+        if (ret != EBUSY) {
+            LOG_W ("jni: pthread_tryjoin_np error: %d", ret);
+            break;
+        }
+
+        /* Thread still running, wait a bit */
+        usleep (check_interval_ms * 1000);
+
+        /* Log progress every second */
+        if ((wait_count * check_interval_ms) % 1000 == 0) {
+            LOG_D ("jni: waiting for thread to exit... (%d ms elapsed)",
+                   wait_count * check_interval_ms);
+        }
+    }
+
+    /* Timeout reached, force quit */
+    LOG_W ("jni: native thread did not exit after %d ms, forcing shutdown",
+           max_wait_ms);
+
+    force_quit = 1;
+
+    /* Send SIGTERM to thread group */
+    pthread_kill (work_thread, SIGTERM);
+
+    /* Final wait with shorter timeout */
+    for (wait_count = 0; wait_count < 10; wait_count++) {
+        ret = pthread_tryjoin_np (work_thread, NULL);
+        if (ret == 0) {
+            LOG_I ("jni: native thread exited after SIGTERM");
+            is_working = 0;
+            goto exit;
+        }
+        usleep (100000); /* 100ms */
+    }
+
+    /* Last resort: cancel the thread */
+    LOG_E ("jni: native thread did not respond to SIGTERM, cancelling");
+    ret = pthread_cancel (work_thread);
+    if (ret == 0) {
+        pthread_join (work_thread, NULL);
+        LOG_W ("jni: native thread was cancelled");
+    } else {
+        LOG_E ("jni: failed to cancel thread: %d", ret);
+    }
 
     is_working = 0;
 exit:

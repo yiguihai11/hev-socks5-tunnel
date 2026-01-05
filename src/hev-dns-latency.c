@@ -34,6 +34,22 @@
 static int ping_ipv4_available = -1;
 static int ping_ipv6_available = -1;
 
+/* Module state */
+static int dns_latency_initialized = 0;
+static int dns_latency_shutdown = 0;
+
+/* Task tracking */
+#define MAX_TASKS 64
+static struct
+{
+    HevTask *task;
+    int active;
+} dns_latency_tasks[MAX_TASKS];
+static int dns_latency_task_count = 0;
+
+/* Mutex for task list access (simple spinlock since we use hev-task) */
+static int dns_latency_task_lock = 0;
+
 /* DNS header structure */
 typedef struct
 {
@@ -44,6 +60,70 @@ typedef struct
     uint16_t nscount;
     uint16_t arcount;
 } __attribute__ ((packed)) DNSHeader;
+
+/* Simple spinlock for task list */
+static inline void
+task_lock (void)
+{
+    while (__atomic_test_and_set (&dns_latency_task_lock, __ATOMIC_ACQUIRE))
+        hev_task_yield (HEV_TASK_YIELD);
+}
+
+static inline void
+task_unlock (void)
+{
+    __atomic_clear (&dns_latency_task_lock, __ATOMIC_RELEASE);
+}
+
+/* Add task to tracking list */
+static int
+add_task (HevTask *task)
+{
+    int i;
+    task_lock ();
+    for (i = 0; i < MAX_TASKS; i++) {
+        if (!dns_latency_tasks[i].active) {
+            dns_latency_tasks[i].task = task;
+            dns_latency_tasks[i].active = 1;
+            dns_latency_task_count++;
+            task_unlock ();
+            LOG_D ("dns-latency: Added task %p to tracking list (count=%d)", task,
+                   dns_latency_task_count);
+            return 0;
+        }
+    }
+    task_unlock ();
+    LOG_W ("dns-latency: Task tracking list full!");
+    return -1;
+}
+
+/* Remove task from tracking list */
+static void
+remove_task (HevTask *task)
+{
+    int i;
+    task_lock ();
+    for (i = 0; i < MAX_TASKS; i++) {
+        if (dns_latency_tasks[i].active && dns_latency_tasks[i].task == task) {
+            dns_latency_tasks[i].active = 0;
+            dns_latency_tasks[i].task = NULL;
+            dns_latency_task_count--;
+            task_unlock ();
+            LOG_D ("dns-latency: Removed task %p from tracking list (count=%d)",
+                   task, dns_latency_task_count);
+            return;
+        }
+    }
+    task_unlock ();
+    LOG_W ("dns-latency: Task %p not found in tracking list", task);
+}
+
+/* Check if shutdown is requested */
+static inline int
+is_shutdown (void)
+{
+    return __atomic_load_n (&dns_latency_shutdown, __ATOMIC_ACQUIRE);
+}
 
 /* Helper: read big-endian uint16 */
 static inline uint16_t
@@ -157,6 +237,12 @@ hev_dns_latency_init (void)
     FILE *fp;
     int ret;
 
+    /* Initialize module state */
+    dns_latency_initialized = 0;
+    dns_latency_shutdown = 0;
+    dns_latency_task_count = 0;
+    memset (dns_latency_tasks, 0, sizeof (dns_latency_tasks));
+
     /* Detect if 'ping' command exists for IPv4
      * Execute 'ping -h' and check exit status:
      * - 0 or 2 = command exists (2 means invalid usage, but command exists)
@@ -197,6 +283,7 @@ hev_dns_latency_init (void)
             "dns-latency: ping6 command NOT available for IPv6, ICMP testing disabled");
     }
 
+    dns_latency_initialized = 1;
     LOG_I ("dns-latency: DNS latency optimization module initialized");
     return 0;
 }
@@ -204,6 +291,64 @@ hev_dns_latency_init (void)
 void
 hev_dns_latency_fini (void)
 {
+    int i;
+    int wait_count = 0;
+    int total_wait_ms = 0;
+    const int max_wait_ms = 5000; /* Wait max 5 seconds */
+
+    if (!dns_latency_initialized) {
+        return;
+    }
+
+    /* Signal shutdown */
+    __atomic_store_n (&dns_latency_shutdown, 1, __ATOMIC_RELEASE);
+    LOG_I ("dns-latency: Shutdown signaled, waiting for %d active tasks to complete",
+           dns_latency_task_count);
+
+    /* Wait for all tasks to complete */
+    while (dns_latency_task_count > 0 && total_wait_ms < max_wait_ms) {
+        /* Check each task and join if active */
+        task_lock ();
+        for (i = 0; i < MAX_TASKS; i++) {
+            if (dns_latency_tasks[i].active && dns_latency_tasks[i].task) {
+                HevTask *task = dns_latency_tasks[i].task;
+                task_unlock ();
+
+                LOG_D ("dns-latency: Joining task %p...", task);
+                hev_task_join (task);
+                hev_task_unref (task);
+                wait_count++;
+
+                task_lock ();
+                /* Task should have removed itself from list, but verify */
+                if (dns_latency_tasks[i].active) {
+                    dns_latency_tasks[i].active = 0;
+                    dns_latency_tasks[i].task = NULL;
+                    dns_latency_task_count--;
+                }
+                task_unlock ();
+
+                hev_task_yield (HEV_TASK_YIELD); /* Give other tasks chance to exit */
+                break; /* Start over since list changed */
+            }
+        }
+        task_unlock ();
+
+        if (dns_latency_task_count > 0) {
+            hev_task_sleep (100); /* Sleep 100ms */
+            total_wait_ms += 100;
+        }
+    }
+
+    if (dns_latency_task_count > 0) {
+        LOG_W (
+            "dns-latency: %d tasks still active after %d ms shutdown timeout",
+            dns_latency_task_count, total_wait_ms);
+    } else {
+        LOG_I ("dns-latency: All %d tasks completed during shutdown", wait_count);
+    }
+
+    dns_latency_initialized = 0;
     LOG_I ("dns-latency: DNS latency optimization module finalized");
 }
 
@@ -478,6 +623,13 @@ icmp_ping_test (const ip_addr_t *ip, int64_t *latency_us_out)
     char cmd[256];
     struct timespec start_time, end_time;
     int ret;
+    FILE *fp;
+
+    /* Check if shutdown is in progress - skip ping during shutdown */
+    if (is_shutdown ()) {
+        LOG_D ("dns-latency: Shutdown in progress, skipping ICMP ping");
+        return -1;
+    }
 
     /* Check if ping command is available */
     if (IP_IS_V6 (ip)) {
@@ -499,6 +651,7 @@ icmp_ping_test (const ip_addr_t *ip, int64_t *latency_us_out)
     /* Build ping command:
      * - ping -c 1 -W 1 <IPv4> for IPv4 addresses
      * - ping6 -c 1 -W 1 <IPv6> for IPv6 addresses
+     * Note: Add -W 1 (1 second timeout) to prevent hanging
      */
     if (IP_IS_V6 (ip)) {
         snprintf (cmd, sizeof (cmd), "ping6 -c 1 -W 1 %s", ip_str);
@@ -512,17 +665,24 @@ icmp_ping_test (const ip_addr_t *ip, int64_t *latency_us_out)
     clock_gettime (CLOCK_MONOTONIC, &start_time);
 
     /* Execute ping command */
-    FILE *fp = popen (cmd, "r");
+    fp = popen (cmd, "r");
     if (!fp) {
         LOG_D ("dns-latency: Failed to execute ping command: %s",
                strerror (errno));
         return -1;
     }
 
-    /* Read output (we don't need it, just wait for completion) */
+    /* Read output with shutdown check
+     * Check shutdown periodically to avoid blocking on slow popen */
     char buffer[256];
+    int line_count = 0;
     while (fgets (buffer, sizeof (buffer), fp) != NULL) {
-        /* Discard output */
+        /* Check shutdown every few lines */
+        if (++line_count % 10 == 0 && is_shutdown ()) {
+            LOG_W ("dns-latency: Shutdown during ping, aborting");
+            pclose (fp); /* Clean up the pipe */
+            return -1;
+        }
     }
 
     ret = pclose (fp);
@@ -645,9 +805,24 @@ dns_latency_optimize_task (void *data)
     int best_tcp_idx = -1;
     int64_t best_tcp_latency = INT64_MAX;
     int tcp_success_count = 0;
+    HevTask *self = hev_task_self ();
+
+    /* Register this task */
+    hev_task_ref (self);
+    if (add_task (self) < 0) {
+        hev_task_unref (self);
+        goto cleanup;
+    }
 
     LOG_I ("dns-latency: Starting latency optimization for domain: %s",
            ctx->domain);
+
+    /* Check if shutdown was requested */
+    if (is_shutdown ()) {
+        LOG_W ("dns-latency: Shutdown requested, skipping optimization for %s",
+               ctx->domain);
+        goto send_response;
+    }
 
     /* Extract all IPs */
     int ipv4_count, ipv6_count;
@@ -679,6 +854,14 @@ dns_latency_optimize_task (void *data)
            ip_count, per_ip_timeout);
 
     for (int i = 0; i < ip_count; i++) {
+        /* Check shutdown before each test */
+        if (is_shutdown ()) {
+            LOG_W (
+                "dns-latency: Shutdown requested during testing, using best result so far for %s",
+                ctx->domain);
+            break;
+        }
+
         if (hev_dns_latency_test_ip (&ips[i], &results[i], per_ip_timeout) ==
             0) {
             if (results[i].success &&
@@ -711,6 +894,14 @@ dns_latency_optimize_task (void *data)
         LOG_W ("dns-latency: All TCP tests failed, trying ICMP ping...");
 
         for (int i = 0; i < ip_count; i++) {
+            /* Check shutdown before each test */
+            if (is_shutdown ()) {
+                LOG_W (
+                    "dns-latency: Shutdown requested during ICMP testing, using best result so far for %s",
+                    ctx->domain);
+                break;
+            }
+
             if (hev_dns_latency_test_ip (&ips[i], &results[i],
                                          per_ip_timeout) == 0) {
                 if (results[i].success &&
@@ -789,6 +980,10 @@ send_response:
     }
 
 cleanup:
+    /* Remove task from tracking list */
+    remove_task (self);
+    hev_task_unref (self);
+
     if (ctx->response_data)
         hev_free (ctx->response_data);
     hev_object_unref (HEV_OBJECT (ctx->base));
@@ -810,6 +1005,13 @@ hev_dns_latency_optimize_response_async (const uint8_t *response_data,
         !base) {
         LOG_E ("dns-latency: Invalid parameters for async optimization");
         return -1;
+    }
+
+    /* Check if shutdown is in progress */
+    if (is_shutdown ()) {
+        LOG_D ("dns-latency: Shutdown in progress, skipping optimization for %s",
+               domain);
+        return 0; /* Let caller continue normal flow */
     }
 
     /* Allocate context */
