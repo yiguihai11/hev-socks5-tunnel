@@ -392,8 +392,26 @@ event_task_entry (void *data)
     }
     LOG_I ("socks5 tunnel: terminated %d sessions", terminated_count);
 
-    /* 不要等待会话退出，直接继续关闭其他任务
-     * 会话任务会在自然退出时清理自己 */
+    /* 等待所有会话任务退出，设置超时避免永久卡死 */
+    LOG_D ("socks5 tunnel: waiting for sessions to finish (session_count=%d)",
+           session_count);
+    int wait_count = 0;
+    int max_waits = 100; /* 最多等待10秒 (100 * 100ms) */
+
+    while (session_count > 0 && wait_count < max_waits) {
+        LOG_D ("socks5 tunnel: wait iteration %d/%d (session_count=%d)",
+               wait_count + 1, max_waits, session_count);
+        hev_task_sleep (100); /* 等待100ms */
+        wait_count++;
+        LOG_D ("socks5 tunnel: woke from sleep, session_count=%d", session_count);
+    }
+
+    if (session_count > 0) {
+        LOG_W ("socks5 tunnel: %d sessions still active after timeout",
+               session_count);
+    } else {
+        LOG_I ("socks5 tunnel: all sessions finished");
+    }
 
     LOG_D ("socks5 tunnel: joining lwip_io task");
     hev_task_join (task_lwip_io);
