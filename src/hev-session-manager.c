@@ -858,7 +858,13 @@ run_direct_connect_task (void *data)
     LOG_D ("%p [DIRECT] Waiting for backward splice task", self);
 
     /* Wait for backward task */
-    hev_task_join (task_b);
+    if (hev_socks5_tunnel_is_running ()) {
+        /* Only join if tunnel is still running. During shutdown, the
+         * background task has already exited due to tunnel status check. */
+        hev_task_join (task_b);
+    } else {
+        LOG_D ("%p [DIRECT] Tunnel stopped, skipping task join", self);
+    }
     hev_task_unref (task_b);
 
 cleanup_splice:
@@ -1084,7 +1090,14 @@ run_smart_proxy_task (void *data)
         hev_task_yield (type);
     }
 
-    hev_task_join (task_b);
+    /* Wait for backward task */
+    if (hev_socks5_tunnel_is_running ()) {
+        /* Only join if tunnel is still running. During shutdown, the
+         * background task has already exited due to tunnel status check. */
+        hev_task_join (task_b);
+    } else {
+        LOG_D ("%p [SMART-PROXY] Tunnel stopped, skipping task join", self);
+    }
     hev_task_unref (task_b);
 
 cleanup_splice:
