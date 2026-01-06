@@ -379,8 +379,9 @@ event_task_entry (void *data)
     /* 终止所有会话 */
     node = hev_list_first (&session_set);
     int terminated_count = 0;
-    for (; node; node = hev_list_node_next (node)) {
+    for (; node;) {
         HevSocks5SessionData *sd;
+        HevListNode *next = hev_list_node_next (node);
         sd = container_of (node, HevSocks5SessionData, node);
         LOG_D ("socks5 tunnel: terminating session %d (self=%p)",
                terminated_count, sd->self);
@@ -388,7 +389,12 @@ event_task_entry (void *data)
         if (sd->self) {
             hev_socks5_session_terminate (sd->self);
             terminated_count++;
+        } else {
+            /* NULL entries should also be removed from the list */
+            LOG_D ("socks5 tunnel: removing NULL session entry");
+            hev_socks5_tunnel_delete_session (node);
         }
+        node = next;
     }
     LOG_I ("socks5 tunnel: terminated %d sessions", terminated_count);
 
