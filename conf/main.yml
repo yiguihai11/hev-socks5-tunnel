@@ -160,7 +160,7 @@ mapdns:
   # Mapped DNS listen address (IPv4, optional)
   address: 198.18.0.2
   # Mapped DNS listen address (IPv6, optional, for pure IPv6 environment)
-  address6: fd00::1
+  address6: 'fd00::1'
   # Mapped DNS port
   port: 53
   # Mapped IP network base (IPv4)
@@ -168,7 +168,7 @@ mapdns:
   # Mapped IP network mask (IPv4)
   netmask: 240.0.0.0
   # Mapped IP network prefix (IPv6, optional, default: fd00::)
-  network6: fd00::
+  network6: 'fd00::'
   # IPv6 prefix length (optional, default: 96)
   # /96 = 32-bit index (4.2B entries)
   # /112 = 16-bit index (65K entries)
