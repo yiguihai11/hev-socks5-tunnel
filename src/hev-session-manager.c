@@ -708,6 +708,11 @@ tcp_splice_task_b (void *data)
         hev_task_mod_fd (task, fd, POLLIN);
 
     for (;;) {
+        /* 检查隧道是否已停止，如果是则退出后台任务 */
+        if (!hev_socks5_tunnel_is_running ()) {
+            LOG_D ("%p [SPLICE-B] %s tunnel stopped, exiting", self, task_name);
+            break;
+        }
         if (tcp_direct_splice_b (self, timer) < 0)
             break;
         hev_task_yield (HEV_TASK_WAITIO);
@@ -822,6 +827,11 @@ run_direct_connect_task (void *data)
     LOG_D ("%p [DIRECT] Starting data transfer loop", self);
 
     for (;;) {
+        /* 检查隧道是否已停止 */
+        if (!hev_socks5_tunnel_is_running ()) {
+            LOG_D ("%p [DIRECT] tunnel stopped, exiting", self);
+            break;
+        }
         int res_f = tcp_direct_splice_f (self, &idle_timer);
         if (res_f < 0) {
             LOG_D ("%p [DIRECT] Forward splice ended", self);
@@ -990,6 +1000,11 @@ run_smart_proxy_task (void *data)
        🔍 数据传输循环，检测真实数据
        ==================================================================== */
     for (;;) {
+        /* 检查隧道是否已停止 */
+        if (!hev_socks5_tunnel_is_running ()) {
+            LOG_D ("%p [SMART-PROXY] tunnel stopped, exiting", self);
+            break;
+        }
         int res_f = tcp_direct_splice_f (self, &idle_timer);
 
         if (first_loop && self->initial_data_received) {
