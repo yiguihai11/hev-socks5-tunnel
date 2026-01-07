@@ -434,7 +434,8 @@ extract_dns_domain (const uint8_t *data, size_t len, char *domain_out,
         return -1;
 
     size_t pos = sizeof (DNSHeader);
-    int result = parse_dns_name (dns_data, dns_len, &pos, domain_out, domain_max);
+    int result =
+        parse_dns_name (dns_data, dns_len, &pos, domain_out, domain_max);
 
     LOG_D ("dns-cache: extract_dns_domain: result=%d, domain='%s' (len=%zu)",
            result, domain_out, strlen (domain_out));
