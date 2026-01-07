@@ -415,8 +415,31 @@ extract_dns_domain (const uint8_t *data, size_t len, char *domain_out,
     if (len < sizeof (DNSHeader))
         return -1;
 
+    /* ⭐ 检查并跳过UDP头部（8字节）
+     * 如果前两个字节的和等于0x0035（DNS端口），说明包含UDP头部
+     * 数据包格式：UDP头部(8字节) + DNS头部(12字节) + DNS问题部分
+     */
+    size_t dns_offset = 0;
+    if (len >= 10 && data[2] == 0x00 && data[3] == 0x35) {
+        /* 检测到UDP头部（目标端口=53），跳过8字节UDP头部 */
+        dns_offset = 8;
+        LOG_D ("dns-cache: Detected UDP header in packet, skipping 8 bytes");
+    }
+
+    /* 调整后的DNS数据起始位置和长度 */
+    const uint8_t *dns_data = data + dns_offset;
+    size_t dns_len = len - dns_offset;
+
+    if (dns_len < sizeof (DNSHeader))
+        return -1;
+
     size_t pos = sizeof (DNSHeader);
-    return parse_dns_name (data, len, &pos, domain_out, domain_max);
+    int result = parse_dns_name (dns_data, dns_len, &pos, domain_out, domain_max);
+
+    LOG_D ("dns-cache: extract_dns_domain: result=%d, domain='%s' (len=%zu)",
+           result, domain_out, strlen (domain_out));
+
+    return result;
 }
 
 /* 检测IPv6是否可用 */
