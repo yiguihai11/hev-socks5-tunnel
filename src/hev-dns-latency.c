@@ -21,6 +21,8 @@
 #include <unistd.h>
 #include <hev-memory-allocator.h>
 #include <hev-task.h>
+#include <hev-task-mutex.h>
+#include <hev-task-cond.h>
 #include <hev-task-io.h>
 #include <hev-task-io-socket.h>
 #include <hev-socks5.h>
@@ -38,6 +40,25 @@ static int ping_ipv6_available = -1;
 /* Module state */
 static int dns_latency_initialized = 0;
 static int dns_latency_shutdown = 0;
+
+/* ⭐ 并发测试上下文 */
+typedef struct _ConcurrentTestContext
+{
+    ip_addr_t *ips;
+    DnsLatencyResult *results;
+    int ip_count;
+    volatile int completed_count; /* 已完成的任务数 */
+    volatile int should_stop;     /* 超时标志 */
+    HevTaskMutex mutex;
+    HevTaskCond cond;
+} ConcurrentTestContext;
+
+/* ⭐ 单IP测试任务参数 */
+typedef struct _SingleIPTestParam
+{
+    ConcurrentTestContext *ctx;
+    int ip_index;
+} SingleIPTestParam;
 
 /* Task tracking */
 #define MAX_TASKS 64
@@ -532,6 +553,22 @@ hev_dns_latency_modify_response (uint8_t *data, size_t *len,
     return 0;
 }
 
+/* ⭐ 简单的yielder函数，用于非阻塞socket操作 */
+static int
+dns_latency_yielder (HevTaskYieldType type, void *data)
+{
+    (void)data; /* 未使用 */
+
+    if (type == HEV_TASK_YIELD) {
+        hev_task_yield (HEV_TASK_YIELD);
+        return 0;
+    }
+
+    /* HEV_TASK_WAITIO: 等待I/O事件，同时允许超时唤醒 */
+    hev_task_yield (HEV_TASK_WAITIO);
+    return 0;
+}
+
 static int
 tcp_connect_test (const ip_addr_t *ip, uint16_t port, int64_t *latency_us_out)
 {
@@ -547,65 +584,42 @@ tcp_connect_test (const ip_addr_t *ip, uint16_t port, int64_t *latency_us_out)
         return -1;
     }
 
-    /* Set non-blocking */
-    int flags = fcntl (sock, F_GETFL, 0);
-    fcntl (sock, F_SETFL, flags | O_NONBLOCK);
-
     /* Build address */
     struct sockaddr_storage addr;
     memset (&addr, 0, sizeof (addr));
+    socklen_t addr_len;
     if (IP_IS_V6 (ip)) {
         struct sockaddr_in6 *a6 = (struct sockaddr_in6 *)&addr;
         a6->sin6_family = AF_INET6;
         a6->sin6_port = htons (port);
         memcpy (&a6->sin6_addr, ip_2_ip6 (ip)->addr, 16);
+        addr_len = sizeof (struct sockaddr_in6);
     } else {
         struct sockaddr_in *a4 = (struct sockaddr_in *)&addr;
         a4->sin_family = AF_INET;
         a4->sin_port = htons (port);
         a4->sin_addr.s_addr = ip_2_ip4 (ip)->addr;
+        addr_len = sizeof (struct sockaddr_in);
     }
 
     /* Start timing */
     clock_gettime (CLOCK_MONOTONIC, &start_time);
 
-    /* Connect */
-    int connect_ret = connect (sock, (struct sockaddr *)&addr,
-                               IP_IS_V6 (ip) ? sizeof (struct sockaddr_in6) :
-                                               sizeof (struct sockaddr_in));
-
-    if (connect_ret < 0 && errno != EINPROGRESS) {
-        LOG_D ("dns-latency: TCP connect to %s:%d failed: %s", ipaddr_ntoa (ip),
-               port, strerror (errno));
-        goto cleanup;
-    }
-
-    /* Wait for connection with timeout */
-    struct pollfd pfd;
-    pfd.fd = sock;
-    pfd.events = POLLOUT;
-
-    int poll_ret = poll (&pfd, 1, 500); /* 500ms timeout per port */
-    if (poll_ret <= 0) {
-        LOG_D ("dns-latency: TCP connect to %s:%d timeout/no event",
-               ipaddr_ntoa (ip), port);
-        goto cleanup;
-    }
-
-    /* Check for errors */
-    int error = 0;
-    socklen_t len = sizeof (error);
-    if (getsockopt (sock, SOL_SOCKET, SO_ERROR, &error, &len) < 0 ||
-        error != 0) {
-        LOG_D ("dns-latency: TCP connect to %s:%d failed: %s", ipaddr_ntoa (ip),
-               port, strerror (error));
-        goto cleanup;
-    }
+    /* ⭐ 使用非阻塞connect (hev_task_io_socket_connect) */
+    int connect_ret
+        = hev_task_io_socket_connect (sock, (struct sockaddr *)&addr, addr_len,
+                                      dns_latency_yielder, NULL);
 
     /* Calculate latency */
     clock_gettime (CLOCK_MONOTONIC, &end_time);
     *latency_us_out = (end_time.tv_sec - start_time.tv_sec) * 1000000 +
                       (end_time.tv_nsec - start_time.tv_nsec) / 1000;
+
+    if (connect_ret < 0) {
+        LOG_D ("dns-latency: TCP connect to %s:%d failed: %s", ipaddr_ntoa (ip),
+               port, strerror (errno));
+        goto cleanup;
+    }
 
     LOG_I ("dns-latency: TCP connect to %s:%d succeeded, latency=%lld us",
            ipaddr_ntoa (ip), port, (long long)*latency_us_out);
@@ -785,6 +799,191 @@ hev_dns_latency_test_ip_all (const ip_addr_t *ip, DnsLatencyResult *results_out,
     return 0;
 }
 
+/* ⭐ 单IP并发测试任务 */
+static void
+single_ip_test_task (void *data)
+{
+    SingleIPTestParam *param = (SingleIPTestParam *)data;
+    ConcurrentTestContext *ctx = param->ctx;
+    int ip_index = param->ip_index;
+
+    ip_addr_t *ip = &ctx->ips[ip_index];
+    DnsLatencyResult *result = &ctx->results[ip_index];
+
+    LOG_D ("dns-latency: [%d] Starting concurrent test for %s", ip_index,
+           ipaddr_ntoa (ip));
+
+    /* 初始化结果 */
+    memset (result, 0, sizeof (DnsLatencyResult));
+    ip_addr_copy (result->ip, *ip);
+
+    /* 测试443 (500ms超时) */
+    if (!ctx->should_stop) {
+        if (tcp_connect_test (ip, 443, &result->latency_us) == 0) {
+            result->method = DNS_LATENCY_METHOD_TCP443;
+            result->success = 1;
+            LOG_I ("dns-latency: [%d] IP %s TCP443 succeeded, latency=%lld us",
+                   ip_index, ipaddr_ntoa (ip), (long long)result->latency_us);
+            goto done;
+        }
+    }
+
+    /* 测试80 (500ms超时) */
+    if (!ctx->should_stop) {
+        if (tcp_connect_test (ip, 80, &result->latency_us) == 0) {
+            result->method = DNS_LATENCY_METHOD_TCP80;
+            result->success = 1;
+            LOG_I ("dns-latency: [%d] IP %s TCP80 succeeded, latency=%lld us",
+                   ip_index, ipaddr_ntoa (ip), (long long)result->latency_us);
+            goto done;
+        }
+    }
+
+    /* 测试ICMP (500ms超时) */
+    if (!ctx->should_stop) {
+        if (icmp_ping_test (ip, &result->latency_us) == 0) {
+            result->method = DNS_LATENCY_METHOD_ICMP;
+            result->success = 1;
+            LOG_I ("dns-latency: [%d] IP %s ICMP succeeded, latency=%lld us",
+                   ip_index, ipaddr_ntoa (ip), (long long)result->latency_us);
+            goto done;
+        }
+    }
+
+    /* 全部失败 */
+    LOG_W ("dns-latency: [%d] IP %s all tests failed", ip_index, ipaddr_ntoa (ip));
+    result->success = 0;
+
+done:
+    /* 释放参数 */
+    hev_free (param);
+
+    /* 通知主任务 */
+    hev_task_mutex_lock (&ctx->mutex);
+    ctx->completed_count++;
+    hev_task_cond_signal (&ctx->cond);
+    hev_task_mutex_unlock (&ctx->mutex);
+
+    LOG_D ("dns-latency: [%d] Task completed (%d/%d)", ip_index,
+           ctx->completed_count, ctx->ip_count);
+}
+
+/* ⭐ 并发测试多IP (总timeout_ms) */
+int
+hev_dns_latency_test_concurrent (const ip_addr_t *ips, int ip_count,
+                                  DnsLatencyResult *results_out, int timeout_ms)
+{
+    if (!ips || !results_out || ip_count <= 0 || ip_count > 32)
+        return -1;
+
+    ConcurrentTestContext ctx;
+    memset (&ctx, 0, sizeof (ctx));
+
+    ctx.ips = (ip_addr_t *)ips;
+    ctx.results = results_out;
+    ctx.ip_count = ip_count;
+    ctx.completed_count = 0;
+    ctx.should_stop = 0;
+
+    /* 初始化同步原语 */
+    if (hev_task_mutex_init (&ctx.mutex) != 0) {
+        LOG_E ("dns-latency: Failed to init mutex");
+        return -1;
+    }
+    if (hev_task_cond_init (&ctx.cond) != 0) {
+        LOG_E ("dns-latency: Failed to init cond");
+        return -1;
+    }
+
+    LOG_I ("dns-latency: Starting concurrent test for %d IPs (timeout=%dms)",
+           ip_count, timeout_ms);
+
+    /* 创建并发任务 */
+    for (int i = 0; i < ip_count; i++) {
+        HevTask *task = hev_task_new (-1);
+        if (!task) {
+            LOG_E ("dns-latency: Failed to create task for IP %d", i);
+            continue;
+        }
+
+        /* 分配参数 */
+        SingleIPTestParam *param = hev_malloc (sizeof (SingleIPTestParam));
+        if (!param) {
+            LOG_E ("dns-latency: Failed to alloc param for IP %d", i);
+            hev_task_unref (task);
+            continue;
+        }
+
+        param->ctx = &ctx;
+        param->ip_index = i;
+
+        /* 运行任务 */
+        hev_task_run (task, single_ip_test_task, param);
+        LOG_D ("dns-latency: Created and started task for IP %d", i);
+        /* ⭐ 不调用hev_task_unref()，任务系统会自动管理 */
+    }
+
+    LOG_D ("dns-latency: All %d tasks created, waiting for completion...", ip_count);
+
+    /* ⭐ 让出CPU多次，让子任务开始执行 */
+    for (int yield_count = 0; yield_count < 5; yield_count++) {
+        hev_task_yield (HEV_TASK_YIELD);
+        hev_task_sleep (10); /* 每次yield后睡眠10ms */
+    }
+
+    /* 等待所有任务完成或超时 */
+    hev_task_mutex_lock (&ctx.mutex);
+
+    int success_count = 0;
+    struct timespec timeout_abs;
+    struct timespec now;
+    clock_gettime (CLOCK_MONOTONIC, &now);
+    timeout_abs.tv_sec = now.tv_sec + (timeout_ms / 1000);
+    timeout_abs.tv_nsec = now.tv_nsec + (timeout_ms % 1000) * 1000000;
+    if (timeout_abs.tv_nsec >= 1000000000) {
+        timeout_abs.tv_sec++;
+        timeout_abs.tv_nsec -= 1000000000;
+    }
+
+    while (ctx.completed_count < ip_count) {
+        /* 检查是否应该停止（shutdown或超时） */
+        if (is_shutdown ()) {
+            LOG_W ("dns-latency: Shutdown during concurrent test");
+            ctx.should_stop = 1;
+            break;
+        }
+
+        /* 等待任务完成或超时 */
+        int ret = hev_task_cond_timedwait (&ctx.cond, &ctx.mutex,
+                                            timeout_ms - (timeout_ms / ip_count) *
+                                                       ctx.completed_count);
+        if (ret != 0) {
+            /* 超时或错误，设置停止标志 */
+            LOG_W ("dns-latency: Concurrent test timeout after %dms, stopping",
+                   timeout_ms);
+            ctx.should_stop = 1;
+            break;
+        }
+    }
+
+    hev_task_mutex_unlock (&ctx.mutex);
+
+    /* 等待正在运行的任务退出（给一点时间让它们看到should_stop标志） */
+    hev_task_sleep (100);
+
+    /* 统计成功数量 */
+    for (int i = 0; i < ip_count; i++) {
+        if (results_out[i].success)
+            success_count++;
+    }
+
+    LOG_I ("dns-latency: Concurrent test completed: %d/%d IPs succeeded",
+           success_count, ip_count);
+
+    /* Mutex和Cond不需要destroy（栈上分配的结构体） */
+    return success_count > 0 ? 0 : -1;
+}
+
 /* Context for async optimization task */
 typedef struct _DnsLatencyOptimizeContext
 {
@@ -805,9 +1004,6 @@ dns_latency_optimize_task (void *data)
     ip_addr_t ips[32]; /* Max 32 IPs */
     DnsLatencyResult results[32];
     int ip_count;
-    int best_tcp_idx = -1;
-    int64_t best_tcp_latency = INT64_MAX;
-    int tcp_success_count = 0;
     HevTask *self = hev_task_self ();
 
     /* Register this task */
@@ -849,75 +1045,34 @@ dns_latency_optimize_task (void *data)
         goto send_response;
     }
 
-    /* First round: Test TCP latency for all IPs */
+    /* ⭐ 并发测试所有IP (超时控制在总timeout内) */
     int timeout_ms = hev_config_get_dns_latency_timeout_ms ();
-    int per_ip_timeout = timeout_ms / ip_count;
 
-    LOG_I ("dns-latency: Testing TCP latency for %d IPs (timeout=%dms each)",
-           ip_count, per_ip_timeout);
+    LOG_I ("dns-latency: Concurrent testing %d IPs (total timeout=%dms)",
+           ip_count, timeout_ms);
 
-    for (int i = 0; i < ip_count; i++) {
-        /* Check shutdown before each test */
-        if (is_shutdown ()) {
-            LOG_W (
-                "dns-latency: Shutdown requested during testing, using best result so far for %s",
-                ctx->domain);
-            break;
-        }
-
-        if (hev_dns_latency_test_ip (&ips[i], &results[i], per_ip_timeout) ==
-            0) {
-            if (results[i].success &&
-                results[i].method <= DNS_LATENCY_METHOD_TCP80) {
-                /* TCP test successful (443 or 80) */
-                tcp_success_count++;
-                if (results[i].latency_us < best_tcp_latency) {
-                    best_tcp_latency = results[i].latency_us;
-                    best_tcp_idx = i;
-                }
-                LOG_I ("dns-latency: IP %s TCP latency=%lld us (port=%d)",
-                       ipaddr_ntoa (&ips[i]), (long long)results[i].latency_us,
-                       results[i].method == DNS_LATENCY_METHOD_TCP443 ? 443 :
-                                                                        80);
-            }
-        }
+    /* 使用并发测试 */
+    if (hev_dns_latency_test_concurrent (ips, ip_count, results, timeout_ms) != 0) {
+        LOG_W ("dns-latency: Concurrent test failed for all IPs");
+        goto send_response;
     }
 
+    /* 从结果中选择最佳IP (优先TCP 443 > TCP 80 > ICMP) */
     int best_idx = -1;
     int64_t best_latency = INT64_MAX;
+    DnsLatencyTestMethod best_method = DNS_LATENCY_METHOD_ICMP;
 
-    if (tcp_success_count > 0) {
-        /* Use best TCP result */
-        best_idx = best_tcp_idx;
-        best_latency = best_tcp_latency;
-        LOG_I ("dns-latency: Using best TCP result: %s with latency=%lld us",
-               ipaddr_ntoa (&ips[best_idx]), (long long)best_latency);
-    } else {
-        /* All TCP tests failed, try ICMP ping */
-        LOG_W ("dns-latency: All TCP tests failed, trying ICMP ping...");
+    for (int i = 0; i < ip_count; i++) {
+        if (!results[i].success)
+            continue;
 
-        for (int i = 0; i < ip_count; i++) {
-            /* Check shutdown before each test */
-            if (is_shutdown ()) {
-                LOG_W (
-                    "dns-latency: Shutdown requested during ICMP testing, using best result so far for %s",
-                    ctx->domain);
-                break;
-            }
-
-            if (hev_dns_latency_test_ip (&ips[i], &results[i],
-                                         per_ip_timeout) == 0) {
-                if (results[i].success &&
-                    results[i].method == DNS_LATENCY_METHOD_ICMP) {
-                    if (results[i].latency_us < best_latency) {
-                        best_latency = results[i].latency_us;
-                        best_idx = i;
-                    }
-                    LOG_I ("dns-latency: IP %s ICMP latency=%lld us",
-                           ipaddr_ntoa (&ips[i]),
-                           (long long)results[i].latency_us);
-                }
-            }
+        /* 优先选择TCP结果 */
+        if (results[i].method < best_method ||
+            (results[i].method == best_method &&
+             results[i].latency_us < best_latency)) {
+            best_idx = i;
+            best_latency = results[i].latency_us;
+            best_method = results[i].method;
         }
     }
 

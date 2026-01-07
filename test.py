@@ -16,7 +16,7 @@ tunnel_process = None
 TUNNEL_EXE_REL_PATH = "bin/hev-socks5-tunnel"  # 隧道程序相对脚本的路径
 TUNNEL_CONF_REL_PATH = "conf/main.yml"          # 隧道配置文件相对路径
 DEFAULT_IFACE = "tun0"                          # 默认绑定网卡（用`ip link show`确认）
-TEST_DOMAIN_DNS = "music.163.com"               # DNS测试目标域名
+TEST_DOMAIN_DNS = "www.cnnic.com.cn"            # DNS测试目标域名
 DNS_SERVERS = [                                  # 待测试DNS服务器列表（可增删）
     ("119.29.29.29", 53),
     ("114.114.114.114", 53),
@@ -222,12 +222,14 @@ def _test_single_dns(dns_ip, dns_port, query, iface, timeout):
         if 'sock' in locals():
             sock.close()
 
-def test_dns_servers(iface=None, timeout=3):
+def test_dns_servers(iface=None, timeout=3, round=1):
     """批量测试所有配置的DNS服务器"""
     query = build_dns_query(TEST_DOMAIN_DNS)
-    print(f"\n=== DNS测试开始（目标域名：{TEST_DOMAIN_DNS}，绑定网卡：{iface}）===")
+    print(f"\n{'='*60}")
+    print(f"DNS测试 - 第 {round} 轮（目标域名：{TEST_DOMAIN_DNS}，绑定网卡：{iface}）")
+    print(f"{'='*60}")
     for dns_ip, dns_port in DNS_SERVERS:
-        print(f"\n测试 {dns_ip}:{dns_port}...")
+        print(f"\n[第{round}轮] 测试 {dns_ip}:{dns_port}...")
         result = _test_single_dns(dns_ip, dns_port, query, iface, timeout)
         print(f"  {'✅' if '成功' in result else '❌'} {result}")
 
@@ -347,7 +349,27 @@ def run_test_workflow(iface=DEFAULT_IFACE, start_tunnel=True):
             print(f"✅ 隧道启动成功（PID：{tunnel_process.pid}，状态：存活）")
 
         # 第二步：执行网络测试（DNS + TCP）
-        test_dns_servers(iface=iface)
+        # DNS缓存测试：运行两次，观察缓存行为
+        print("\n" + "="*60)
+        print("DNS缓存测试：将运行两轮DNS查询")
+        print("第一轮：建立DNS缓存")
+        print("第二轮：使用DNS缓存（应该更快）")
+        print("="*60)
+
+        # 第一轮：建立缓存
+        test_dns_servers(iface=iface, round=1)
+
+        # 等待2秒，让用户观察日志
+        print("\n⏳ 等待 2 秒，请观察 tunnel.log 中的缓存相关日志...")
+        time.sleep(2)
+
+        # 第二轮：测试缓存
+        test_dns_servers(iface=iface, round=2)
+
+        # TCP测试（可选）
+        print("\n" + "="*60)
+        print("TCP连接测试")
+        print("="*60)
         test_tcp_servers(iface=iface)
 
         # 第三步：测试完成后，主动终止隧道（核心逻辑）

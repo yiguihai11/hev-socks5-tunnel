@@ -116,6 +116,26 @@ int hev_dns_latency_test_ip_all (const ip_addr_t *ip,
                                  DnsLatencyResult *results_out, int timeout_ms);
 
 /**
+ * hev_dns_latency_test_concurrent:
+ * @ips: IP addresses to test (IPv4 or IPv6)
+ * @ip_count: number of IPs
+ * @results_out: output array for test results (must have ip_count elements)
+ * @timeout_ms: total timeout for all IPs in milliseconds
+ *
+ * Test latency for multiple IPs concurrently using task system:
+ * - Each IP tests in parallel (443 -> 80 -> ICMP)
+ * - Total timeout applies to the entire group
+ * - Each port has 500ms hardcoded timeout
+ * - When timeout occurs, all tests are stopped
+ * - Returns best result from successful tests
+ *
+ * Returns: 0 on success (at least one IP succeeded), -1 on failure
+ */
+int hev_dns_latency_test_concurrent (const ip_addr_t *ips, int ip_count,
+                                      DnsLatencyResult *results_out,
+                                      int timeout_ms);
+
+/**
  * hev_dns_latency_optimize_response_async:
  * @response_data: DNS response data (will be copied)
  * @response_len: response data length
