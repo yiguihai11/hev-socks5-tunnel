@@ -1475,7 +1475,8 @@ direct_udp_recv_task (void *data)
                     /* 启动异步优化任务 */
                     int ret = hev_dns_latency_optimize_response_async (
                         buffer, received, domain, session->pcb,
-                        &session->orig_dest_ip, session->orig_dest_port, s5);
+                        &session->orig_dest_ip, session->orig_dest_port,
+                        &session->src_ip, session->src_port, s5);
 
                     if (ret > 0) {
                         LOG_I (
