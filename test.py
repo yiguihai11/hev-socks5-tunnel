@@ -188,7 +188,12 @@ def _test_single_dns(dns_ip, dns_port, query, iface, timeout):
         sock.sendto(query, (dns_ip, dns_port))
 
         # 接收响应
-        response, _ = sock.recvfrom(1024)
+        try:
+            response, addr = sock.recvfrom(1024)
+            # 调试：打印响应来源
+            print(f"    [调试] 响应来自: {addr} (期望: {dns_ip}:{dns_port})")
+        except socket.timeout:
+            raise
 
         # 1. 检查响应大小
         if not response:
