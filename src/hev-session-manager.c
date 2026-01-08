@@ -1442,9 +1442,9 @@ direct_udp_recv_task (void *data)
                             /* ⭐ 缓存干净的DNS响应 */
                             char domain[256];
                             if (extract_dns_domain (buffer, received, domain,
-                                                    sizeof (domain)) >= 0) {
+                                                    sizeof (domain)) > 0) {
                                 hev_dns_cache_insert (domain, buffer, received,
-                                                      time (NULL) + 300, 0);
+                                                      time (NULL) + 300, 1);
                                 LOG_I (
                                     "%p session: Cached clean DNS response for domain '%s' (from SOCKS5)",
                                     session, domain);
@@ -1473,24 +1473,9 @@ direct_udp_recv_task (void *data)
                 if (extract_dns_domain (buffer, received, domain,
                                         sizeof (domain)) >= 0) {
                     /* 启动异步优化任务 */
-                    char src_str[INET6_ADDRSTRLEN], orig_str[INET6_ADDRSTRLEN];
-                    ipaddr_to_str (&session->src_ip, src_str);
-                    ipaddr_to_str (&session->orig_dest_ip, orig_str);
-                    LOG_I ("%p session: DNS latency params: client=%s:%d, src=%s:%d (src_ip=%p, orig_dest_ip=%p)",
-                           session, src_str, session->src_port, orig_str, session->orig_dest_port,
-                           &session->src_ip, &session->orig_dest_ip);
-
-                    /* Debug: Check values after function call */
                     int ret = hev_dns_latency_optimize_response_async (
                         buffer, received, domain, session->pcb,
-                        &session->src_ip, session->src_port,
                         &session->orig_dest_ip, session->orig_dest_port, s5);
-
-                    char src_str2[INET6_ADDRSTRLEN], orig_str2[INET6_ADDRSTRLEN];
-                    ipaddr_to_str (&session->src_ip, src_str2);
-                    ipaddr_to_str (&session->orig_dest_ip, orig_str2);
-                    LOG_I ("%p session: After call: client=%s:%d, src=%s:%d",
-                           session, src_str2, session->src_port, orig_str2, session->orig_dest_port);
 
                     if (ret > 0) {
                         LOG_I (
