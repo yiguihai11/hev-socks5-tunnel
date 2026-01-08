@@ -507,15 +507,14 @@ hev_dns_latency_modify_response (uint8_t *data, size_t *len,
         pos += 4;
     }
 
-    /* Find and keep only the best IP */
-    size_t first_answer_pos = pos;
-    size_t best_answer_start = 0;
-    size_t best_answer_len = 0;
+    /* 遍历所有Answer，找到目标IP并统计 */
+    int target_answer_count = 0;  /* 目标Answer之前需要保留的Answer数量 */
     int found = 0;
 
     for (int i = 0; i < ancount && pos < *len; i++) {
-        size_t answer_start = pos;
         char domain[256];
+        size_t answer_start = pos;
+
         if (parse_dns_name (data, *len, &pos, domain, sizeof (domain)) < 0)
             break;
 
@@ -529,28 +528,38 @@ hev_dns_latency_modify_response (uint8_t *data, size_t *len,
         if (pos + rdlen > *len)
             break;
 
-        /* Check if this answer matches best_ip */
-        int match = 0;
+        /* 检查是否匹配目标IP */
+        int is_target = 0;
         if (IP_IS_V4 (best_ip) && rtype == DNS_TYPE_A && rdlen == 4) {
             ip_addr_t ip;
             IP_ADDR4 (&ip, data[pos], data[pos + 1], data[pos + 2],
                       data[pos + 3]);
-            if (ip_addr_cmp (&ip, best_ip))
-                match = 1;
+            if (ip_addr_cmp (&ip, best_ip)) {
+                is_target = 1;
+                found = 1;
+            }
         } else if (IP_IS_V6 (best_ip) && rtype == DNS_TYPE_AAAA &&
                    rdlen == 16) {
             ip_addr_t ip;
             memset (&ip, 0, sizeof (ip));
             memcpy (ip_2_ip6 (&ip)->addr, data + pos, 16);
             ip.type = IPADDR_TYPE_V6;
-            if (ip_addr_cmp (&ip, best_ip))
-                match = 1;
+            if (ip_addr_cmp (&ip, best_ip)) {
+                is_target = 1;
+                found = 1;
+            }
         }
 
-        if (match) {
-            best_answer_start = answer_start;
-            best_answer_len = (pos + rdlen) - answer_start;
-            found = 1;
+        /* 如果是CNAME，需要保留 */
+        if (rtype == DNS_TYPE_CNAME) {
+            target_answer_count++;
+        }
+
+        /* 如果是目标IP，记录位置并停止 */
+        if (is_target) {
+            /* 简单方案：记录目标Answer的结束位置 */
+            *len = answer_start + 10 + rdlen;  /* Answer开始 + 头部 + 数据 */
+            hdr->ancount = htons (target_answer_count + 1);
             break;
         }
 
@@ -562,18 +571,8 @@ hev_dns_latency_modify_response (uint8_t *data, size_t *len,
         return -1;
     }
 
-    /* Move the best answer to replace all answers */
-    if (best_answer_start > first_answer_pos) {
-        memmove (data + first_answer_pos, data + best_answer_start,
-                 best_answer_len);
-    }
-
-    /* Update length and ancount */
-    *len = first_answer_pos + best_answer_len;
-    hdr->ancount = htons (1);
-
-    LOG_I ("dns-latency: Modified DNS response to keep only %s (len=%zu)",
-           ipaddr_ntoa (best_ip), *len);
+    LOG_I ("dns-latency: Modified DNS response, kept %d answers (len=%zu)",
+           target_answer_count + 1, *len);
 
     return 0;
 }
@@ -870,7 +869,7 @@ single_ip_test_task (void *data)
 
     /* ⭐ 阶段1: TCP 443 测试（硬编码500ms超时） */
     hev_task_mutex_lock (&ctx->mutex);
-    while (ctx->current_stage > TEST_STAGE_TCP443 && !ctx->should_stop) {
+    while (ctx->current_stage != TEST_STAGE_TCP443 && !ctx->should_stop) {
         hev_task_cond_wait (&ctx->stage_cond, &ctx->mutex);
     }
     hev_task_mutex_unlock (&ctx->mutex);
@@ -892,12 +891,14 @@ single_ip_test_task (void *data)
     /* ⭐ 通知阶段1完成 */
     hev_task_mutex_lock (&ctx->mutex);
     ctx->stage_completed_count++;
+    LOG_D ("dns-latency: [%d] Stage1 completed, count=%d/%d", ip_index,
+           ctx->stage_completed_count, ctx->ip_count);
     hev_task_cond_signal (&ctx->stage_cond);
     hev_task_mutex_unlock (&ctx->mutex);
 
     /* ⭐ 阶段2: TCP 80 测试（硬编码500ms超时） */
     hev_task_mutex_lock (&ctx->mutex);
-    while (ctx->current_stage > TEST_STAGE_TCP80 && !ctx->should_stop) {
+    while (ctx->current_stage != TEST_STAGE_TCP80 && ctx->current_stage <= TEST_STAGE_TCP443 && !ctx->should_stop) {
         hev_task_cond_wait (&ctx->stage_cond, &ctx->mutex);
     }
     hev_task_mutex_unlock (&ctx->mutex);
@@ -919,12 +920,14 @@ single_ip_test_task (void *data)
     /* ⭐ 通知阶段2完成 */
     hev_task_mutex_lock (&ctx->mutex);
     ctx->stage_completed_count++;
+    LOG_D ("dns-latency: [%d] Stage2 completed, count=%d/%d", ip_index,
+           ctx->stage_completed_count, ctx->ip_count);
     hev_task_cond_signal (&ctx->stage_cond);
     hev_task_mutex_unlock (&ctx->mutex);
 
     /* ⭐ 阶段3: ICMP 测试（硬编码250ms超时，全局deadline控制） */
     hev_task_mutex_lock (&ctx->mutex);
-    while (ctx->current_stage > TEST_STAGE_ICMP && !ctx->should_stop) {
+    while (ctx->current_stage != TEST_STAGE_ICMP && ctx->current_stage <= TEST_STAGE_TCP80 && !ctx->should_stop) {
         hev_task_cond_wait (&ctx->stage_cond, &ctx->mutex);
     }
     hev_task_mutex_unlock (&ctx->mutex);
@@ -946,6 +949,8 @@ single_ip_test_task (void *data)
     /* ⭐ 通知阶段3完成 */
     hev_task_mutex_lock (&ctx->mutex);
     ctx->stage_completed_count++;
+    LOG_D ("dns-latency: [%d] Stage3 completed, count=%d/%d", ip_index,
+           ctx->stage_completed_count, ctx->ip_count);
     hev_task_cond_signal (&ctx->stage_cond);
     hev_task_mutex_unlock (&ctx->mutex);
 
@@ -1031,26 +1036,30 @@ hev_dns_latency_test_concurrent (const ip_addr_t *ips, int ip_count,
         LOG_D ("dns-latency: Created and started task for IP %d", i);
     }
 
-    LOG_D ("dns-latency: All %d tasks created", ip_count);
-
-    /* ⭐ 让出CPU多次，让子任务开始执行 */
-    for (int yield_count = 0; yield_count < 5; yield_count++) {
-        hev_task_yield (HEV_TASK_YIELD);
-        hev_task_sleep (10);
-    }
+    LOG_D ("dns-latency: All %d tasks created, starting stage coordination", ip_count);
 
     /* ⭐ 阶段协调：管理三个测试阶段 */
     for (int stage = TEST_STAGE_TCP443; stage <= TEST_STAGE_ICMP; stage++) {
+        LOG_I ("dns-latency: === Starting stage %d ===", stage);
+
+        /* 重置阶段完成计数并设置当前阶段（持有锁）*/
+        hev_task_mutex_lock (&ctx.mutex);
         ctx.current_stage = stage;
         ctx.stage_completed_count = 0;
 
         /* 唤醒所有任务开始当前阶段 */
-        hev_task_mutex_lock (&ctx.mutex);
         hev_task_cond_broadcast (&ctx.stage_cond);
         hev_task_mutex_unlock (&ctx.mutex);
 
-        /* 等待所有任务完成当前阶段 */
+        /* 让出CPU，让子任务开始等待当前阶段 */
+        hev_task_yield (HEV_TASK_YIELD);
+        hev_task_yield (HEV_TASK_YIELD);
+
         hev_task_mutex_lock (&ctx.mutex);
+        LOG_I ("dns-latency: Waiting for stage %d completion (count=%d/%d)",
+               stage, ctx.stage_completed_count, ctx.ip_count);
+
+        /* 等待所有任务完成当前阶段（在持有锁的情况下检查条件）*/
         while (ctx.stage_completed_count < ctx.ip_count && !ctx.should_stop) {
             /* 检查全局超时 */
             int64_t elapsed_ms = get_time_ms () - ctx.start_time_ms;
@@ -1059,9 +1068,13 @@ hev_dns_latency_test_concurrent (const ip_addr_t *ips, int ip_count,
                 ctx.should_stop = 1;
                 break;
             }
+            LOG_D ("dns-latency: Still waiting for stage %d, completed=%d/%d",
+                   stage, ctx.stage_completed_count, ctx.ip_count);
             hev_task_cond_wait (&ctx.stage_cond, &ctx.mutex);
         }
         hev_task_mutex_unlock (&ctx.mutex);
+
+        LOG_I ("dns-latency: === Stage %d completed, count=%d ===", stage, ctx.stage_completed_count);
 
         /* ⭐ 早期退出优化：如果所有IP的443都成功，跳过后续阶段 */
         if (stage == TEST_STAGE_TCP443) {
@@ -1120,6 +1133,8 @@ typedef struct _DnsLatencyOptimizeContext
     struct udp_pcb *pcb;
     ip_addr_t client_ip;
     uint16_t client_port;
+    ip_addr_t src_ip;  /* DNS server IP (source address for response) */
+    uint16_t src_port; /* DNS server port (source port for response) */
     HevSocks5 *base;
 } DnsLatencyOptimizeContext;
 
@@ -1179,10 +1194,21 @@ dns_latency_optimize_task (void *data)
            ip_count, timeout_ms);
 
     /* 使用并发测试 */
+    LOG_D ("dns-latency: Before concurrent test, response_len=%zu", ctx->response_len);
+    LOG_D ("dns-latency: Original response data (first 20 bytes): %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x",
+           ctx->response_data[0], ctx->response_data[1], ctx->response_data[2], ctx->response_data[3],
+           ctx->response_data[4], ctx->response_data[5], ctx->response_data[6], ctx->response_data[7],
+           ctx->response_data[8], ctx->response_data[9], ctx->response_data[10], ctx->response_data[11],
+           ctx->response_data[12], ctx->response_data[13], ctx->response_data[14], ctx->response_data[15],
+           ctx->response_data[16], ctx->response_data[17], ctx->response_data[18], ctx->response_data[19]);
+
     if (hev_dns_latency_test_concurrent (ips, ip_count, results, timeout_ms) != 0) {
         LOG_W ("dns-latency: Concurrent test failed for all IPs");
+        LOG_W ("dns-latency: Sending original response (len=%zu)", ctx->response_len);
         goto send_response;
     }
+
+    LOG_I ("dns-latency: Concurrent test returned successfully");
 
     /* ⭐ 方案C: 按优先级分组比较 IP */
     int best_idx = -1;
@@ -1282,7 +1308,28 @@ dns_latency_optimize_task (void *data)
         struct pbuf *p = pbuf_alloc (PBUF_TRANSPORT, modified_len, PBUF_RAM);
         if (p) {
             memcpy (p->payload, modified_response, modified_len);
-            udp_sendto (ctx->pcb, p, &ctx->client_ip, ctx->client_port);
+
+            /* Set PCB remote address to client for sending */
+            ip_addr_copy (ctx->pcb->remote_ip, ctx->client_ip);
+            ctx->pcb->remote_port = ctx->client_port;
+
+            /* Use udp_sendfrom to send with spoofed source address */
+            char src_str[INET6_ADDRSTRLEN], dst_str[INET6_ADDRSTRLEN];
+            ipaddr_ntoa_r (&ctx->src_ip, src_str, sizeof (src_str));
+            ipaddr_ntoa_r (&ctx->client_ip, dst_str, sizeof (dst_str));
+            LOG_I ("dns-latency: Sending DNS response: src=%s:%d, dst=%s:%d",
+                   src_str, ctx->src_port, dst_str, ctx->client_port);
+
+            /* Verify PCB remote address before sending */
+            char pcb_dst_str[INET6_ADDRSTRLEN];
+            ipaddr_ntoa_r (&ctx->pcb->remote_ip, pcb_dst_str, sizeof (pcb_dst_str));
+            LOG_D ("dns-latency: PCB remote: %s:%d (should match dst above)",
+                   pcb_dst_str, ctx->pcb->remote_port);
+
+            err_t err = udp_sendfrom (ctx->pcb, p, &ctx->src_ip, ctx->src_port);
+            if (err != ERR_OK) {
+                LOG_E ("dns-latency: udp_sendfrom failed: %d", err);
+            }
             pbuf_free (p);
             LOG_I (
                 "dns-latency: Sent optimized DNS response to client (%zu bytes)",
@@ -1304,7 +1351,18 @@ send_response:
             pbuf_alloc (PBUF_TRANSPORT, ctx->response_len, PBUF_RAM);
         if (p) {
             memcpy (p->payload, ctx->response_data, ctx->response_len);
-            udp_sendto (ctx->pcb, p, &ctx->client_ip, ctx->client_port);
+            /* Set PCB remote address to client for sending */
+            ip_addr_copy (ctx->pcb->remote_ip, ctx->client_ip);
+            ctx->pcb->remote_port = ctx->client_port;
+
+            /* Use udp_sendfrom to send with spoofed source address */
+            char src_str[INET6_ADDRSTRLEN], dst_str[INET6_ADDRSTRLEN];
+            ipaddr_ntoa_r (&ctx->src_ip, src_str, sizeof (src_str));
+            ipaddr_ntoa_r (&ctx->client_ip, dst_str, sizeof (dst_str));
+            LOG_I ("dns-latency: Sending original response: src=%s:%d, dst=%s:%d",
+                   src_str, ctx->src_port, dst_str, ctx->client_port);
+
+            udp_sendfrom (ctx->pcb, p, &ctx->src_ip, ctx->src_port);
             pbuf_free (p);
             LOG_I (
                 "dns-latency: Sent original DNS response to client (%zu bytes)",
@@ -1332,7 +1390,9 @@ hev_dns_latency_optimize_response_async (const uint8_t *response_data,
                                          const char *domain,
                                          struct udp_pcb *pcb,
                                          const ip_addr_t *client_ip,
-                                         uint16_t client_port, HevSocks5 *base)
+                                         uint16_t client_port,
+                                         const ip_addr_t *src_ip,
+                                         uint16_t src_port, HevSocks5 *base)
 {
     if (!response_data || response_len == 0 || !domain || !pcb || !client_ip ||
         !base) {
@@ -1368,10 +1428,25 @@ hev_dns_latency_optimize_response_async (const uint8_t *response_data,
 
     strncpy (ctx->domain, domain, sizeof (ctx->domain) - 1);
     ctx->pcb = pcb;
+
+    LOG_I ("dns-latency: Before copy: *client_ip=%s (ptr=%p), *src_ip=%s (ptr=%p)",
+           ipaddr_ntoa (client_ip), client_ip, ipaddr_ntoa (src_ip), src_ip);
+    LOG_I ("dns-latency: Raw memory: client_ip[0-7]=%02x%02x%02x%02x%02x%02x%02x%02x, src_ip[0-7]=%02x%02x%02x%02x%02x%02x%02x%02x",
+           ((uint8_t*)client_ip)[0], ((uint8_t*)client_ip)[1], ((uint8_t*)client_ip)[2], ((uint8_t*)client_ip)[3],
+           ((uint8_t*)client_ip)[4], ((uint8_t*)client_ip)[5], ((uint8_t*)client_ip)[6], ((uint8_t*)client_ip)[7],
+           ((uint8_t*)src_ip)[0], ((uint8_t*)src_ip)[1], ((uint8_t*)src_ip)[2], ((uint8_t*)src_ip)[3],
+           ((uint8_t*)src_ip)[4], ((uint8_t*)src_ip)[5], ((uint8_t*)src_ip)[6], ((uint8_t*)src_ip)[7]);
+
     ip_addr_copy (ctx->client_ip, *client_ip);
     ctx->client_port = client_port;
+    ip_addr_copy (ctx->src_ip, *src_ip);
+    ctx->src_port = src_port;
     ctx->base = base;
     hev_object_ref (HEV_OBJECT (base));
+
+    LOG_I ("dns-latency: Context init: client=%s:%d, src=%s:%d",
+           ipaddr_ntoa (&ctx->client_ip), ctx->client_port,
+           ipaddr_ntoa (&ctx->src_ip), ctx->src_port);
 
     /* Create and run async task */
     int stack_size = hev_config_get_misc_task_stack_size ();

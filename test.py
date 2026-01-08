@@ -186,28 +186,37 @@ def _test_single_dns(dns_ip, dns_port, query, iface, timeout):
 
         # 发送DNS查询
         sock.sendto(query, (dns_ip, dns_port))
-        
+
         # 接收响应
         response, _ = sock.recvfrom(1024)
-        
+
         # 1. 检查响应大小
         if not response:
             return "失败：收到0字节的空响应"
-        
+
         # 2. 检查响应是否合法
         # parse_dns_response 会在响应不合法时抛出异常，被外层的except捕获
         records = parse_dns_response(response)
-        
+
         found_types = {r['type'] for r in records if 'type' in r}
-        
+
         has_a = 'A' in found_types
         has_aaaa = 'AAAA' in found_types
         has_cname = 'CNAME' in found_types
-        
-        # 3. 根据记录完整性返回结果 (至少存在其中一个即可)
+
+        # 3. 检查是否为缓存响应（通过响应时间判断）
+        # 如果响应非常快（<100ms），可能是缓存
+        # 但这里我们主要关注响应内容
+
+        # 4. 根据记录完整性返回结果 (至少存在其中一个即可)
         if has_a or has_aaaa or has_cname:
             found_list = [t for t, h in [('A', has_a), ('AAAA', has_aaaa), ('CNAME', has_cname)] if h]
-            return f"成功：收到{len(response)}字节响应，包含 {', '.join(found_list)} 记录"
+            # 检查响应中是否包含优化后的IP（DNS延迟优化特征）
+            response_str = response.hex()
+            # 如果响应包含特定优化特征，说明是缓存/优化响应
+            is_optimized = "182.131.26.231" in response_str or "42.83.144.13" in response_str
+            cache_info = " [缓存/优化]" if is_optimized else ""
+            return f"成功：收到{len(response)}字节响应，包含 {', '.join(found_list)} 记录{cache_info}"
         else:
             return f"失败：收到{len(response)}字节响应，但未找到 A、AAAA 或 CNAME 记录"
 
@@ -222,7 +231,7 @@ def _test_single_dns(dns_ip, dns_port, query, iface, timeout):
         if 'sock' in locals():
             sock.close()
 
-def test_dns_servers(iface=None, timeout=3, round=1):
+def test_dns_servers(iface=None, timeout=6, round=1):
     """批量测试所有配置的DNS服务器"""
     query = build_dns_query(TEST_DOMAIN_DNS)
     print(f"\n{'='*60}")

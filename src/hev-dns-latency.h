@@ -171,7 +171,7 @@ int hev_dns_latency_test_concurrent (const ip_addr_t *ips, int ip_count,
 int hev_dns_latency_optimize_response_async (
     const uint8_t *response_data, size_t response_len, const char *domain,
     struct udp_pcb *pcb, const ip_addr_t *client_ip, uint16_t client_port,
-    HevSocks5 *base);
+    const ip_addr_t *src_ip, uint16_t src_port, HevSocks5 *base);
 
 #ifdef __cplusplus
 }
