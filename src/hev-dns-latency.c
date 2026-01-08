@@ -1313,7 +1313,7 @@ dns_latency_optimize_task (void *data)
             ip_addr_copy (ctx->pcb->remote_ip, ctx->client_ip);
             ctx->pcb->remote_port = ctx->client_port;
 
-            /* Use udp_sendfrom to send with spoofed source address */
+            /* Use separate buffers for each address to avoid static buffer reuse */
             char src_str[INET6_ADDRSTRLEN], dst_str[INET6_ADDRSTRLEN];
             ipaddr_ntoa_r (&ctx->src_ip, src_str, sizeof (src_str));
             ipaddr_ntoa_r (&ctx->client_ip, dst_str, sizeof (dst_str));
@@ -1321,16 +1321,19 @@ dns_latency_optimize_task (void *data)
                    src_str, ctx->src_port, dst_str, ctx->client_port);
 
             /* Verify addresses before sending */
-            LOG_D ("dns-latency: Sending DNS response: spoofed src=%s:%d, actual dst=%s:%d",
-                   ipaddr_ntoa (&ctx->src_ip), ctx->src_port,
-                   ipaddr_ntoa (&ctx->client_ip), ctx->client_port);
+            char src_verify[INET6_ADDRSTRLEN], dst_verify[INET6_ADDRSTRLEN];
+            ipaddr_ntoa_r (&ctx->src_ip, src_verify, sizeof (src_verify));
+            ipaddr_ntoa_r (&ctx->client_ip, dst_verify, sizeof (dst_verify));
+            LOG_D ("dns-latency: Verify: spoofed src=%s:%d, actual dst=%s:%d",
+                   src_verify, ctx->src_port, dst_verify, ctx->client_port);
 
             /* Use udp_sendto_if_src to specify both source and destination addresses */
             /* This allows us to send to client while spoofing the DNS server as source */
             err_t err = udp_sendto_if_src (ctx->pcb, p, &ctx->client_ip,
                                           ctx->client_port, NULL, &ctx->src_ip);
             if (err != ERR_OK) {
-                LOG_E ("dns-latency: udp_sendto_if_src failed: %d", err);
+                LOG_E ("dns-latency: udp_sendto_if_src failed: %d (sending to %s:%d from %s:%d)",
+                       err, dst_verify, ctx->client_port, src_verify, ctx->src_port);
             }
             pbuf_free (p);
             LOG_I (
@@ -1446,9 +1449,12 @@ hev_dns_latency_optimize_response_async (const uint8_t *response_data,
     ctx->base = base;
     hev_object_ref (HEV_OBJECT (base));
 
+    /* Use separate buffers to avoid static buffer reuse issues */
+    char client_ip_buf[INET6_ADDRSTRLEN], src_ip_buf[INET6_ADDRSTRLEN];
+    ipaddr_ntoa_r (&ctx->client_ip, client_ip_buf, sizeof (client_ip_buf));
+    ipaddr_ntoa_r (&ctx->src_ip, src_ip_buf, sizeof (src_ip_buf));
     LOG_I ("dns-latency: Context init: client=%s:%d, src=%s:%d",
-           ipaddr_ntoa (&ctx->client_ip), ctx->client_port,
-           ipaddr_ntoa (&ctx->src_ip), ctx->src_port);
+           client_ip_buf, ctx->client_port, src_ip_buf, ctx->src_port);
 
     /* Create and run async task */
     int stack_size = hev_config_get_misc_task_stack_size ();
