@@ -1097,14 +1097,17 @@ hev_dns_cache_check_only (struct udp_pcb *pcb, struct pbuf *p,
             memcpy (response->payload, cached_response, cached_len);
 
             /* 调试日志：显示PCB状态和发送目标 */
-            char local_str[INET6_ADDRSTRLEN], dst_str[INET6_ADDRSTRLEN];
+            char local_str[INET6_ADDRSTRLEN], dst_str[INET6_ADDRSTRLEN], src_str[INET6_ADDRSTRLEN];
             ipaddr_ntoa_r (&pcb->local_ip, local_str, sizeof (local_str));
             ipaddr_ntoa_r (&pcb->remote_ip, dst_str, sizeof (dst_str));
-            LOG_I ("dns-cache: PCB local=%s:%d remote=%s:%d, sending cached response (len=%zu)",
-                   local_str, pcb->local_port, dst_str, pcb->remote_port, cached_len);
+            ipaddr_ntoa_r (addr, src_str, sizeof (src_str));
+            LOG_I ("dns-cache: PCB local=%s:%d remote=%s:%d, query dst=%s:%d, sending cached response (len=%zu)",
+                   local_str, pcb->local_port, dst_str, pcb->remote_port, src_str, port, cached_len);
 
-            err_t err = udp_sendto (pcb, response, &pcb->remote_ip, pcb->remote_port);
-            LOG_I ("dns-cache: udp_sendto result: %d (0=success)", err);
+            /* 使用 udp_sendfrom 指定源地址为原始查询的目标DNS服务器 */
+            err_t err = udp_sendfrom (pcb, response, addr, port);
+            LOG_I ("dns-cache: udp_sendfrom result: %d (0=success), src=%s:%d, dst=%s:%d",
+                   err, src_str, port, dst_str, pcb->remote_port);
             pbuf_free (response);
             LOG_I ("dns-cache: Cache hit for domain: %s", domain);
             total_cache_hits++;
