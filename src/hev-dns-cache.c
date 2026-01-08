@@ -1096,13 +1096,15 @@ hev_dns_cache_check_only (struct udp_pcb *pcb, struct pbuf *p,
         if (response) {
             memcpy (response->payload, cached_response, cached_len);
 
-            /* 调试日志：显示发送目标 */
-            char dst_str[INET6_ADDRSTRLEN];
+            /* 调试日志：显示PCB状态和发送目标 */
+            char local_str[INET6_ADDRSTRLEN], dst_str[INET6_ADDRSTRLEN];
+            ipaddr_ntoa_r (&pcb->local_ip, local_str, sizeof (local_str));
             ipaddr_ntoa_r (&pcb->remote_ip, dst_str, sizeof (dst_str));
-            LOG_I ("dns-cache: Sending cached response to %s:%d (len=%zu)",
-                   dst_str, pcb->remote_port, cached_len);
+            LOG_I ("dns-cache: PCB local=%s:%d remote=%s:%d, sending cached response (len=%zu)",
+                   local_str, pcb->local_port, dst_str, pcb->remote_port, cached_len);
 
-            udp_sendto (pcb, response, &pcb->remote_ip, pcb->remote_port);
+            err_t err = udp_sendto (pcb, response, &pcb->remote_ip, pcb->remote_port);
+            LOG_I ("dns-cache: udp_sendto result: %d (0=success)", err);
             pbuf_free (response);
             LOG_I ("dns-cache: Cache hit for domain: %s", domain);
             total_cache_hits++;
