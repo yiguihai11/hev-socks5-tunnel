@@ -32,7 +32,7 @@
 #define STR_ARG(c) #c
 #define N_ELEMENTS(arr) (sizeof (arr) / sizeof ((arr)[0]))
 
-#define STOP_TIMEOUT_MS 5000 /* 5 seconds timeout for graceful shutdown */
+#define STOP_TIMEOUT_MS 1000 /* 1 second timeout for graceful shutdown */
 
 typedef struct _ThreadData ThreadData;
 
