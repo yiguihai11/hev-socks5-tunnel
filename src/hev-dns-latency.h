@@ -24,6 +24,7 @@ typedef struct _HevSocks5 HevSocks5;
 /* DNS record types */
 #define DNS_TYPE_A 1
 #define DNS_TYPE_AAAA 28
+#define DNS_TYPE_CNAME 5
 
 /* IP latency test method */
 typedef enum
@@ -33,13 +34,20 @@ typedef enum
     DNS_LATENCY_METHOD_ICMP = 2
 } DnsLatencyTestMethod;
 
-/* IP latency test result */
+/* 单个方法的测试结果 */
+typedef struct _DnsLatencyMethodResult
+{
+    int success;
+    int64_t latency_us; /* microseconds */
+} DnsLatencyMethodResult;
+
+/* IP latency test result (所有方法的测试结果) */
 typedef struct _DnsLatencyResult
 {
     ip_addr_t ip; /* lwIP ip_addr_t supports IPv4/IPv6 */
-    DnsLatencyTestMethod method;
-    int64_t latency_us; /* microseconds */
-    int success;
+    DnsLatencyMethodResult tcp443; /* TCP 443 测试结果 */
+    DnsLatencyMethodResult tcp80;  /* TCP 80 测试结果 */
+    DnsLatencyMethodResult icmp;   /* ICMP 测试结果 */
 } DnsLatencyResult;
 
 /**
@@ -92,20 +100,22 @@ int hev_dns_latency_modify_response (uint8_t *data, size_t *len,
  * hev_dns_latency_test_ip:
  * @ip: IP address to test (IPv4 or IPv6)
  * @result_out: output test result
- * @timeout_ms: timeout in milliseconds
+ * @tcp_timeout_ms: TCP connection timeout in milliseconds
+ * @icmp_timeout_ms: ICMP ping timeout in milliseconds (unused, uses hardcoded timeout)
  *
  * Test latency for a single IP using: TCP 443 -> TCP 80 -> ICMP
  *
  * Returns: 0 on success (result in result_out), -1 on failure
  */
 int hev_dns_latency_test_ip (const ip_addr_t *ip, DnsLatencyResult *result_out,
-                             int timeout_ms);
+                             int tcp_timeout_ms, int icmp_timeout_ms);
 
 /**
  * hev_dns_latency_test_ip_all:
  * @ip: IP address to test (IPv4 or IPv6)
  * @results_out: output array for all test results (must have 3 elements)
- * @timeout_ms: timeout in milliseconds for each test
+ * @tcp_timeout_ms: TCP connection timeout in milliseconds
+ * @icmp_timeout_ms: ICMP ping timeout in milliseconds (unused, uses hardcoded timeout)
  *
  * Test latency using ALL methods: TCP 443, TCP 80, ICMP
  * Returns results for all methods regardless of success/failure.
@@ -113,7 +123,8 @@ int hev_dns_latency_test_ip (const ip_addr_t *ip, DnsLatencyResult *result_out,
  * Returns: 0 on success, -1 on failure
  */
 int hev_dns_latency_test_ip_all (const ip_addr_t *ip,
-                                 DnsLatencyResult *results_out, int timeout_ms);
+                                 DnsLatencyResult *results_out,
+                                 int tcp_timeout_ms, int icmp_timeout_ms);
 
 /**
  * hev_dns_latency_test_concurrent:
