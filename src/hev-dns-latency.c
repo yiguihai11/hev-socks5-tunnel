@@ -1449,6 +1449,13 @@ hev_dns_latency_optimize_response_async (const uint8_t *response_data,
     ctx->base = base;
     hev_object_ref (HEV_OBJECT (base));
 
+    /* Verify the copy using raw memory access */
+    LOG_I ("dns-latency: After copy: ctx->client_ip raw=%02x%02x%02x%02x, ctx->src_ip raw=%02x%02x%02x%02x",
+           ((uint8_t*)&ctx->client_ip)[0], ((uint8_t*)&ctx->client_ip)[1],
+           ((uint8_t*)&ctx->client_ip)[2], ((uint8_t*)&ctx->client_ip)[3],
+           ((uint8_t*)&ctx->src_ip)[0], ((uint8_t*)&ctx->src_ip)[1],
+           ((uint8_t*)&ctx->src_ip)[2], ((uint8_t*)&ctx->src_ip)[3]);
+
     /* Use separate buffers to avoid static buffer reuse issues */
     char client_ip_buf[INET6_ADDRSTRLEN], src_ip_buf[INET6_ADDRSTRLEN];
     ipaddr_ntoa_r (&ctx->client_ip, client_ip_buf, sizeof (client_ip_buf));
