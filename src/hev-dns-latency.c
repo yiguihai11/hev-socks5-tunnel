@@ -1317,28 +1317,19 @@ dns_latency_optimize_task (void *data)
             char src_str[INET6_ADDRSTRLEN], dst_str[INET6_ADDRSTRLEN];
             ipaddr_ntoa_r (&ctx->src_ip, src_str, sizeof (src_str));
             ipaddr_ntoa_r (&ctx->client_ip, dst_str, sizeof (dst_str));
-            LOG_I ("dns-latency: Sending DNS response: src=%s:%d, dst=%s:%d",
-                   src_str, ctx->src_port, dst_str, ctx->client_port);
+            LOG_I ("dns-latency: Sending DNS response to %s:%d (spoofed src: %s:%d)",
+                   dst_str, ctx->client_port, src_str, ctx->src_port);
 
-            /* Verify addresses before sending */
-            char src_verify[INET6_ADDRSTRLEN], dst_verify[INET6_ADDRSTRLEN];
-            ipaddr_ntoa_r (&ctx->src_ip, src_verify, sizeof (src_verify));
-            ipaddr_ntoa_r (&ctx->client_ip, dst_verify, sizeof (dst_verify));
-            LOG_D ("dns-latency: Verify: spoofed src=%s:%d, actual dst=%s:%d",
-                   src_verify, ctx->src_port, dst_verify, ctx->client_port);
-
-            /* Use udp_sendto_if_src to specify both source and destination addresses */
-            /* This allows us to send to client while spoofing the DNS server as source */
-            err_t err = udp_sendto_if_src (ctx->pcb, p, &ctx->client_ip,
-                                          ctx->client_port, NULL, &ctx->src_ip);
+            /* Use udp_sendfrom: sends to PCB remote_ip (client) with specified source */
+            err_t err = udp_sendfrom (ctx->pcb, p, &ctx->src_ip, ctx->src_port);
             if (err != ERR_OK) {
-                LOG_E ("dns-latency: udp_sendto_if_src failed: %d (sending to %s:%d from %s:%d)",
-                       err, dst_verify, ctx->client_port, src_verify, ctx->src_port);
+                LOG_E ("dns-latency: udp_sendfrom failed: %d (to %s:%d from %s:%d)",
+                       err, dst_str, ctx->client_port, src_str, ctx->src_port);
+            } else {
+                LOG_I ("dns-latency: Sent optimized DNS response to client (%zu bytes)",
+                       modified_len);
             }
             pbuf_free (p);
-            LOG_I (
-                "dns-latency: Sent optimized DNS response to client (%zu bytes)",
-                modified_len);
         }
 
         hev_free (modified_response);
