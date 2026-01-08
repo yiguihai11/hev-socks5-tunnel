@@ -337,11 +337,14 @@ hev_dns_latency_fini (void)
     int i;
     int wait_count = 0;
     int total_wait_ms = 0;
-    const int max_wait_ms = 5000; /* Wait max 5 seconds */
+    int max_wait_ms;
 
     if (!dns_latency_initialized) {
         return;
     }
+
+    /* Calculate max wait time: config timeout + 500ms buffer */
+    max_wait_ms = hev_config_get_dns_latency_timeout_ms () + 500;
 
     /* Signal shutdown */
     dns_latency_shutdown = 1;
@@ -575,28 +578,16 @@ hev_dns_latency_modify_response (uint8_t *data, size_t *len,
     return 0;
 }
 
-/* ⭐ 简单的yielder函数，用于非阻塞socket操作 */
+/* ⭐ TCP连接测试（带超时控制） */
 static int
-dns_latency_yielder (HevTaskYieldType type, void *data)
-{
-    (void)data; /* 未使用 */
-
-    if (type == HEV_TASK_YIELD) {
-        hev_task_yield (HEV_TASK_YIELD);
-        return 0;
-    }
-
-    /* HEV_TASK_WAITIO: 等待I/O事件，同时允许超时唤醒 */
-    hev_task_yield (HEV_TASK_WAITIO);
-    return 0;
-}
-
-static int
-tcp_connect_test (const ip_addr_t *ip, uint16_t port, int64_t *latency_us_out)
+tcp_connect_test (const ip_addr_t *ip, uint16_t port, int64_t *latency_us_out,
+                  int timeout_ms)
 {
     int sock = -1;
     int ret = -1;
     struct timespec start_time, end_time;
+    int flags;
+    struct pollfd pfd;
 
     /* Create socket based on IP type */
     int family = IP_IS_V6 (ip) ? AF_INET6 : AF_INET;
@@ -604,6 +595,13 @@ tcp_connect_test (const ip_addr_t *ip, uint16_t port, int64_t *latency_us_out)
     if (sock < 0) {
         LOG_D ("dns-latency: Failed to create socket: %s", strerror (errno));
         return -1;
+    }
+
+    /* 设置为非阻塞模式 */
+    flags = fcntl (sock, F_GETFL, 0);
+    if (flags < 0 || fcntl (sock, F_SETFL, flags | O_NONBLOCK) < 0) {
+        LOG_D ("dns-latency: Failed to set non-blocking: %s", strerror (errno));
+        goto cleanup;
     }
 
     /* Build address */
@@ -627,21 +625,43 @@ tcp_connect_test (const ip_addr_t *ip, uint16_t port, int64_t *latency_us_out)
     /* Start timing */
     clock_gettime (CLOCK_MONOTONIC, &start_time);
 
-    /* ⭐ 使用非阻塞connect (hev_task_io_socket_connect) */
-    int connect_ret
-        = hev_task_io_socket_connect (sock, (struct sockaddr *)&addr, addr_len,
-                                      dns_latency_yielder, NULL);
+    /* 发起非阻塞connect */
+    int connect_ret = connect (sock, (struct sockaddr *)&addr, addr_len);
+    if (connect_ret < 0 && errno != EINPROGRESS) {
+        LOG_D ("dns-latency: TCP connect to %s:%d failed immediately: %s",
+               ipaddr_ntoa (ip), port, strerror (errno));
+        goto cleanup;
+    }
+
+    /* 等待连接完成（带超时） */
+    pfd.fd = sock;
+    pfd.events = POLLOUT;
+    pfd.revents = 0;
+
+    int poll_ret = poll (&pfd, 1, timeout_ms);
+    if (poll_ret <= 0) {
+        if (poll_ret == 0) {
+            LOG_D ("dns-latency: TCP connect to %s:%d timeout after %dms",
+                   ipaddr_ntoa (ip), port, timeout_ms);
+        } else {
+            LOG_D ("dns-latency: TCP connect poll error: %s", strerror (errno));
+        }
+        goto cleanup;
+    }
+
+    /* 检查连接是否成功 */
+    int error = 0;
+    socklen_t len = sizeof (error);
+    if (getsockopt (sock, SOL_SOCKET, SO_ERROR, &error, &len) < 0 || error != 0) {
+        LOG_D ("dns-latency: TCP connect to %s:%d failed: %s",
+               ipaddr_ntoa (ip), port, error ? strerror (error) : "unknown");
+        goto cleanup;
+    }
 
     /* Calculate latency */
     clock_gettime (CLOCK_MONOTONIC, &end_time);
     *latency_us_out = (end_time.tv_sec - start_time.tv_sec) * 1000000 +
                       (end_time.tv_nsec - start_time.tv_nsec) / 1000;
-
-    if (connect_ret < 0) {
-        LOG_D ("dns-latency: TCP connect to %s:%d failed: %s", ipaddr_ntoa (ip),
-               port, strerror (errno));
-        goto cleanup;
-    }
 
     LOG_I ("dns-latency: TCP connect to %s:%d succeeded, latency=%lld us",
            ipaddr_ntoa (ip), port, (long long)*latency_us_out);
@@ -688,14 +708,14 @@ icmp_ping_test (const ip_addr_t *ip, int64_t *latency_us_out)
     ipaddr_ntoa_r (ip, ip_str, sizeof (ip_str));
 
     /* Build ping command:
-     * - ping -c 1 -W 1 <IPv4> for IPv4 addresses
-     * - ping6 -c 1 -W 1 <IPv6> for IPv6 addresses
-     * Note: -W 1 (1 second timeout), but global deadline will enforce 250ms
+     * - ping -c 1 -W 0.2 <IPv4> for IPv4 addresses
+     * - ping6 -c 1 -W 0.2 <IPv6> for IPv6 addresses
+     * Note: -W 0.2 (200ms timeout) for ICMP testing
      */
     if (IP_IS_V6 (ip)) {
-        snprintf (cmd, sizeof (cmd), "ping6 -c 1 -W 1 %s", ip_str);
+        snprintf (cmd, sizeof (cmd), "ping6 -c 1 -W 0.2 %s", ip_str);
     } else {
-        snprintf (cmd, sizeof (cmd), "ping -c 1 -W 1 %s", ip_str);
+        snprintf (cmd, sizeof (cmd), "ping -c 1 -W 0.2 %s", ip_str);
     }
 
     LOG_D ("dns-latency: Running ICMP ping: %s", cmd);
@@ -749,8 +769,7 @@ hev_dns_latency_test_ip (const ip_addr_t *ip, DnsLatencyResult *result_out,
     if (!ip || !result_out)
         return -1;
 
-    (void)tcp_timeout_ms;    /* Unused for now */
-    (void)icmp_timeout_ms;   /* Unused for now */
+    (void)icmp_timeout_ms;   /* ICMP timeout handled separately */
 
     memset (result_out, 0, sizeof (DnsLatencyResult));
     ip_addr_copy (result_out->ip, *ip);
@@ -764,13 +783,15 @@ hev_dns_latency_test_ip (const ip_addr_t *ip, DnsLatencyResult *result_out,
     result_out->icmp.latency_us = -1;
 
     /* Try TCP 443 first */
-    if (tcp_connect_test (ip, 443, &result_out->tcp443.latency_us) == 0) {
+    if (tcp_connect_test (ip, 443, &result_out->tcp443.latency_us,
+                          tcp_timeout_ms) == 0) {
         result_out->tcp443.success = 1;
         return 0;
     }
 
     /* Try TCP 80 */
-    if (tcp_connect_test (ip, 80, &result_out->tcp80.latency_us) == 0) {
+    if (tcp_connect_test (ip, 80, &result_out->tcp80.latency_us,
+                          tcp_timeout_ms) == 0) {
         result_out->tcp80.success = 1;
         return 0;
     }
@@ -793,22 +814,23 @@ hev_dns_latency_test_ip_all (const ip_addr_t *ip,
     if (!ip || !results_out)
         return -1;
 
-    (void)tcp_timeout_ms;    /* Unused for now */
-    (void)icmp_timeout_ms;   /* Unused for now */
+    (void)icmp_timeout_ms;   /* ICMP timeout handled separately */
 
     /* Test TCP 443 */
     memset (results_out, 0, sizeof (DnsLatencyResult));
     ip_addr_copy (results_out->ip, *ip);
     results_out->tcp443.success = 0;
     results_out->tcp443.latency_us = -1;
-    if (tcp_connect_test (ip, 443, &results_out->tcp443.latency_us) == 0) {
+    if (tcp_connect_test (ip, 443, &results_out->tcp443.latency_us,
+                          tcp_timeout_ms) == 0) {
         results_out->tcp443.success = 1;
     }
 
     /* Test TCP 80 */
     results_out->tcp80.success = 0;
     results_out->tcp80.latency_us = -1;
-    if (tcp_connect_test (ip, 80, &results_out->tcp80.latency_us) == 0) {
+    if (tcp_connect_test (ip, 80, &results_out->tcp80.latency_us,
+                          tcp_timeout_ms) == 0) {
         results_out->tcp80.success = 1;
     }
 
@@ -846,7 +868,7 @@ single_ip_test_task (void *data)
     result->icmp.success = 0;
     result->icmp.latency_us = -1;
 
-    /* ⭐ 阶段1: TCP 443 测试（最多500ms） */
+    /* ⭐ 阶段1: TCP 443 测试（硬编码500ms超时） */
     hev_task_mutex_lock (&ctx->mutex);
     while (ctx->current_stage > TEST_STAGE_TCP443 && !ctx->should_stop) {
         hev_task_cond_wait (&ctx->stage_cond, &ctx->mutex);
@@ -856,11 +878,9 @@ single_ip_test_task (void *data)
     if (!ctx->should_stop) {
         int64_t remaining_ms = ctx->timeout_ms - (get_time_ms () - ctx->start_time_ms);
         if (remaining_ms > 0) {
-            int test_timeout = (remaining_ms < 500) ? remaining_ms : 500;
-            LOG_D ("dns-latency: [%d] Testing TCP443 with %dms timeout", ip_index,
-                   test_timeout);
+            LOG_D ("dns-latency: [%d] Testing TCP443 with 500ms timeout", ip_index);
 
-            if (tcp_connect_test (ip, 443, &result->tcp443.latency_us) == 0) {
+            if (tcp_connect_test (ip, 443, &result->tcp443.latency_us, 500) == 0) {
                 result->tcp443.success = 1;
                 LOG_I ("dns-latency: [%d] IP %s TCP443 succeeded, latency=%lld us",
                        ip_index, ipaddr_ntoa (ip),
@@ -875,7 +895,7 @@ single_ip_test_task (void *data)
     hev_task_cond_signal (&ctx->stage_cond);
     hev_task_mutex_unlock (&ctx->mutex);
 
-    /* ⭐ 阶段2: TCP 80 测试（最多500ms） */
+    /* ⭐ 阶段2: TCP 80 测试（硬编码500ms超时） */
     hev_task_mutex_lock (&ctx->mutex);
     while (ctx->current_stage > TEST_STAGE_TCP80 && !ctx->should_stop) {
         hev_task_cond_wait (&ctx->stage_cond, &ctx->mutex);
@@ -885,11 +905,9 @@ single_ip_test_task (void *data)
     if (!ctx->should_stop && !result->tcp443.success) {
         int64_t remaining_ms = ctx->timeout_ms - (get_time_ms () - ctx->start_time_ms);
         if (remaining_ms > 0) {
-            int test_timeout = (remaining_ms < 500) ? remaining_ms : 500;
-            LOG_D ("dns-latency: [%d] Testing TCP80 with %dms timeout", ip_index,
-                   test_timeout);
+            LOG_D ("dns-latency: [%d] Testing TCP80 with 500ms timeout", ip_index);
 
-            if (tcp_connect_test (ip, 80, &result->tcp80.latency_us) == 0) {
+            if (tcp_connect_test (ip, 80, &result->tcp80.latency_us, 500) == 0) {
                 result->tcp80.success = 1;
                 LOG_I ("dns-latency: [%d] IP %s TCP80 succeeded, latency=%lld us",
                        ip_index, ipaddr_ntoa (ip),
@@ -904,7 +922,7 @@ single_ip_test_task (void *data)
     hev_task_cond_signal (&ctx->stage_cond);
     hev_task_mutex_unlock (&ctx->mutex);
 
-    /* ⭐ 阶段3: ICMP 测试（最多250ms，全局deadline控制） */
+    /* ⭐ 阶段3: ICMP 测试（硬编码250ms超时，全局deadline控制） */
     hev_task_mutex_lock (&ctx->mutex);
     while (ctx->current_stage > TEST_STAGE_ICMP && !ctx->should_stop) {
         hev_task_cond_wait (&ctx->stage_cond, &ctx->mutex);
@@ -914,9 +932,7 @@ single_ip_test_task (void *data)
     if (!ctx->should_stop && !result->tcp443.success && !result->tcp80.success) {
         int64_t remaining_ms = ctx->timeout_ms - (get_time_ms () - ctx->start_time_ms);
         if (remaining_ms > 0) {
-            int test_timeout = (remaining_ms < 250) ? remaining_ms : 250;
-            LOG_D ("dns-latency: [%d] Testing ICMP with %dms timeout", ip_index,
-                   test_timeout);
+            LOG_D ("dns-latency: [%d] Testing ICMP with 250ms timeout", ip_index);
 
             if (icmp_ping_test (ip, &result->icmp.latency_us) == 0) {
                 result->icmp.success = 1;
