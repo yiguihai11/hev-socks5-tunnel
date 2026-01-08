@@ -29,6 +29,7 @@ typedef struct _HevSocks5 HevSocks5;
 /* IP latency test method */
 typedef enum
 {
+    DNS_LATENCY_METHOD_NONE = -1,
     DNS_LATENCY_METHOD_TCP443 = 0,
     DNS_LATENCY_METHOD_TCP80 = 1,
     DNS_LATENCY_METHOD_ICMP = 2
