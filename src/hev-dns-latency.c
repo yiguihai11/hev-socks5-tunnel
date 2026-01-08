@@ -1320,15 +1320,17 @@ dns_latency_optimize_task (void *data)
             LOG_I ("dns-latency: Sending DNS response: src=%s:%d, dst=%s:%d",
                    src_str, ctx->src_port, dst_str, ctx->client_port);
 
-            /* Verify PCB remote address before sending */
-            char pcb_dst_str[INET6_ADDRSTRLEN];
-            ipaddr_ntoa_r (&ctx->pcb->remote_ip, pcb_dst_str, sizeof (pcb_dst_str));
-            LOG_D ("dns-latency: PCB remote: %s:%d (should match dst above)",
-                   pcb_dst_str, ctx->pcb->remote_port);
+            /* Verify addresses before sending */
+            LOG_D ("dns-latency: Sending DNS response: spoofed src=%s:%d, actual dst=%s:%d",
+                   ipaddr_ntoa (&ctx->src_ip), ctx->src_port,
+                   ipaddr_ntoa (&ctx->client_ip), ctx->client_port);
 
-            err_t err = udp_sendfrom (ctx->pcb, p, &ctx->src_ip, ctx->src_port);
+            /* Use udp_sendto_if_src to specify both source and destination addresses */
+            /* This allows us to send to client while spoofing the DNS server as source */
+            err_t err = udp_sendto_if_src (ctx->pcb, p, &ctx->client_ip,
+                                          ctx->client_port, NULL, &ctx->src_ip);
             if (err != ERR_OK) {
-                LOG_E ("dns-latency: udp_sendfrom failed: %d", err);
+                LOG_E ("dns-latency: udp_sendto_if_src failed: %d", err);
             }
             pbuf_free (p);
             LOG_I (
