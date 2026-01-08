@@ -49,7 +49,7 @@ typedef enum
     TEST_STAGE_ICMP = 2
 } TestStage;
 
-/* ⭐ 并发测试上下文 */
+/* ⭐ 并发测试上下文（竞争式） */
 typedef struct _ConcurrentTestContext
 {
     ip_addr_t *ips;
@@ -58,13 +58,11 @@ typedef struct _ConcurrentTestContext
     int64_t start_time_ms;       /* 测试开始时间（毫秒） */
     int64_t timeout_ms;          /* 总超时时间（毫秒） */
     volatile int completed_count; /* 已完成的任务数 */
-    volatile int should_stop;     /* 超时标志 */
-    volatile int stage_completed_count; /* 当前阶段完成的任务数 */
-    volatile int stage_failed_count;    /* 当前阶段失败的任务数 */
-    volatile TestStage current_stage;   /* 当前测试阶段 */
+    volatile int should_stop;     /* 停止标志 */
+    volatile int winner_index;    /* 赢家 IP 索引 (-1 表示无赢家） */
+    volatile int winner_method;   /* 赢家使用的方法 (TCP443/TCP80/ICMP) */
     HevTaskMutex mutex;
     HevTaskCond cond;
-    HevTaskCond stage_cond;       /* 阶段同步条件变量 */
 } ConcurrentTestContext;
 
 /* ⭐ 单IP测试任务参数 */
@@ -581,13 +579,16 @@ hev_dns_latency_modify_response (uint8_t *data, size_t *len,
 /* ⭐ TCP连接测试（带超时控制） */
 static int
 tcp_connect_test (const ip_addr_t *ip, uint16_t port, int64_t *latency_us_out,
-                  int timeout_ms)
+                  int timeout_ms, ConcurrentTestContext *ctx, int initial_failed_count)
 {
     int sock = -1;
     int ret = -1;
     struct timespec start_time, end_time;
     int flags;
     struct pollfd pfd;
+
+    (void)ctx;      /* 保留参数以保持接口一致 */
+    (void)initial_failed_count;  /* 保留参数以保持接口一致 */
 
     /* Create socket based on IP type */
     int family = IP_IS_V6 (ip) ? AF_INET6 : AF_INET;
@@ -784,14 +785,14 @@ hev_dns_latency_test_ip (const ip_addr_t *ip, DnsLatencyResult *result_out,
 
     /* Try TCP 443 first */
     if (tcp_connect_test (ip, 443, &result_out->tcp443.latency_us,
-                          tcp_timeout_ms) == 0) {
+                          tcp_timeout_ms, NULL, 0) == 0) {
         result_out->tcp443.success = 1;
         return 0;
     }
 
     /* Try TCP 80 */
     if (tcp_connect_test (ip, 80, &result_out->tcp80.latency_us,
-                          tcp_timeout_ms) == 0) {
+                          tcp_timeout_ms, NULL, 0) == 0) {
         result_out->tcp80.success = 1;
         return 0;
     }
@@ -822,7 +823,7 @@ hev_dns_latency_test_ip_all (const ip_addr_t *ip,
     results_out->tcp443.success = 0;
     results_out->tcp443.latency_us = -1;
     if (tcp_connect_test (ip, 443, &results_out->tcp443.latency_us,
-                          tcp_timeout_ms) == 0) {
+                          tcp_timeout_ms, NULL, 0) == 0) {
         results_out->tcp443.success = 1;
     }
 
@@ -830,7 +831,7 @@ hev_dns_latency_test_ip_all (const ip_addr_t *ip,
     results_out->tcp80.success = 0;
     results_out->tcp80.latency_us = -1;
     if (tcp_connect_test (ip, 80, &results_out->tcp80.latency_us,
-                          tcp_timeout_ms) == 0) {
+                          tcp_timeout_ms, NULL, 0) == 0) {
         results_out->tcp80.success = 1;
     }
 
@@ -844,8 +845,7 @@ hev_dns_latency_test_ip_all (const ip_addr_t *ip,
     return 0;
 }
 
-/* ⭐ 单IP并发测试任务 */
-/* ⭐ 单IP并发测试任务（支持阶段测试和deadline机制） */
+/* ⭐ 单IP竞争式测试任务（依次测试443/80/ICMP，谁先成功赢） */
 static void
 single_ip_test_task (void *data)
 {
@@ -856,9 +856,9 @@ single_ip_test_task (void *data)
     ip_addr_t *ip = &ctx->ips[ip_index];
     DnsLatencyResult *result = &ctx->results[ip_index];
 
-    LOG_D ("dns-latency: [%d] Starting test for %s", ip_index, ipaddr_ntoa (ip));
+    LOG_D ("dns-latency: [%d] Starting race test for %s", ip_index, ipaddr_ntoa (ip));
 
-    /* 初始化结果（所有方法都标记为失败） */
+    /* 初始化结果 */
     memset (result, 0, sizeof (DnsLatencyResult));
     ip_addr_copy (result->ip, *ip);
     result->tcp443.success = 0;
@@ -868,152 +868,130 @@ single_ip_test_task (void *data)
     result->icmp.success = 0;
     result->icmp.latency_us = -1;
 
-    /* ⭐ 阶段1: TCP 443 测试（硬编码800ms超时） */
+    /* ⭐ 测试 TCP443 */
     hev_task_mutex_lock (&ctx->mutex);
-    while (ctx->current_stage != TEST_STAGE_TCP443 && !ctx->should_stop) {
-        hev_task_cond_wait (&ctx->stage_cond, &ctx->mutex);
-    }
+    int has_winner = (ctx->winner_index >= 0);
+    int64_t elapsed_ms = get_time_ms () - ctx->start_time_ms;
+    int is_timeout = (elapsed_ms >= ctx->timeout_ms);
     hev_task_mutex_unlock (&ctx->mutex);
 
-    if (!ctx->should_stop) {
+    if (!has_winner && !is_timeout) {
         int64_t remaining_ms = ctx->timeout_ms - (get_time_ms () - ctx->start_time_ms);
         if (remaining_ms > 0) {
-            LOG_D ("dns-latency: [%d] Testing TCP443 with 800ms timeout", ip_index);
+            LOG_D ("dns-latency: [%d] Testing TCP443 (remaining %lldms)",
+                   ip_index, (long long)remaining_ms);
 
-            if (tcp_connect_test (ip, 443, &result->tcp443.latency_us, 800) == 0) {
+            int test_timeout = (remaining_ms < 1000) ? remaining_ms : 1000;
+            if (tcp_connect_test (ip, 443, &result->tcp443.latency_us,
+                                 test_timeout, NULL, 0) == 0) {
                 result->tcp443.success = 1;
                 LOG_I ("dns-latency: [%d] IP %s TCP443 succeeded, latency=%lld us",
                        ip_index, ipaddr_ntoa (ip),
                        (long long)result->tcp443.latency_us);
-            }
-        }
 
-        /* ⭐ 失败时立即通知主任务 */
-        if (!result->tcp443.success) {
-            hev_task_mutex_lock (&ctx->mutex);
-            ctx->stage_failed_count++;
-            LOG_D ("dns-latency: [%d] TCP443 failed, stage_failed_count=%d/%d",
-                   ip_index, ctx->stage_failed_count, ctx->ip_count);
-
-            /* 如果所有IP都失败了，立即唤醒主任务跳过当前阶段 */
-            if (ctx->stage_failed_count >= ctx->ip_count) {
-                LOG_I ("dns-latency: [%d] All IPs failed at TCP443, skipping to next stage",
-                       ip_index);
-                hev_task_cond_signal (&ctx->stage_cond);
+                /* 尝试成为赢家 */
+                hev_task_mutex_lock (&ctx->mutex);
+                if (ctx->winner_index < 0) {
+                    ctx->winner_index = ip_index;
+                    ctx->winner_method = DNS_LATENCY_METHOD_TCP443;
+                    LOG_I ("dns-latency: [%d] IP %s became winner via TCP443!",
+                           ip_index, ipaddr_ntoa (ip));
+                    hev_task_cond_signal (&ctx->cond);
+                    hev_task_mutex_unlock (&ctx->mutex);
+                    goto done;
+                }
+                hev_task_mutex_unlock (&ctx->mutex);
             }
-            hev_task_mutex_unlock (&ctx->mutex);
         }
     }
 
-    /* ⭐ 通知阶段1完成 */
+    /* ⭐ 测试 TCP80 */
     hev_task_mutex_lock (&ctx->mutex);
-    ctx->stage_completed_count++;
-    LOG_D ("dns-latency: [%d] Stage1 completed, count=%d/%d", ip_index,
-           ctx->stage_completed_count, ctx->ip_count);
-    hev_task_cond_signal (&ctx->stage_cond);
+    has_winner = (ctx->winner_index >= 0);
+    elapsed_ms = get_time_ms () - ctx->start_time_ms;
+    is_timeout = (elapsed_ms >= ctx->timeout_ms);
     hev_task_mutex_unlock (&ctx->mutex);
 
-    /* ⭐ 阶段2: TCP 80 测试（硬编码800ms超时） */
-    hev_task_mutex_lock (&ctx->mutex);
-    while (ctx->current_stage != TEST_STAGE_TCP80 && ctx->current_stage <= TEST_STAGE_TCP443 && !ctx->should_stop) {
-        hev_task_cond_wait (&ctx->stage_cond, &ctx->mutex);
-    }
-    hev_task_mutex_unlock (&ctx->mutex);
-
-    if (!ctx->should_stop && !result->tcp443.success) {
+    if (!has_winner && !is_timeout) {
         int64_t remaining_ms = ctx->timeout_ms - (get_time_ms () - ctx->start_time_ms);
         if (remaining_ms > 0) {
-            LOG_D ("dns-latency: [%d] Testing TCP80 with 800ms timeout", ip_index);
+            LOG_D ("dns-latency: [%d] Testing TCP80 (remaining %lldms)",
+                   ip_index, (long long)remaining_ms);
 
-            if (tcp_connect_test (ip, 80, &result->tcp80.latency_us, 800) == 0) {
+            int test_timeout = (remaining_ms < 1000) ? remaining_ms : 1000;
+            if (tcp_connect_test (ip, 80, &result->tcp80.latency_us,
+                                 test_timeout, NULL, 0) == 0) {
                 result->tcp80.success = 1;
                 LOG_I ("dns-latency: [%d] IP %s TCP80 succeeded, latency=%lld us",
                        ip_index, ipaddr_ntoa (ip),
                        (long long)result->tcp80.latency_us);
-            }
-        }
 
-        /* ⭐ 失败时立即通知主任务 */
-        if (!result->tcp80.success) {
-            hev_task_mutex_lock (&ctx->mutex);
-            ctx->stage_failed_count++;
-            LOG_D ("dns-latency: [%d] TCP80 failed, stage_failed_count=%d/%d",
-                   ip_index, ctx->stage_failed_count, ctx->ip_count);
-
-            /* 如果所有需要测试的IP都失败了，立即唤醒主任务跳过当前阶段 */
-            int need_test_count = 0;
-            for (int i = 0; i < ctx->ip_count; i++) {
-                if (!ctx->results[i].tcp443.success) {
-                    need_test_count++;
+                hev_task_mutex_lock (&ctx->mutex);
+                if (ctx->winner_index < 0) {
+                    ctx->winner_index = ip_index;
+                    ctx->winner_method = DNS_LATENCY_METHOD_TCP80;
+                    LOG_I ("dns-latency: [%d] IP %s became winner via TCP80!",
+                           ip_index, ipaddr_ntoa (ip));
+                    hev_task_cond_signal (&ctx->cond);
+                    hev_task_mutex_unlock (&ctx->mutex);
+                    goto done;
                 }
+                hev_task_mutex_unlock (&ctx->mutex);
             }
-
-            if (ctx->stage_failed_count >= need_test_count) {
-                LOG_I ("dns-latency: [%d] All IPs failed at TCP80, skipping to next stage",
-                       ip_index);
-                hev_task_cond_signal (&ctx->stage_cond);
-            }
-            hev_task_mutex_unlock (&ctx->mutex);
         }
     }
 
-    /* ⭐ 通知阶段2完成 */
+    /* ⭐ 测试 ICMP */
     hev_task_mutex_lock (&ctx->mutex);
-    ctx->stage_completed_count++;
-    LOG_D ("dns-latency: [%d] Stage2 completed, count=%d/%d", ip_index,
-           ctx->stage_completed_count, ctx->ip_count);
-    hev_task_cond_signal (&ctx->stage_cond);
+    has_winner = (ctx->winner_index >= 0);
+    elapsed_ms = get_time_ms () - ctx->start_time_ms;
+    is_timeout = (elapsed_ms >= ctx->timeout_ms);
     hev_task_mutex_unlock (&ctx->mutex);
 
-    /* ⭐ 阶段3: ICMP 测试（硬编码250ms超时，全局deadline控制） */
-    hev_task_mutex_lock (&ctx->mutex);
-    while (ctx->current_stage != TEST_STAGE_ICMP && ctx->current_stage <= TEST_STAGE_TCP80 && !ctx->should_stop) {
-        hev_task_cond_wait (&ctx->stage_cond, &ctx->mutex);
-    }
-    hev_task_mutex_unlock (&ctx->mutex);
-
-    if (!ctx->should_stop && !result->tcp443.success && !result->tcp80.success) {
+    if (!has_winner && !is_timeout) {
         int64_t remaining_ms = ctx->timeout_ms - (get_time_ms () - ctx->start_time_ms);
         if (remaining_ms > 0) {
-            LOG_D ("dns-latency: [%d] Testing ICMP with 250ms timeout", ip_index);
+            LOG_D ("dns-latency: [%d] Testing ICMP (remaining %lldms)",
+                   ip_index, (long long)remaining_ms);
 
             if (icmp_ping_test (ip, &result->icmp.latency_us) == 0) {
                 result->icmp.success = 1;
                 LOG_I ("dns-latency: [%d] IP %s ICMP succeeded, latency=%lld us",
                        ip_index, ipaddr_ntoa (ip),
                        (long long)result->icmp.latency_us);
+
+                hev_task_mutex_lock (&ctx->mutex);
+                if (ctx->winner_index < 0) {
+                    ctx->winner_index = ip_index;
+                    ctx->winner_method = DNS_LATENCY_METHOD_ICMP;
+                    LOG_I ("dns-latency: [%d] IP %s became winner via ICMP!",
+                           ip_index, ipaddr_ntoa (ip));
+                    hev_task_cond_signal (&ctx->cond);
+                    hev_task_mutex_unlock (&ctx->mutex);
+                    goto done;
+                }
+                hev_task_mutex_unlock (&ctx->mutex);
             }
         }
     }
 
-    /* ⭐ 通知阶段3完成 */
-    hev_task_mutex_lock (&ctx->mutex);
-    ctx->stage_completed_count++;
-    LOG_D ("dns-latency: [%d] Stage3 completed, count=%d/%d", ip_index,
-           ctx->stage_completed_count, ctx->ip_count);
-    hev_task_cond_signal (&ctx->stage_cond);
-    hev_task_mutex_unlock (&ctx->mutex);
+    /* 所有测试都失败了 */
+    LOG_D ("dns-latency: [%d] IP %s all tests failed", ip_index, ipaddr_ntoa (ip));
 
-    /* 检查是否全部失败 */
-    if (!result->tcp443.success && !result->tcp80.success && !result->icmp.success) {
-        LOG_W ("dns-latency: [%d] IP %s all tests failed", ip_index,
-               ipaddr_ntoa (ip));
-    }
-
-    /* 释放参数 */
-    hev_free (param);
-
-    /* 通知主任务完成 */
+done:
+    /* 通知完成 */
     hev_task_mutex_lock (&ctx->mutex);
     ctx->completed_count++;
+    LOG_D ("dns-latency: [%d] Task completed (%d/%d)", ip_index,
+           ctx->completed_count, ctx->ip_count);
     hev_task_cond_signal (&ctx->cond);
     hev_task_mutex_unlock (&ctx->mutex);
 
-    LOG_D ("dns-latency: [%d] Task completed (%d/%d)", ip_index,
-           ctx->completed_count, ctx->ip_count);
+    /* 释放参数 */
+    hev_free (param);
 }
 
-/* ⭐ 并发测试多IP (支持阶段协调和deadline机制) */
+/* ⭐ 并发测试多IP（竞争式：谁先成功赢，超时返回原始） */
 int
 hev_dns_latency_test_concurrent (const ip_addr_t *ips, int ip_count,
                                   DnsLatencyResult *results_out, int timeout_ms)
@@ -1029,10 +1007,10 @@ hev_dns_latency_test_concurrent (const ip_addr_t *ips, int ip_count,
     ctx.ip_count = ip_count;
     ctx.completed_count = 0;
     ctx.should_stop = 0;
+    ctx.winner_index = -1;
+    ctx.winner_method = DNS_LATENCY_METHOD_NONE;
     ctx.start_time_ms = get_time_ms ();
     ctx.timeout_ms = timeout_ms;
-    ctx.current_stage = TEST_STAGE_TCP443;
-    ctx.stage_completed_count = 0;
 
     /* 初始化同步原语 */
     if (hev_task_mutex_init (&ctx.mutex) != 0) {
@@ -1043,14 +1021,9 @@ hev_dns_latency_test_concurrent (const ip_addr_t *ips, int ip_count,
         LOG_E ("dns-latency: Failed to init cond");
         return -1;
     }
-    if (hev_task_cond_init (&ctx.stage_cond) != 0) {
-        LOG_E ("dns-latency: Failed to init stage cond");
-        return -1;
-    }
 
-    LOG_I (
-        "dns-latency: Starting concurrent test for %d IPs (total timeout=%dms, stages: TCP443->TCP80->ICMP)",
-        ip_count, timeout_ms);
+    LOG_I ("dns-latency: Starting race test for %d IPs (timeout=%dms)",
+           ip_count, timeout_ms);
 
     /* 创建并发任务 */
     for (int i = 0; i < ip_count; i++) {
@@ -1060,7 +1033,6 @@ hev_dns_latency_test_concurrent (const ip_addr_t *ips, int ip_count,
             continue;
         }
 
-        /* 分配参数 */
         SingleIPTestParam *param = hev_malloc (sizeof (SingleIPTestParam));
         if (!param) {
             LOG_E ("dns-latency: Failed to alloc param for IP %d", i);
@@ -1071,60 +1043,26 @@ hev_dns_latency_test_concurrent (const ip_addr_t *ips, int ip_count,
         param->ctx = &ctx;
         param->ip_index = i;
 
-        /* 运行任务 */
         hev_task_run (task, single_ip_test_task, param);
-        LOG_D ("dns-latency: Created and started task for IP %d", i);
+        LOG_D ("dns-latency: Created task for IP %d", i);
     }
 
-    LOG_D ("dns-latency: All %d tasks created, starting stage coordination", ip_count);
-
-    /* ⭐ 阶段协调：管理三个测试阶段 */
-    for (int stage = TEST_STAGE_TCP443; stage <= TEST_STAGE_ICMP; stage++) {
-        LOG_I ("dns-latency: === Starting stage %d ===", stage);
-
-        /* 重置阶段计数并设置当前阶段（持有锁）*/
-        hev_task_mutex_lock (&ctx.mutex);
-        ctx.current_stage = stage;
-        ctx.stage_completed_count = 0;
-        ctx.stage_failed_count = 0;
-
-        /* 唤醒所有任务开始当前阶段 */
-        hev_task_cond_broadcast (&ctx.stage_cond);
-        hev_task_mutex_unlock (&ctx.mutex);
-
-        /* 让出CPU，让子任务开始等待当前阶段 */
-        hev_task_yield (HEV_TASK_YIELD);
-        hev_task_yield (HEV_TASK_YIELD);
-
-        hev_task_mutex_lock (&ctx.mutex);
-        LOG_I ("dns-latency: Waiting for stage %d completion (completed=%d, failed=%d, total=%d)",
-               stage, ctx.stage_completed_count, ctx.stage_failed_count, ctx.ip_count);
-
-        /* ⭐ 等待所有任务完成当前阶段，或者所有任务都失败（在持有锁的情况下检查条件）*/
-        while ((ctx.stage_completed_count + ctx.stage_failed_count) < ctx.ip_count && !ctx.should_stop) {
-            /* 检查全局超时 */
-            int64_t elapsed_ms = get_time_ms () - ctx.start_time_ms;
-            if (elapsed_ms >= ctx.timeout_ms) {
-                LOG_W ("dns-latency: Global timeout after %lldms", (long long)elapsed_ms);
-                ctx.should_stop = 1;
-                break;
-            }
-            LOG_D ("dns-latency: Still waiting for stage %d, completed=%d, failed=%d/%d",
-                   stage, ctx.stage_completed_count, ctx.stage_failed_count, ctx.ip_count);
-            hev_task_cond_wait (&ctx.stage_cond, &ctx.mutex);
-        }
-        hev_task_mutex_unlock (&ctx.mutex);
-
-        LOG_I ("dns-latency: === Stage %d completed (completed=%d, failed=%d) ===",
-               stage, ctx.stage_completed_count, ctx.stage_failed_count);
-
-        /* 检查是否应该停止 */
-        if (ctx.should_stop || is_shutdown ()) {
+    /* ⭐ 等待：有赢家 OR 全部完成 OR 超时 */
+    hev_task_mutex_lock (&ctx.mutex);
+    while (ctx.winner_index < 0 && ctx.completed_count < ctx.ip_count) {
+        /* 检查超时 */
+        int64_t elapsed_ms = get_time_ms () - ctx.start_time_ms;
+        if (elapsed_ms >= ctx.timeout_ms) {
+            LOG_W ("dns-latency: Race timeout after %lldms", (long long)elapsed_ms);
+            ctx.should_stop = 1;
             break;
         }
 
-        LOG_I ("dns-latency: Stage %d completed, moving to next stage", stage);
+        /* 等待信号（有赢家或任务完成） */
+        hev_task_cond_wait (&ctx.cond, &ctx.mutex);
     }
+    ctx.should_stop = 1; /* 通知所有任务停止 */
+    hev_task_mutex_unlock (&ctx.mutex);
 
     /* 等待所有任务完全结束 */
     hev_task_mutex_lock (&ctx.mutex);
@@ -1133,21 +1071,19 @@ hev_dns_latency_test_concurrent (const ip_addr_t *ips, int ip_count,
     }
     hev_task_mutex_unlock (&ctx.mutex);
 
-    /* 统计成功数量（任一方法成功即算成功） */
-    int success_count = 0;
-    for (int i = 0; i < ip_count; i++) {
-        if (results_out[i].tcp443.success || results_out[i].tcp80.success ||
-            results_out[i].icmp.success) {
-            success_count++;
-        }
+    /* 检查结果 */
+    int64_t total_elapsed_ms = get_time_ms () - ctx.start_time_ms;
+    if (ctx.winner_index >= 0) {
+        const char *method_name = (ctx.winner_method == DNS_LATENCY_METHOD_TCP443) ? "TCP443" :
+                                 (ctx.winner_method == DNS_LATENCY_METHOD_TCP80) ? "TCP80" : "ICMP";
+        LOG_I ("dns-latency: Race winner: IP %d (%s), total time=%lldms",
+               ctx.winner_index, method_name, (long long)total_elapsed_ms);
+        return 0;
     }
 
-    int64_t total_elapsed_ms = get_time_ms () - ctx.start_time_ms;
-    LOG_I (
-        "dns-latency: Concurrent test completed: %d/%d IPs succeeded, total time=%lldms",
-        success_count, ip_count, (long long)total_elapsed_ms);
-
-    return success_count > 0 ? 0 : -1;
+    LOG_W ("dns-latency: No winner in race (timeout), total time=%lldms",
+           (long long)total_elapsed_ms);
+    return -1;
 }
 
 /* Context for async optimization task */
@@ -1236,77 +1172,52 @@ dns_latency_optimize_task (void *data)
 
     LOG_I ("dns-latency: Concurrent test returned successfully");
 
-    /* ⭐ 按优先级降级比较：所有 IP 都成功某个方法才能用该方法比较 */
+    /* ⭐ 竞争式：直接选择第一个成功的 IP */
     int best_idx = -1;
     int64_t best_latency = INT64_MAX;
     DnsLatencyTestMethod best_method = DNS_LATENCY_METHOD_NONE;
 
-    /* 第一步：检查是否所有 IP 的 TCP443 都成功 */
-    int all_tcp443_success = 1;
+    /* 按优先级查找第一个成功的 IP 和方法 */
     for (int i = 0; i < ip_count; i++) {
-        if (!results[i].tcp443.success) {
-            all_tcp443_success = 0;
+        if (results[i].tcp443.success) {
+            best_idx = i;
+            best_latency = results[i].tcp443.latency_us;
+            best_method = DNS_LATENCY_METHOD_TCP443;
+            LOG_I ("dns-latency: Found winner IP %d via TCP443 (latency=%lld us)",
+                   i, (long long)best_latency);
             break;
         }
     }
 
-    /* 第二步：如果没有全部 TCP443 成功，检查是否全部 TCP80 成功 */
-    int all_tcp80_success = 0;
-    if (!all_tcp443_success) {
-        all_tcp80_success = 1;
+    if (best_idx < 0) {
         for (int i = 0; i < ip_count; i++) {
-            if (!results[i].tcp80.success) {
-                all_tcp80_success = 0;
+            if (results[i].tcp80.success) {
+                best_idx = i;
+                best_latency = results[i].tcp80.latency_us;
+                best_method = DNS_LATENCY_METHOD_TCP80;
+                LOG_I ("dns-latency: Found winner IP %d via TCP80 (latency=%lld us)",
+                       i, (long long)best_latency);
                 break;
             }
         }
     }
 
-    /* 第三步：如果 TCP80 也没全部成功，检查是否全部 ICMP 成功 */
-    int all_icmp_success = 0;
-    if (!all_tcp443_success && !all_tcp80_success) {
-        all_icmp_success = 1;
+    if (best_idx < 0) {
         for (int i = 0; i < ip_count; i++) {
-            if (!results[i].icmp.success) {
-                all_icmp_success = 0;
+            if (results[i].icmp.success) {
+                best_idx = i;
+                best_latency = results[i].icmp.latency_us;
+                best_method = DNS_LATENCY_METHOD_ICMP;
+                LOG_I ("dns-latency: Found winner IP %d via ICMP (latency=%lld us)",
+                       i, (long long)best_latency);
                 break;
             }
         }
     }
 
-    /* 第四步：确定比较方法和日志 */
-    if (all_tcp443_success) {
-        LOG_I ("dns-latency: All IPs succeeded at TCP443, comparing by TCP443 latency");
-        best_method = DNS_LATENCY_METHOD_TCP443;
-    } else if (all_tcp80_success) {
-        LOG_I ("dns-latency: All IPs succeeded at TCP80, comparing by TCP80 latency");
-        best_method = DNS_LATENCY_METHOD_TCP80;
-    } else if (all_icmp_success) {
-        LOG_I ("dns-latency: All IPs succeeded at ICMP, comparing by ICMP latency");
-        best_method = DNS_LATENCY_METHOD_ICMP;
-    } else {
-        LOG_W ("dns-latency: No test method succeeded for all IPs, sending original response");
+    if (best_idx < 0) {
+        LOG_W ("dns-latency: No IP succeeded any test, sending original response");
         goto send_response;
-    }
-
-    /* 第五步：根据确定的方法比较延迟（所有 IP 此方法都成功） */
-    for (int i = 0; i < ip_count; i++) {
-        int64_t latency = INT64_MAX;
-
-        /* 根据优先级选择对应的方法结果 */
-        if (best_method == DNS_LATENCY_METHOD_TCP443) {
-            latency = results[i].tcp443.latency_us;
-        } else if (best_method == DNS_LATENCY_METHOD_TCP80) {
-            latency = results[i].tcp80.latency_us;
-        } else { /* ICMP */
-            latency = results[i].icmp.latency_us;
-        }
-
-        /* 选择延迟最低的 IP */
-        if (latency < best_latency) {
-            best_idx = i;
-            best_latency = latency;
-        }
     }
 
     LOG_I ("dns-latency: Best IP for %s is %s with latency=%lld us (method: %s)",
