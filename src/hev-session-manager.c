@@ -881,8 +881,40 @@ exit_cleanup:
 }
 
 /* ============================================================================
-   Smart Proxy Splice Implementation
+   Smart Proxy Independent Probe Implementation
    ============================================================================ */
+
+/* Probe result enumeration */
+typedef enum {
+    PROBE_UNKNOWN = 0,
+    PROBE_SUCCESS,    /* Received valid response from server */
+    PROBE_RESET,      /* Connection reset (likely GFW RST) */
+    PROBE_TIMEOUT,    /* Timeout without response */
+    PROBE_ERROR       /* Other error (network, system, etc.) */
+} ProbeResult;
+
+/* Probe result enumeration with connection fd */
+typedef struct {
+    ProbeResult result;
+    int fd;              /* Probe connection fd (-1 if closed) */
+    time_t duration_ms;  /* Probe duration in milliseconds */
+} ProbeOutcome;
+
+/* Forward declarations for probe functions */
+static ProbeOutcome probe_target_connection (HevSocks5SessionTCP *self,
+                                            struct sockaddr *saddr,
+                                            socklen_t saddr_len,
+                                            struct pbuf *data_queue,
+                                            int timeout_ms,
+                                            HevTask *task);
+static int send_browser_data_queue (int fd, struct pbuf *queue);
+static int wait_for_probe_response (int fd, int timeout_ms);
+static int continue_with_direct_connection (HevSocks5SessionTCP *self,
+                                            HevSocks5Session *s,
+                                            HevTask *task,
+                                            int fd,
+                                            struct sockaddr *saddr,
+                                            socklen_t saddr_len);
 
 static void
 run_smart_proxy_task (void *data)
@@ -894,7 +926,6 @@ run_smart_proxy_task (void *data)
         klass->iface (HEV_OBJECT (s), HEV_SOCKS5_SESSION_TYPE);
     struct tcp_pcb *pcb = self->pcb;
     HevTask *task = iface->get_task (s);
-    HevTask *task_b = NULL;
     HevListNode *node = iface->get_node (s);
     struct sockaddr_storage saddr;
     socklen_t saddr_len;
@@ -902,16 +933,11 @@ run_smart_proxy_task (void *data)
     char dst_ip[INET6_ADDRSTRLEN];
     ip_addr_t dst_ip_copy;
     u16_t dst_port_copy;
-    int tcp_buffer_size;
-    int fd = -1;
     int timeout;
-    int stack_size;
-    HevIdleTimer idle_timer;
-    time_t connect_start = 0;
-    time_t connect_success_time = 0;
-    int gfw_detected = 0;
-    int first_loop = 1;
-    int probe_success = 0;
+    int probe_timeout;
+    ProbeOutcome probe_outcome;
+    int direct_fd = -1;
+    int gfw_blocked = 0;
 
     /*
      * Note: ACL checking and hostname detection are already done in
@@ -925,71 +951,412 @@ run_smart_proxy_task (void *data)
     dst_ip_copy = pcb->local_ip;
     dst_port_copy = pcb->local_port;
 
-    LOG_D ("%p [SMART-PROXY] Task run %s:%d -> %s:%d", self, src_ip,
+    LOG_D ("%p [SMART-PROXY-V2] Task run %s:%d -> %s:%d", self, src_ip,
            pcb->remote_port, dst_ip, pcb->local_port);
 
-    init_session_idle_timer (&idle_timer);
     build_ipv6_sockaddr (&pcb->local_ip, pcb->local_port, &saddr, &saddr_len);
 
-    fd = create_tcp_socket (task, "smart proxy");
-    if (fd < 0) {
-        goto fallback_socks5;
-    }
-
-    /* ====================================================================
-       🔍 阶段 1：TCP 三次握手
-       ==================================================================== */
     timeout = hev_config_get_smart_proxy_timeout_ms ();
-    hev_socks5_set_timeout (s, timeout);
-    connect_start = get_current_time_ms ();
-
-    LOG_D ("%p [SMART-PROXY] Attempting TCP handshake to %s:%d (timeout=%dms)",
-           self, dst_ip, pcb->local_port, timeout);
-
-    if (hev_task_io_socket_connect (fd, (struct sockaddr *)&saddr, saddr_len,
-                                    hev_socks5_task_io_yielder, s) < 0) {
-        time_t connect_duration_ms = get_current_time_ms () - connect_start;
-
-        LOG_W ("%p [SMART-PROXY] TCP handshake FAILED to %s:%d after %ld ms, "
-               "fallback to SOCKS5 (will blacklist if proxy succeeds)",
-               self, dst_ip, pcb->local_port, connect_duration_ms);
-
-        gfw_detected = 1;
-        cleanup_socket (s, task, fd);
-        goto fallback_socks5;
-    }
-
-    connect_success_time = get_current_time_ms ();
-    LOG_I (
-        "%p [SMART-PROXY] TCP handshake SUCCESS %s:%d -> %s:%d (took %ld ms)",
-        self, src_ip, pcb->remote_port, dst_ip, pcb->local_port,
-        connect_success_time - connect_start);
+    probe_timeout = timeout / 2;
+    if (probe_timeout < 500)
+        probe_timeout = 500;
 
     /* ====================================================================
-       🔍 阶段 2：等待服务器数据并验证
+       Step 1: Independent probe with connection reuse
        ==================================================================== */
+
+    LOG_I ("%p [SMART-PROXY-V2] Starting probe to %s:%d (timeout=%dms)",
+           self, dst_ip, pcb->local_port, probe_timeout);
+
+    /* Create probe connection and test */
+    probe_outcome = probe_target_connection (self, (struct sockaddr *)&saddr,
+                                             saddr_len, self->queue,
+                                             probe_timeout, task);
+
+    LOG_I ("%p [SMART-PROXY-V2] Probe result: %d (duration=%ldms)", self,
+           probe_outcome.result, probe_outcome.duration_ms);
+
+    /* ====================================================================
+       Step 2: Decision based on probe result
+       ==================================================================== */
+
+    switch (probe_outcome.result) {
+    case PROBE_SUCCESS:
+        /* Probe succeeded - reuse the probe connection! */
+        LOG_I ("%p [SMART-PROXY-V2] Probe SUCCESS in %ldms, reusing connection",
+               self, probe_outcome.duration_ms);
+
+        direct_fd = probe_outcome.fd;
+        probe_outcome.fd = -1; /* Transfer ownership */
+
+        /* Continue with direct connection using the probe fd */
+        if (continue_with_direct_connection (self, s, task, direct_fd,
+                                             (struct sockaddr *)&saddr,
+                                             saddr_len) < 0) {
+            LOG_W ("%p [SMART-PROXY-V2] Direct connection failed", self);
+            gfw_blocked = 1;
+        }
+        break;
+
+    case PROBE_RESET:
+        /* Probe received RST - likely GFW blocking */
+        LOG_W ("%p [SMART-PROXY-V2] Probe received RST in %ldms (GFW blocked), "
+               "using SOCKS5", self, probe_outcome.duration_ms);
+        gfw_blocked = 1;
+        break;
+
+    case PROBE_TIMEOUT:
+        /* Probe timeout - server not responding */
+        LOG_W ("%p [SMART-PROXY-V2] Probe timeout after %ldms, using SOCKS5",
+               self, probe_outcome.duration_ms);
+        gfw_blocked = 1;
+        break;
+
+    case PROBE_ERROR:
+    default:
+        /* Probe error - network or system error */
+        LOG_E ("%p [SMART-PROXY-V2] Probe error, using SOCKS5", self);
+        gfw_blocked = 1;
+        break;
+    }
+
+    /* ====================================================================
+       Step 3: Fallback to SOCKS5 if needed
+       ==================================================================== */
+
+    if (gfw_blocked) {
+        char fallback_dst_ip[INET6_ADDRSTRLEN];
+        ipaddr_ntoa_r (&dst_ip_copy, fallback_dst_ip, sizeof (fallback_dst_ip));
+
+        LOG_I ("%p [SMART-PROXY-V2] Falling back to SOCKS5 for %s:%d -> %s:%d",
+               self, src_ip, pcb ? pcb->remote_port : 0, fallback_dst_ip,
+               dst_port_copy);
+
+        hev_socks5_session_run (s);
+
+        LOG_I ("%p [SMART-PROXY-V2] SOCKS5 fallback ended", self);
+
+        /* Add to blacklist if SOCKS5 succeeded */
+        if (self->socks5_success && self->detected_hostname[0]) {
+            hev_filter_blacklist_add_domain (self->detected_hostname);
+            LOG_W ("%p [SMART-PROXY-V2] Added domain '%s' to blacklist", self,
+                   self->detected_hostname);
+        } else if (self->socks5_success) {
+            hev_filter_blacklist_add_ip (&dst_ip_copy);
+            LOG_W ("%p [SMART-PROXY-V2] Added IP '%s' to blacklist", self,
+                   fallback_dst_ip);
+        }
+    }
+
+    /* ====================================================================
+       Cleanup
+       ==================================================================== */
+
+    if (direct_fd >= 0) {
+        close (direct_fd);
+    }
+
+    cleanup_session (s, node);
+}
+
+/* ============================================================================
+   Independent Probe Implementation
+   ============================================================================ */
+
+/**
+ * send_browser_data_queue - Send browser's pbuf queue to socket
+ * @fd: socket file descriptor
+ * @queue: pbuf queue to send
+ *
+ * Returns: bytes sent on success, -1 on error
+ */
+static int
+send_browser_data_queue (int fd, struct pbuf *queue)
+{
+    struct iovec iov[128];
+    int iovc = 0;
+    struct pbuf *p;
+
+    if (!queue)
+        return -1;
+
+    /* Build iovec from pbuf queue */
+    for (p = queue; p && (iovc < 128); p = p->next, iovc++) {
+        iov[iovc].iov_base = p->payload;
+        iov[iovc].iov_len = p->len;
+    }
+
+    if (iovc == 0)
+        return 0;
+
+    /* Send data using writev */
+    ssize_t sent = writev (fd, iov, iovc);
+    if (sent < 0) {
+        LOG_D ("[PROBE] writev failed: errno=%d (%s)", errno, strerror (errno));
+        return -1;
+    }
+
+    LOG_D ("[PROBE] Sent %zd bytes (%d iovs)", sent, iovc);
+    return sent;
+}
+
+/**
+ * wait_for_probe_response - Wait for server response on probe connection
+ * @fd: socket file descriptor
+ * @timeout_ms: timeout in milliseconds
+ *
+ * Returns: PROBE_SUCCESS, PROBE_RESET, PROBE_TIMEOUT, or PROBE_ERROR
+ */
+static int
+wait_for_probe_response (int fd, int timeout_ms)
+{
+    struct pollfd pfd;
+    char buf[16];
+    int ret;
+
+    pfd.fd = fd;
+    pfd.events = POLLIN;
+
+    LOG_D ("[PROBE] Waiting for response (timeout=%dms)...", timeout_ms);
+
+    /* Wait for data with timeout */
+    ret = poll (&pfd, 1, timeout_ms);
+
+    if (ret < 0) {
+        /* Poll error */
+        LOG_D ("[PROBE] poll error: errno=%d (%s)", errno, strerror (errno));
+        return PROBE_ERROR;
+    } else if (ret == 0) {
+        /* Timeout - no response */
+        LOG_D ("[PROBE] Timeout waiting for response");
+        return PROBE_TIMEOUT;
+    }
+
+    /* Check for error events */
+    if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) {
+        int error = 0;
+        socklen_t len = sizeof (error);
+        getsockopt (fd, SOL_SOCKET, SO_ERROR, &error, &len);
+
+        LOG_D ("[PROBE] Socket error event: error=%d (%s)", error,
+               strerror (error));
+        return PROBE_RESET;
+    }
+
+    /* Try to peek at data to verify connection is alive */
+    ssize_t n = recv (fd, buf, sizeof (buf), MSG_PEEK | MSG_DONTWAIT);
+
+    if (n > 0) {
+        /* Received data from server - connection is valid */
+        LOG_I ("[PROBE] Received %zd bytes from server", n);
+        return PROBE_SUCCESS;
+    } else if (n == 0) {
+        /* Connection closed by server */
+        LOG_D ("[PROBE] Connection closed by server");
+        return PROBE_RESET;
+    } else {
+        /* Error or EAGAIN */
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            /* No data available yet, but connection is still valid */
+            LOG_D ("[PROBE] No data yet, connection valid");
+            return PROBE_SUCCESS;
+        } else {
+            /* Connection error (likely ECONNRESET) */
+            LOG_D ("[PROBE] recv error: errno=%d (%s)", errno, strerror (errno));
+            return PROBE_RESET;
+        }
+    }
+}
+
+/**
+ * probe_target_connection - Create independent probe connection to target
+ * @self: session context
+ * @saddr: target address
+ * @saddr_len: address length
+ * @data_queue: browser data to send (contains SNI)
+ * @timeout_ms: probe timeout in milliseconds
+ * @task: task context for yielding
+ *
+ * This function creates an independent TCP connection to the target server
+ * and sends the browser's actual data (including SNI for TLS).
+ *
+ * **Key behavior for connection reuse (方案 B):**
+ * - If probe SUCCESS: returns fd open, caller should reuse it for data transfer
+ * - If probe FAIL (RST/timeout/error): closes fd, returns -1
+ *
+ * This way:
+ * - When probe succeeds: no data re-send, zero waste, zero latency penalty
+ * - When probe fails: browser connection is completely isolated from RST
+ *
+ * Returns: ProbeOutcome with result code and possibly open fd
+ */
+static ProbeOutcome
+probe_target_connection (HevSocks5SessionTCP *self,
+                        struct sockaddr *saddr,
+                        socklen_t saddr_len,
+                        struct pbuf *data_queue,
+                        int timeout_ms,
+                        HevTask *task)
+{
+    ProbeOutcome outcome = { PROBE_ERROR, -1, 0 };
+    int probe_fd = -1;
+    int ret;
+    time_t start_time;
+
+    start_time = get_current_time_ms ();
+
+    LOG_I ("%p [PROBE] Creating independent probe socket", self);
+
+    /* Create probe socket */
+    probe_fd = socket (saddr->sa_family, SOCK_STREAM, 0);
+    if (probe_fd < 0) {
+        LOG_E ("%p [PROBE] Failed to create socket: errno=%d", self, errno);
+        return outcome;
+    }
+
+    /* Set non-blocking */
+    int flags = fcntl (probe_fd, F_GETFL, 0);
+    fcntl (probe_fd, F_SETFL, flags | O_NONBLOCK);
+
+    /* Connect to target */
+    LOG_D ("%p [PROBE] Connecting to target...", self);
+    ret = connect (probe_fd, saddr, saddr_len);
+
+    if (ret < 0 && errno != EINPROGRESS) {
+        LOG_W ("%p [PROBE] Connect failed immediately: errno=%d", self, errno);
+        close (probe_fd);
+        outcome.duration_ms = get_current_time_ms () - start_time;
+        return outcome;
+    }
+
+    /* Wait for connection to complete */
+    if (errno == EINPROGRESS) {
+        struct pollfd pfd;
+        pfd.fd = probe_fd;
+        pfd.events = POLLOUT;
+
+        ret = poll (&pfd, 1, timeout_ms);
+        if (ret < 0) {
+            LOG_E ("%p [PROBE] Poll error during connect", self);
+            close (probe_fd);
+            outcome.duration_ms = get_current_time_ms () - start_time;
+            return outcome;
+        } else if (ret == 0) {
+            LOG_W ("%p [PROBE] Connect timeout", self);
+            close (probe_fd);
+            outcome.result = PROBE_TIMEOUT;
+            outcome.duration_ms = get_current_time_ms () - start_time;
+            return outcome;
+        }
+
+        /* Check for socket errors */
+        int error = 0;
+        socklen_t len = sizeof (error);
+        if (getsockopt (probe_fd, SOL_SOCKET, SO_ERROR, &error, &len) < 0
+            || error != 0) {
+            LOG_W ("%p [PROBE] Connect failed: error=%d", self, error);
+            close (probe_fd);
+            outcome.result = PROBE_ERROR;
+            outcome.duration_ms = get_current_time_ms () - start_time;
+            return outcome;
+        }
+    }
+
+    LOG_I ("%p [PROBE] TCP handshake successful", self);
+
+    /* Send browser's actual data (contains SNI for TLS) */
+    LOG_I ("%p [PROBE] Sending browser data (%d bytes)...", self,
+           data_queue ? data_queue->tot_len : 0);
+
+    ret = send_browser_data_queue (probe_fd, data_queue);
+    if (ret < 0) {
+        LOG_W ("%p [PROBE] Failed to send data", self);
+        close (probe_fd);
+        outcome.result = PROBE_ERROR;
+        outcome.duration_ms = get_current_time_ms () - start_time;
+        return outcome;
+    }
+
+    LOG_I ("%p [PROBE] Sent %d bytes, waiting for response...", self, ret);
+
+    /* Wait for server response */
+    ProbeResult result = wait_for_probe_response (probe_fd, timeout_ms);
+
+    outcome.duration_ms = get_current_time_ms () - start_time;
+    outcome.result = result;
+
+    if (result == PROBE_SUCCESS) {
+        /* Probe succeeded! Keep connection open for reuse */
+        LOG_I ("%p [PROBE] Probe SUCCESS in %ldms, keeping connection open for reuse",
+               self, outcome.duration_ms);
+        outcome.fd = probe_fd;  /* Transfer ownership to caller */
+    } else {
+        /* Probe failed, close connection */
+        LOG_W ("%p [PROBE] Probe failed (%d) in %ldms, closing connection",
+               self, result, outcome.duration_ms);
+        close (probe_fd);
+        outcome.fd = -1;
+    }
+
+    return outcome;
+}
+
+/**
+ * continue_with_direct_connection - Continue using the probe connection
+ * @self: session context
+ * @s: socks5 session
+ * @task: task context
+ * @fd: probe connection fd (from successful probe)
+ * @saddr: target address
+ * @saddr_len: address length
+ *
+ * This function continues data transfer using the probe connection.
+ * It sets up bidirectional splice between the tun device and the server.
+ *
+ * Returns: 0 on success, -1 on error
+ */
+static int
+continue_with_direct_connection (HevSocks5SessionTCP *self,
+                                HevSocks5Session *s,
+                                HevTask *task,
+                                int fd,
+                                struct sockaddr *saddr,
+                                socklen_t saddr_len)
+{
+    HevTask *task_b = NULL;
+    HevIdleTimer idle_timer;
+    HevSpliceTaskData *task_data;
+    int stack_size;
+    int tcp_buffer_size;
+    int res = 0;
+
+    LOG_I ("%p [DIRECT] Setting up splice with probe connection fd=%d", self,
+           fd);
+
+    init_session_idle_timer (&idle_timer);
+
+    /* Allocate ring buffer */
     tcp_buffer_size = hev_config_get_misc_tcp_buffer_size ();
     self->buffer = hev_ring_buffer_alloca (tcp_buffer_size);
     if (!self->buffer) {
-        LOG_E ("%p [SMART-PROXY] Failed to allocate ring buffer", self);
-        cleanup_socket (s, task, fd);
-        goto fallback_socks5;
+        LOG_E ("%p [DIRECT] Failed to allocate ring buffer", self);
+        return -1;
     }
 
     HEV_SOCKS5 (s)->fd = fd;
 
+    /* Create backward splice task */
     stack_size = hev_config_get_misc_task_stack_size ();
     task_b = hev_task_new (stack_size);
     if (!task_b) {
-        LOG_E ("%p [SMART-PROXY] Failed to create backward splice task", self);
-        goto cleanup_splice;
+        LOG_E ("%p [DIRECT] Failed to create backward splice task", self);
+        return -1;
     }
 
-    HevSpliceTaskData *task_data =
-        create_splice_task_data (self, &idle_timer, "smart proxy");
+    task_data = create_splice_task_data (self, &idle_timer, "direct");
     if (!task_data) {
         hev_task_unref (task_b);
-        goto cleanup_splice;
+        return -1;
     }
 
     hev_task_ref (task_b);
@@ -998,177 +1365,42 @@ run_smart_proxy_task (void *data)
     if (hev_task_mod_fd (task, fd, POLLOUT) < 0)
         hev_task_add_fd (task, fd, POLLOUT);
 
-    LOG_D (
-        "%p [SMART-PROXY] Waiting for initial data from server (timeout=%dms)",
-        self, timeout);
+    LOG_I ("%p [DIRECT] Starting bidirectional splice", self);
 
-    /* ====================================================================
-       🔍 数据传输循环，检测真实数据
-       ==================================================================== */
+    /* Main splice loop */
     for (;;) {
-        /* 检查隧道是否已停止 */
         if (!hev_socks5_tunnel_is_running ()) {
-            LOG_D ("%p [SMART-PROXY] tunnel stopped, exiting", self);
-            break;
-        }
-        int res_f = tcp_direct_splice_f (self, &idle_timer);
-
-        if (first_loop && self->initial_data_received) {
-            time_t elapsed_ms = get_current_time_ms () - connect_success_time;
-            struct iovec iov[2];
-            int iovc = hev_ring_buffer_reading (self->buffer, iov);
-            int is_valid_response = 0;
-
-            /* Case 1: Buffer still has data (long connection) */
-            if (iovc > 0 && iov[0].iov_len >= 16) {
-                LOG_I ("%p [SMART-PROXY] SUCCESS for port %d: "
-                       "Received %zu bytes from %s (data in buffer, %ld ms)",
-                       self, pcb->local_port, iov[0].iov_len, dst_ip,
-                       elapsed_ms);
-                is_valid_response = 1;
-            }
-            /* Case 2: Buffer consumed but data was received (short HTTP connection) */
-            else if (iovc == 0) {
-                /* initial_data_received is true but buffer is empty means
-                 * backward task already consumed the data and sent it to client.
-                 * This is normal for short HTTP connections. */
-                LOG_I (
-                    "%p [SMART-PROXY] SUCCESS for port %d: "
-                    "Data was received and forwarded to client (buffer consumed, "
-                    "short HTTP connection, %ld ms)",
-                    self, pcb->local_port, elapsed_ms);
-                is_valid_response = 1;
-            }
-
-            if (is_valid_response) {
-                probe_success = 1;
-                LOG_I ("%p [SMART-PROXY] Probe SUCCESS for %s:%d "
-                       "(handshake OK + valid application data in %ld ms), "
-                       "NOT blacklisting, continue direct connection",
-                       self, dst_ip, pcb->local_port, elapsed_ms);
-                hev_socks5_set_timeout (s, 0);
-                first_loop = 0;
-            } else if (elapsed_ms >= timeout) {
-                LOG_W ("%p [SMART-PROXY] TIMEOUT for %s:%d "
-                       "(handshake OK but NO valid data received in %d ms), "
-                       "fallback to SOCKS5 (will blacklist if proxy succeeds)",
-                       self, dst_ip, pcb->local_port, timeout);
-                gfw_detected = 1;
-                break;
-            }
-        }
-
-        if (res_f < 0) {
-            if (probe_success) {
-                LOG_D (
-                    "%p [SMART-PROXY] Forward splice ended after successful probe "
-                    "(HTTP short connection is normal behavior)",
-                    self);
-            } else if (first_loop) {
-                LOG_D (
-                    "%p [SMART-PROXY] Forward splice ended during probe (probe incomplete, considered failed)",
-                    self);
-            } else {
-                LOG_D ("%p [SMART-PROXY] Forward splice ended normally", self);
-            }
+            LOG_D ("%p [DIRECT] Tunnel stopped, exiting", self);
             break;
         }
 
-        if (!first_loop && res_f == 0) {
+        res = tcp_direct_splice_f (self, &idle_timer);
+
+        if (res < 0) {
+            LOG_D ("%p [DIRECT] Forward splice ended", self);
+            break;
+        }
+
+        if (res == 0) {
             if (idle_timer_check (&idle_timer) < 0) {
-                time_t idle_duration =
-                    get_current_time_seconds () - idle_timer.last_activity;
-                LOG_I ("%p [SMART-PROXY] Idle timeout %s:%d -> %s:%d "
-                       "(no activity for %ld seconds)",
-                       self, src_ip, pcb->remote_port, dst_ip, pcb->local_port,
-                       idle_duration);
+                LOG_I ("%p [DIRECT] Idle timeout", self);
                 break;
             }
         }
 
-        HevTaskYieldType type = (res_f > 0) ? HEV_TASK_YIELD : HEV_TASK_WAITIO;
+        HevTaskYieldType type = (res > 0) ? HEV_TASK_YIELD : HEV_TASK_WAITIO;
         hev_task_yield (type);
     }
 
     /* Wait for backward task */
     if (hev_socks5_tunnel_is_running ()) {
-        /* Only join if tunnel is still running. During shutdown, the
-         * background task has already exited due to tunnel status check. */
         hev_task_join (task_b);
-    } else {
-        LOG_D ("%p [SMART-PROXY] Tunnel stopped, skipping task join", self);
     }
     hev_task_unref (task_b);
 
-cleanup_splice:
-    cleanup_socket (s, task, fd);
+    LOG_I ("%p [DIRECT] Splice ended", self);
 
-    if (connect_success_time > 0) {
-        time_t session_duration = get_current_time_ms () - connect_success_time;
-
-        if (gfw_detected) {
-            LOG_I ("%p [SMART-PROXY] FAILED %s:%d -> %s:%d "
-                   "(detected issue, fallback to SOCKS5)",
-                   self, src_ip, pcb->remote_port, dst_ip, pcb->local_port);
-        } else if (probe_success) {
-            LOG_I ("%p [SMART-PROXY] Direct connect ended %s:%d -> %s:%d "
-                   "(duration=%ld ms, probe was successful)",
-                   self, src_ip, pcb->remote_port, dst_ip, pcb->local_port,
-                   session_duration);
-        } else {
-            LOG_I ("%p [SMART-PROXY] Direct connect ended %s:%d -> %s:%d "
-                   "(duration=%ld ms)",
-                   self, src_ip, pcb->remote_port, dst_ip, pcb->local_port,
-                   session_duration);
-        }
-    }
-
-    if (gfw_detected) {
-        goto fallback_socks5;
-    }
-
-    goto exit_cleanup;
-
-fallback_socks5: {
-    /* Use saved IP/port (pcb may be freed or reused) */
-    char fallback_dst_ip[INET6_ADDRSTRLEN];
-    ipaddr_ntoa_r (&dst_ip_copy, fallback_dst_ip, sizeof (fallback_dst_ip));
-
-    LOG_I ("%p [SMART-PROXY] Falling back to SOCKS5 for %s:%d -> %s:%d", self,
-           src_ip, pcb ? pcb->remote_port : 0, fallback_dst_ip, dst_port_copy);
-
-    if (self->buffer) {
-        LOG_D ("%p [SMART-PROXY] Buffer will be reused by SOCKS5", self);
-    }
-
-    hev_socks5_session_run (s);
-
-    LOG_I ("%p [SMART-PROXY] SOCKS5 fallback ended %s:%d -> %s:%d", self,
-           src_ip, pcb ? pcb->remote_port : 0, fallback_dst_ip, dst_port_copy);
-
-    /* Only add to blacklist if: (1) direct failed AND (2) SOCKS5 succeeded */
-    if (gfw_detected && self->socks5_success) {
-        LOG_I (
-            "%p [SMART-PROXY] Direct failed but proxy succeeded - adding to blacklist",
-            self);
-        if (self->detected_hostname[0]) {
-            hev_filter_blacklist_add_domain (self->detected_hostname);
-            LOG_W ("%p [SMART-PROXY] Added domain '%s' to blacklist", self,
-                   self->detected_hostname);
-        } else {
-            hev_filter_blacklist_add_ip (&dst_ip_copy);
-            LOG_W ("%p [SMART-PROXY] Added IP '%s' to blacklist", self,
-                   fallback_dst_ip);
-        }
-    } else if (gfw_detected && !self->socks5_success) {
-        LOG_W (
-            "%p [SMART-PROXY] Direct failed but proxy also failed - NOT blacklisting (uncertain if GFW blocked)",
-            self);
-    }
-}
-
-exit_cleanup:
-    cleanup_session (s, node);
+    return 0;
 }
 
 /* ============================================================================
