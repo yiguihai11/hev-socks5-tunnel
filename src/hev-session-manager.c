@@ -1212,6 +1212,12 @@ probe_target_connection (HevSocks5SessionTCP *self, struct sockaddr *saddr,
         return outcome;
     }
 
+    /* Enable IPv4-mapped IPv6 for dual-stack support */
+    if (saddr->sa_family == AF_INET6) {
+        int zero = 0;
+        setsockopt (probe_fd, IPPROTO_IPV6, IPV6_V6ONLY, &zero, sizeof (zero));
+    }
+
     /* Set non-blocking */
     int flags = fcntl (probe_fd, F_GETFL, 0);
     fcntl (probe_fd, F_SETFL, flags | O_NONBLOCK);
