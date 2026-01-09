@@ -885,35 +885,34 @@ exit_cleanup:
    ============================================================================ */
 
 /* Probe result enumeration */
-typedef enum {
+typedef enum
+{
     PROBE_UNKNOWN = 0,
-    PROBE_SUCCESS,    /* Received valid response from server */
-    PROBE_RESET,      /* Connection reset (likely GFW RST) */
-    PROBE_TIMEOUT,    /* Timeout without response */
-    PROBE_ERROR       /* Other error (network, system, etc.) */
+    PROBE_SUCCESS, /* Received valid response from server */
+    PROBE_RESET, /* Connection reset (likely GFW RST) */
+    PROBE_TIMEOUT, /* Timeout without response */
+    PROBE_ERROR /* Other error (network, system, etc.) */
 } ProbeResult;
 
 /* Probe result enumeration with connection fd */
-typedef struct {
+typedef struct
+{
     ProbeResult result;
-    int fd;              /* Probe connection fd (-1 if closed) */
-    time_t duration_ms;  /* Probe duration in milliseconds */
+    int fd; /* Probe connection fd (-1 if closed) */
+    time_t duration_ms; /* Probe duration in milliseconds */
 } ProbeOutcome;
 
 /* Forward declarations for probe functions */
 static ProbeOutcome probe_target_connection (HevSocks5SessionTCP *self,
-                                            struct sockaddr *saddr,
-                                            socklen_t saddr_len,
-                                            struct pbuf *data_queue,
-                                            int timeout_ms,
-                                            HevTask *task);
+                                             struct sockaddr *saddr,
+                                             socklen_t saddr_len,
+                                             struct pbuf *data_queue,
+                                             int timeout_ms, HevTask *task);
 static int send_browser_data_queue (int fd, struct pbuf *queue);
 static int wait_for_probe_response (int fd, int timeout_ms);
 static int continue_with_direct_connection (HevSocks5SessionTCP *self,
-                                            HevSocks5Session *s,
-                                            HevTask *task,
-                                            int fd,
-                                            struct sockaddr *saddr,
+                                            HevSocks5Session *s, HevTask *task,
+                                            int fd, struct sockaddr *saddr,
                                             socklen_t saddr_len);
 
 static void
@@ -965,8 +964,8 @@ run_smart_proxy_task (void *data)
        Step 1: Independent probe with connection reuse
        ==================================================================== */
 
-    LOG_I ("%p [SMART-PROXY-V2] Starting probe to %s:%d (timeout=%dms)",
-           self, dst_ip, pcb->local_port, probe_timeout);
+    LOG_I ("%p [SMART-PROXY-V2] Starting probe to %s:%d (timeout=%dms)", self,
+           dst_ip, pcb->local_port, probe_timeout);
 
     /* Create probe connection and test */
     probe_outcome = probe_target_connection (self, (struct sockaddr *)&saddr,
@@ -1001,7 +1000,8 @@ run_smart_proxy_task (void *data)
     case PROBE_RESET:
         /* Probe received RST - likely GFW blocking */
         LOG_W ("%p [SMART-PROXY-V2] Probe received RST in %ldms (GFW blocked), "
-               "using SOCKS5", self, probe_outcome.duration_ms);
+               "using SOCKS5",
+               self, probe_outcome.duration_ms);
         gfw_blocked = 1;
         break;
 
@@ -1162,7 +1162,8 @@ wait_for_probe_response (int fd, int timeout_ms)
             return PROBE_SUCCESS;
         } else {
             /* Connection error (likely ECONNRESET) */
-            LOG_D ("[PROBE] recv error: errno=%d (%s)", errno, strerror (errno));
+            LOG_D ("[PROBE] recv error: errno=%d (%s)", errno,
+                   strerror (errno));
             return PROBE_RESET;
         }
     }
@@ -1191,12 +1192,9 @@ wait_for_probe_response (int fd, int timeout_ms)
  * Returns: ProbeOutcome with result code and possibly open fd
  */
 static ProbeOutcome
-probe_target_connection (HevSocks5SessionTCP *self,
-                        struct sockaddr *saddr,
-                        socklen_t saddr_len,
-                        struct pbuf *data_queue,
-                        int timeout_ms,
-                        HevTask *task)
+probe_target_connection (HevSocks5SessionTCP *self, struct sockaddr *saddr,
+                         socklen_t saddr_len, struct pbuf *data_queue,
+                         int timeout_ms, HevTask *task)
 {
     ProbeOutcome outcome = { PROBE_ERROR, -1, 0 };
     int probe_fd = -1;
@@ -1252,8 +1250,8 @@ probe_target_connection (HevSocks5SessionTCP *self,
         /* Check for socket errors */
         int error = 0;
         socklen_t len = sizeof (error);
-        if (getsockopt (probe_fd, SOL_SOCKET, SO_ERROR, &error, &len) < 0
-            || error != 0) {
+        if (getsockopt (probe_fd, SOL_SOCKET, SO_ERROR, &error, &len) < 0 ||
+            error != 0) {
             LOG_W ("%p [PROBE] Connect failed: error=%d", self, error);
             close (probe_fd);
             outcome.result = PROBE_ERROR;
@@ -1287,9 +1285,10 @@ probe_target_connection (HevSocks5SessionTCP *self,
 
     if (result == PROBE_SUCCESS) {
         /* Probe succeeded! Keep connection open for reuse */
-        LOG_I ("%p [PROBE] Probe SUCCESS in %ldms, keeping connection open for reuse",
-               self, outcome.duration_ms);
-        outcome.fd = probe_fd;  /* Transfer ownership to caller */
+        LOG_I (
+            "%p [PROBE] Probe SUCCESS in %ldms, keeping connection open for reuse",
+            self, outcome.duration_ms);
+        outcome.fd = probe_fd; /* Transfer ownership to caller */
     } else {
         /* Probe failed, close connection */
         LOG_W ("%p [PROBE] Probe failed (%d) in %ldms, closing connection",
@@ -1316,12 +1315,9 @@ probe_target_connection (HevSocks5SessionTCP *self,
  * Returns: 0 on success, -1 on error
  */
 static int
-continue_with_direct_connection (HevSocks5SessionTCP *self,
-                                HevSocks5Session *s,
-                                HevTask *task,
-                                int fd,
-                                struct sockaddr *saddr,
-                                socklen_t saddr_len)
+continue_with_direct_connection (HevSocks5SessionTCP *self, HevSocks5Session *s,
+                                 HevTask *task, int fd, struct sockaddr *saddr,
+                                 socklen_t saddr_len)
 {
     HevTask *task_b = NULL;
     HevIdleTimer idle_timer;
