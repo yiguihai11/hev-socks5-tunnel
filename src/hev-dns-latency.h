@@ -47,8 +47,8 @@ typedef struct _DnsLatencyResult
 {
     ip_addr_t ip; /* lwIP ip_addr_t supports IPv4/IPv6 */
     DnsLatencyMethodResult tcp443; /* TCP 443 测试结果 */
-    DnsLatencyMethodResult tcp80;  /* TCP 80 测试结果 */
-    DnsLatencyMethodResult icmp;   /* ICMP 测试结果 */
+    DnsLatencyMethodResult tcp80; /* TCP 80 测试结果 */
+    DnsLatencyMethodResult icmp; /* ICMP 测试结果 */
 } DnsLatencyResult;
 
 /**
@@ -144,8 +144,8 @@ int hev_dns_latency_test_ip_all (const ip_addr_t *ip,
  * Returns: 0 on success (at least one IP succeeded), -1 on failure
  */
 int hev_dns_latency_test_concurrent (const ip_addr_t *ips, int ip_count,
-                                      DnsLatencyResult *results_out,
-                                      int timeout_ms);
+                                     DnsLatencyResult *results_out,
+                                     int timeout_ms);
 
 /**
  * hev_dns_latency_optimize_response_async:

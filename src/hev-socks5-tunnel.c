@@ -409,7 +409,8 @@ event_task_entry (void *data)
                wait_count + 1, max_waits, session_count);
         hev_task_sleep (100); /* 等待100ms */
         wait_count++;
-        LOG_D ("socks5 tunnel: woke from sleep, session_count=%d", session_count);
+        LOG_D ("socks5 tunnel: woke from sleep, session_count=%d",
+               session_count);
     }
 
     if (session_count > 0) {
