@@ -914,6 +914,8 @@ static int continue_with_direct_connection (HevSocks5SessionTCP *self,
                                             HevSocks5Session *s, HevTask *task,
                                             int fd, struct sockaddr *saddr,
                                             socklen_t saddr_len);
+static int create_direct_connection_fd (struct sockaddr *saddr,
+                                        socklen_t saddr_len);
 
 static void
 run_smart_proxy_task (void *data)
@@ -981,18 +983,29 @@ run_smart_proxy_task (void *data)
 
     switch (probe_outcome.result) {
     case PROBE_SUCCESS:
-        /* Probe succeeded - reuse the probe connection! */
-        LOG_I ("%p [SMART-PROXY-V2] Probe SUCCESS in %ldms, reusing connection",
+        /* Probe succeeded! Direct connection is available.
+         *
+         * We don't reuse the probe connection (it's already closed).
+         * Instead, we establish a fresh direct connection for data transfer.
+         * This ensures proper TLS handshake completion.
+         */
+        LOG_I ("%p [SMART-PROXY-V2] Probe SUCCESS in %ldms, establishing new direct connection",
                self, probe_outcome.duration_ms);
 
-        direct_fd = probe_outcome.fd;
-        probe_outcome.fd = -1; /* Transfer ownership */
+        /* Establish new direct connection (probe_fd is already closed) */
+        direct_fd = create_direct_connection_fd ((struct sockaddr *)&saddr, saddr_len);
+        if (direct_fd < 0) {
+            LOG_W ("%p [SMART-PROXY-V2] Failed to create direct connection, using SOCKS5",
+                   self);
+            gfw_blocked = 1;
+            break;
+        }
 
-        /* Continue with direct connection using the probe fd */
+        /* Continue with the new direct connection */
         if (continue_with_direct_connection (self, s, task, direct_fd,
                                              (struct sockaddr *)&saddr,
                                              saddr_len) < 0) {
-            LOG_W ("%p [SMART-PROXY-V2] Direct connection failed", self);
+            LOG_W ("%p [SMART-PROXY-V2] Direct connection failed, using SOCKS5", self);
             gfw_blocked = 1;
         }
         break;
@@ -1191,6 +1204,82 @@ wait_for_probe_response (int fd, int timeout_ms)
  *
  * Returns: ProbeOutcome with result code and possibly open fd
  */
+
+/**
+ * create_direct_connection_fd - Create and connect a socket for direct connection
+ * @saddr: target address
+ * @saddr_len: address length
+ *
+ * This function creates a TCP socket and connects to the target.
+ * Used after successful probe to establish a fresh connection.
+ *
+ * Returns: socket fd on success, -1 on error
+ */
+static int
+create_direct_connection_fd (struct sockaddr *saddr, socklen_t saddr_len)
+{
+    int fd = -1;
+    int ret;
+    int connect_timeout_ms = 10000; /* 10 second timeout for direct connection */
+
+    /* Create socket */
+    fd = socket (saddr->sa_family, SOCK_STREAM, 0);
+    if (fd < 0) {
+        LOG_E ("Failed to create direct connection socket: errno=%d", errno);
+        return -1;
+    }
+
+    /* Enable IPv4-mapped IPv6 for dual-stack support */
+    if (saddr->sa_family == AF_INET6) {
+        int zero = 0;
+        setsockopt (fd, IPPROTO_IPV6, IPV6_V6ONLY, &zero, sizeof (zero));
+    }
+
+    /* Set non-blocking */
+    int flags = fcntl (fd, F_GETFL, 0);
+    fcntl (fd, F_SETFL, flags | O_NONBLOCK);
+
+    /* Connect to target */
+    ret = connect (fd, saddr, saddr_len);
+
+    if (ret < 0 && errno != EINPROGRESS) {
+        LOG_W ("Direct connect failed immediately: errno=%d", errno);
+        close (fd);
+        return -1;
+    }
+
+    /* Wait for connection to complete */
+    if (errno == EINPROGRESS) {
+        struct pollfd pfd;
+        pfd.fd = fd;
+        pfd.events = POLLOUT;
+
+        ret = poll (&pfd, 1, connect_timeout_ms);
+        if (ret < 0) {
+            LOG_E ("Poll error during direct connect");
+            close (fd);
+            return -1;
+        } else if (ret == 0) {
+            LOG_W ("Direct connect timeout");
+            close (fd);
+            return -1;
+        }
+
+        /* Check for socket errors */
+        int error = 0;
+        socklen_t len = sizeof (error);
+        if (getsockopt (fd, SOL_SOCKET, SO_ERROR, &error, &len) < 0 ||
+            error != 0) {
+            LOG_W ("Direct connect failed: error=%d", error);
+            close (fd);
+            return -1;
+        }
+    }
+
+    LOG_D ("Direct connection established (fd=%d)", fd);
+    return fd;
+}
+
 static ProbeOutcome
 probe_target_connection (HevSocks5SessionTCP *self, struct sockaddr *saddr,
                          socklen_t saddr_len, struct pbuf *data_queue,
@@ -1290,11 +1379,22 @@ probe_target_connection (HevSocks5SessionTCP *self, struct sockaddr *saddr,
     outcome.result = result;
 
     if (result == PROBE_SUCCESS) {
-        /* Probe succeeded! Keep connection open for reuse */
+        /* Probe succeeded! Close the connection.
+         *
+         * We cannot reuse the probe connection because:
+         * 1. The probe connection already completed TLS handshake with server
+         * 2. The client still needs to complete its side of TLS handshake
+         * 3. Reusing the connection causes TLS state mismatch
+         * 4. Server receives duplicate handshake messages and closes connection
+         *
+         * By closing the probe connection, the client will establish a fresh
+         * connection with a complete, consistent TLS handshake.
+         */
         LOG_I (
-            "%p [PROBE] Probe SUCCESS in %ldms, keeping connection open for reuse",
+            "%p [PROBE] Probe SUCCESS in %ldms, closing probe connection",
             self, outcome.duration_ms);
-        outcome.fd = probe_fd; /* Transfer ownership to caller */
+        close (probe_fd);
+        outcome.fd = -1;
     } else {
         /* Probe failed, close connection */
         LOG_W ("%p [PROBE] Probe failed (%d) in %ldms, closing connection",
