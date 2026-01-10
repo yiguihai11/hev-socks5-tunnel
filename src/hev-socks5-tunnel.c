@@ -20,6 +20,10 @@
 #include <lwip/ip4_frag.h>
 #include <lwip/ip6_frag.h>
 #include <lwip/priv/tcp_priv.h>
+#include <lwip/prot/ip4.h>
+#include <lwip/prot/ip6.h>
+#include <lwip/prot/icmp.h>
+#include <lwip/prot/icmp6.h>
 
 #include <hev-task.h>
 #include <hev-task-io.h>
@@ -432,6 +436,187 @@ event_task_entry (void *data)
     LOG_D ("socks5 tunnel: event task cleanup complete");
 }
 
+/* Calculate Internet checksum (RFC 1071) */
+static uint16_t
+inet_checksum (const void *data, size_t len)
+{
+    const uint16_t *buf = (const uint16_t *)data;
+    uint32_t sum = 0;
+
+    while (len > 1) {
+        sum += *buf++;
+        len -= 2;
+    }
+
+    if (len == 1)
+        sum += *(const uint8_t *)buf;
+
+    sum = (sum >> 16) + (sum & 0xFFFF);
+    sum += (sum >> 16);
+
+    return (uint16_t)(~sum);
+}
+
+/* Handle ICMPv4 Echo Request and generate Echo Reply locally */
+static int
+handle_icmp_v4 (struct pbuf *p)
+{
+    const struct ip_hdr *iph;
+    struct ip_hdr *iph_copy;
+    struct icmp_echo_hdr *icmph;
+    struct pbuf *reply;
+    uint16_t iphdr_len;
+    ip4_addr_t src, dst;
+    ssize_t s;
+
+    if (p->tot_len < sizeof (struct ip_hdr) + sizeof (struct icmp_echo_hdr))
+        return 0; /* Too short */
+
+    iph = (const struct ip_hdr *)p->payload;
+    iphdr_len = IPH_HL (iph) * 4;
+
+    if (p->tot_len < iphdr_len + sizeof (struct icmp_echo_hdr))
+        return 0; /* Too short */
+
+    /* Check if it's ICMP protocol */
+    if (IPH_PROTO (iph) != IP_PROTO_ICMP)
+        return 0;
+
+    icmph = (struct icmp_echo_hdr *)((uint8_t *)p->payload + iphdr_len);
+
+    /* Check if it's Echo Request (type 8) */
+    if (icmph->type != ICMP_ECHO || icmph->code != 0)
+        return 0;
+
+    LOG_D ("socks5 tunnel: Received ICMPv4 Echo Request, generating local reply");
+
+    /* Allocate reply pbuf */
+    reply = pbuf_alloc (PBUF_RAW, p->len, PBUF_RAM);
+    if (!reply) {
+        LOG_W ("socks5 tunnel: Failed to allocate ICMP reply buffer");
+        return 0;
+    }
+
+    /* Copy entire packet to reply */
+    memcpy (reply->payload, p->payload, p->len);
+
+    iph_copy = (struct ip_hdr *)reply->payload;
+    icmph = (struct icmp_echo_hdr *)((uint8_t *)reply->payload + iphdr_len);
+
+    /* Swap source and destination IP addresses */
+    ip4_addr_copy (src, iph_copy->src);
+    ip4_addr_copy (dst, iph_copy->dest);
+    ip4_addr_copy (iph_copy->src, dst);
+    ip4_addr_copy (iph_copy->dest, src);
+
+    /* Change Echo Request to Echo Reply */
+    icmph->type = ICMP_ER;
+
+    /* Recalculate ICMP checksum */
+    icmph->chksum = 0;
+    icmph->chksum = inet_checksum (icmph, p->tot_len - iphdr_len);
+
+    /* Write reply back to TUN device */
+    s = hev_tunnel_write (tun_fd, reply);
+    pbuf_free (reply);
+
+    if (s > 0) {
+        LOG_D ("socks5 tunnel: Sent ICMPv4 Echo Reply locally (%zd bytes)", s);
+        return 1; /* Handled locally, don't forward to lwIP */
+    }
+
+    LOG_W ("socks5 tunnel: Failed to send ICMPv4 Echo Reply");
+    return 0;
+}
+
+/* Handle ICMPv6 Echo Request and generate Echo Reply locally */
+static int
+handle_icmp_v6 (struct pbuf *p)
+{
+    const struct ip6_hdr *ip6h;
+    struct ip6_hdr *ip6h_copy;
+    struct icmp6_echo_hdr *icmp6h;
+    struct pbuf *reply;
+    uint8_t src[16];
+    ssize_t s;
+
+    if (p->tot_len < sizeof (struct ip6_hdr) + sizeof (struct icmp6_echo_hdr))
+        return 0; /* Too short */
+
+    ip6h = (const struct ip6_hdr *)p->payload;
+
+    /* Check if it's ICMPv6 */
+    if (IP6H_NEXTH (ip6h) != IP6_NEXTH_ICMP6)
+        return 0;
+
+    icmp6h = (struct icmp6_echo_hdr *)((uint8_t *)p->payload + IP6_HLEN);
+
+    /* Check if it's Echo Request (type 128) */
+    if (icmp6h->type != ICMP6_TYPE_EREQ)
+        return 0;
+
+    LOG_D ("socks5 tunnel: Received ICMPv6 Echo Request, generating local reply");
+
+    /* Allocate reply pbuf */
+    reply = pbuf_alloc (PBUF_RAW, p->len, PBUF_RAM);
+    if (!reply) {
+        LOG_W ("socks5 tunnel: Failed to allocate ICMPv6 reply buffer");
+        return 0;
+    }
+
+    /* Copy entire packet to reply */
+    memcpy (reply->payload, p->payload, p->len);
+
+    ip6h_copy = (struct ip6_hdr *)reply->payload;
+    icmp6h = (struct icmp6_echo_hdr *)((uint8_t *)reply->payload + IP6_HLEN);
+
+    /* Swap source and destination IP addresses (direct byte copy, like badvpn) */
+    memcpy (src, ip6h_copy->src.addr, 16);
+    memcpy (ip6h_copy->src.addr, ip6h_copy->dest.addr, 16);
+    memcpy (ip6h_copy->dest.addr, src, 16);
+
+    /* Change Echo Request to Echo Reply */
+    icmp6h->type = ICMP6_TYPE_EREP;
+
+    /* Recalculate ICMPv6 checksum */
+    icmp6h->chksum = 0;
+    icmp6h->chksum = inet_checksum ((uint8_t *)reply->payload + IP6_HLEN,
+                                    p->tot_len - IP6_HLEN);
+
+    /* Write reply back to TUN device */
+    s = hev_tunnel_write (tun_fd, reply);
+    pbuf_free (reply);
+
+    if (s > 0) {
+        LOG_D ("socks5 tunnel: Sent ICMPv6 Echo Reply locally (%zd bytes)", s);
+        return 1; /* Handled locally, don't forward to lwIP */
+    }
+
+    LOG_W ("socks5 tunnel: Failed to send ICMPv6 Echo Reply");
+    return 0;
+}
+
+/* Check if packet is IP and handle ICMP locally if applicable */
+static int
+handle_icmp_packet (struct pbuf *p)
+{
+    uint8_t version;
+
+    if (p->len < 1)
+        return 0;
+
+    /* Get IP version from first nibble */
+    version = ((uint8_t *)p->payload)[0] >> 4;
+
+    if (version == 4) {
+        return handle_icmp_v4 (p);
+    } else if (version == 6) {
+        return handle_icmp_v6 (p);
+    }
+
+    return 0;
+}
+
 static void
 lwip_io_task_entry (void *data)
 {
@@ -450,6 +635,13 @@ lwip_io_task_entry (void *data)
 
         stat_tx_packets++;
         stat_tx_bytes += buf->tot_len;
+
+        /* Check for ICMP Echo Request and handle locally */
+        if (handle_icmp_packet (buf)) {
+            /* ICMP was handled locally, don't forward to lwIP */
+            pbuf_free (buf);
+            continue;
+        }
 
         hev_task_mutex_lock (&mutex);
         if (netif.input (buf, &netif) != ERR_OK)
