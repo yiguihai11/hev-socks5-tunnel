@@ -949,7 +949,7 @@ run_smart_proxy_task (void *data)
     get_session_addresses (pcb, src_ip, dst_ip);
 
     /* Save target IP and port for fallback (pcb may be freed later) */
-    dst_ip_copy = pcb->local_ip;
+    ip_addr_copy (pcb->local_ip, dst_ip_copy);
     dst_port_copy = pcb->local_port;
 
     LOG_D ("%p [SMART-PROXY-V2] Task run %s:%d -> %s:%d", self, src_ip,
