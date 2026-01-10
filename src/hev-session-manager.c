@@ -989,14 +989,17 @@ run_smart_proxy_task (void *data)
          * Instead, we establish a fresh direct connection for data transfer.
          * This ensures proper TLS handshake completion.
          */
-        LOG_I ("%p [SMART-PROXY-V2] Probe SUCCESS in %ldms, establishing new direct connection",
-               self, probe_outcome.duration_ms);
+        LOG_I (
+            "%p [SMART-PROXY-V2] Probe SUCCESS in %ldms, establishing new direct connection",
+            self, probe_outcome.duration_ms);
 
         /* Establish new direct connection (probe_fd is already closed) */
-        direct_fd = create_direct_connection_fd ((struct sockaddr *)&saddr, saddr_len);
+        direct_fd =
+            create_direct_connection_fd ((struct sockaddr *)&saddr, saddr_len);
         if (direct_fd < 0) {
-            LOG_W ("%p [SMART-PROXY-V2] Failed to create direct connection, using SOCKS5",
-                   self);
+            LOG_W (
+                "%p [SMART-PROXY-V2] Failed to create direct connection, using SOCKS5",
+                self);
             gfw_blocked = 1;
             break;
         }
@@ -1005,7 +1008,8 @@ run_smart_proxy_task (void *data)
         if (continue_with_direct_connection (self, s, task, direct_fd,
                                              (struct sockaddr *)&saddr,
                                              saddr_len) < 0) {
-            LOG_W ("%p [SMART-PROXY-V2] Direct connection failed, using SOCKS5", self);
+            LOG_W ("%p [SMART-PROXY-V2] Direct connection failed, using SOCKS5",
+                   self);
             gfw_blocked = 1;
         }
         break;
@@ -1220,7 +1224,8 @@ create_direct_connection_fd (struct sockaddr *saddr, socklen_t saddr_len)
 {
     int fd = -1;
     int ret;
-    int connect_timeout_ms = 10000; /* 10 second timeout for direct connection */
+    int connect_timeout_ms =
+        10000; /* 10 second timeout for direct connection */
 
     /* Create socket */
     fd = socket (saddr->sa_family, SOCK_STREAM, 0);
@@ -1390,9 +1395,8 @@ probe_target_connection (HevSocks5SessionTCP *self, struct sockaddr *saddr,
          * By closing the probe connection, the client will establish a fresh
          * connection with a complete, consistent TLS handshake.
          */
-        LOG_I (
-            "%p [PROBE] Probe SUCCESS in %ldms, closing probe connection",
-            self, outcome.duration_ms);
+        LOG_I ("%p [PROBE] Probe SUCCESS in %ldms, closing probe connection",
+               self, outcome.duration_ms);
         close (probe_fd);
         outcome.fd = -1;
     } else {
