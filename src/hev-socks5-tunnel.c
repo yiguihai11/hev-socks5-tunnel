@@ -488,7 +488,8 @@ handle_icmp_v4 (struct pbuf *p)
     if (icmph->type != ICMP_ECHO || icmph->code != 0)
         return 0;
 
-    LOG_D ("socks5 tunnel: Received ICMPv4 Echo Request, generating local reply");
+    LOG_D (
+        "socks5 tunnel: Received ICMPv4 Echo Request, generating local reply");
 
     /* Allocate reply pbuf */
     reply = pbuf_alloc (PBUF_RAW, p->len, PBUF_RAM);
@@ -555,7 +556,8 @@ handle_icmp_v6 (struct pbuf *p)
     if (icmp6h->type != ICMP6_TYPE_EREQ)
         return 0;
 
-    LOG_D ("socks5 tunnel: Received ICMPv6 Echo Request, generating local reply");
+    LOG_D (
+        "socks5 tunnel: Received ICMPv6 Echo Request, generating local reply");
 
     /* Allocate reply pbuf */
     reply = pbuf_alloc (PBUF_RAW, p->len, PBUF_RAM);
