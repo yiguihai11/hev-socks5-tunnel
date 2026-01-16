@@ -1188,8 +1188,8 @@ hev_dns_query_via_socks5 (const uint8_t *query, size_t query_len,
     }
 
     /* 获取UDP类型（根据SOCKS5配置的udp-relay字段） */
-    /* udp_relay: 0=tcp(UDP_IN_TCP=2), 1=udp(UDP_IN_UDP=1) */
-    udp_type = (srv->udp_relay == 1) ? 1 : 2;
+    /* udp_relay: 0=tcp(UDP_IN_TCP=2), 1=udp(UDP_IN_UDP=3) */
+    udp_type = (srv->udp_relay == 1) ? 3 : 2;
 
     /* 获取配置的DNS服务器列表 */
     const char **dns_servers = NULL;
