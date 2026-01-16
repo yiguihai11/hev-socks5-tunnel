@@ -483,7 +483,8 @@ hev_dns_latency_extract_ips (const uint8_t *data, size_t len,
         int offset = 0;
         for (int i = 0; i < count && offset < (int)sizeof (ip_list) - 20; i++) {
             offset += snprintf (ip_list + offset, sizeof (ip_list) - offset,
-                               "%s%s", i > 0 ? ", " : "", ipaddr_ntoa (&ips_out[i]));
+                                "%s%s", i > 0 ? ", " : "",
+                                ipaddr_ntoa (&ips_out[i]));
         }
         LOG_I ("dns-latency: IP list: [%s]", ip_list);
     }
