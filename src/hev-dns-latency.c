@@ -477,6 +477,17 @@ hev_dns_latency_extract_ips (const uint8_t *data, size_t len,
     LOG_I ("dns-latency: Extracted %d IPs (%d IPv4, %d IPv6)", count,
            ipv4_count, ipv6_count);
 
+    /* 显示所有提取到的 IP 地址列表（INFO 级别） */
+    if (count > 0) {
+        char ip_list[512] = { 0 };
+        int offset = 0;
+        for (int i = 0; i < count && offset < (int)sizeof (ip_list) - 20; i++) {
+            offset += snprintf (ip_list + offset, sizeof (ip_list) - offset,
+                               "%s%s", i > 0 ? ", " : "", ipaddr_ntoa (&ips_out[i]));
+        }
+        LOG_I ("dns-latency: IP list: [%s]", ip_list);
+    }
+
     return count;
 }
 
@@ -1088,8 +1099,10 @@ hev_dns_latency_test_concurrent (const ip_addr_t *ips, int ip_count,
             (ctx.winner_method == DNS_LATENCY_METHOD_TCP443) ? "TCP443" :
             (ctx.winner_method == DNS_LATENCY_METHOD_TCP80)  ? "TCP80" :
                                                                "ICMP";
-        LOG_I ("dns-latency: Race winner: IP %d (%s), total time=%lldms",
-               ctx.winner_index, method_name, (long long)total_elapsed_ms);
+        const ip_addr_t *winner_ip = &ctx.ips[ctx.winner_index];
+        LOG_I ("dns-latency: Race winner: %s (IP %d, %s), total time=%lldms",
+               ipaddr_ntoa (winner_ip), ctx.winner_index, method_name,
+               (long long)total_elapsed_ms);
         return 0;
     }
 
