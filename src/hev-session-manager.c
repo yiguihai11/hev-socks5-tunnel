@@ -939,6 +939,10 @@ run_smart_proxy_task (void *data)
     ProbeOutcome probe_outcome;
     int direct_fd = -1;
     int gfw_blocked = 0;
+    time_t task_start_time, task_end_time;
+    time_t socks5_start_time = 0, socks5_end_time;
+
+    task_start_time = get_current_time_ms ();
 
     /*
      * Note: ACL checking and hostname detection are already done in
@@ -949,8 +953,12 @@ run_smart_proxy_task (void *data)
     get_session_addresses (pcb, src_ip, dst_ip);
 
     /* Save target IP and port for fallback (pcb may be freed later) */
+    LOG_D ("%p [SMART-PROXY-V2] Before copy: pcb->local_ip=%s", self,
+           ipaddr_ntoa (&pcb->local_ip));
     ip_addr_copy (pcb->local_ip, dst_ip_copy);
     dst_port_copy = pcb->local_port;
+    LOG_D ("%p [SMART-PROXY-V2] After copy: dst_ip_copy=%s", self,
+           ipaddr_ntoa (&dst_ip_copy));
 
     LOG_D ("%p [SMART-PROXY-V2] Task run %s:%d -> %s:%d", self, src_ip,
            pcb->remote_port, dst_ip, pcb->local_port);
@@ -974,6 +982,8 @@ run_smart_proxy_task (void *data)
                                              saddr_len, self->queue,
                                              probe_timeout, task);
 
+    LOG_D ("%p [SMART-PROXY-V2] After probe: dst_ip_copy=%s, pcb->local_ip=%s",
+           self, ipaddr_ntoa (&dst_ip_copy), ipaddr_ntoa (&pcb->local_ip));
     LOG_I ("%p [SMART-PROXY-V2] Probe result: %d (duration=%ldms)", self,
            probe_outcome.result, probe_outcome.duration_ms);
 
@@ -1049,9 +1059,12 @@ run_smart_proxy_task (void *data)
                self, src_ip, pcb ? pcb->remote_port : 0, fallback_dst_ip,
                dst_port_copy);
 
+        socks5_start_time = get_current_time_ms ();
         hev_socks5_session_run (s);
+        socks5_end_time = get_current_time_ms ();
 
-        LOG_I ("%p [SMART-PROXY-V2] SOCKS5 fallback ended", self);
+        LOG_I ("%p [SMART-PROXY-V2] SOCKS5 fallback ended (socks5_time=%ldms)",
+               self, socks5_end_time - socks5_start_time);
 
         /* Add to blacklist if SOCKS5 succeeded */
         if (self->socks5_success && self->detected_hostname[0]) {
@@ -1072,6 +1085,10 @@ run_smart_proxy_task (void *data)
     if (direct_fd >= 0) {
         close (direct_fd);
     }
+
+    task_end_time = get_current_time_ms ();
+    LOG_I ("%p [SMART-PROXY-V2] Task ended (total_time=%ldms, path=%s)", self,
+           task_end_time - task_start_time, gfw_blocked ? "SOCKS5" : "DIRECT");
 
     cleanup_session (s, node);
 }
@@ -1435,7 +1452,10 @@ continue_with_direct_connection (HevSocks5SessionTCP *self, HevSocks5Session *s,
     int stack_size;
     int tcp_buffer_size;
     int res = 0;
+    time_t start_time, end_time;
+    time_t total_time_ms;
 
+    start_time = get_current_time_ms ();
     LOG_I ("%p [DIRECT] Setting up splice with probe connection fd=%d", self,
            fd);
 
@@ -1504,7 +1524,9 @@ continue_with_direct_connection (HevSocks5SessionTCP *self, HevSocks5Session *s,
     }
     hev_task_unref (task_b);
 
-    LOG_I ("%p [DIRECT] Splice ended", self);
+    end_time = get_current_time_ms ();
+    total_time_ms = end_time - start_time;
+    LOG_I ("%p [DIRECT] Splice ended (total_time=%ldms)", self, total_time_ms);
 
     return 0;
 }

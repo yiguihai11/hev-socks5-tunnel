@@ -312,7 +312,7 @@ hev_socks5_session_udp_set_upstream_addr (HevSocks5Client *base,
 
     /* 始终使用UDP块的地址配置，不管udp_relay模式如何 */
     if (srv->addr[0]) {
-        uint16_t port = hev_socks5_addr_get_port (addr);
+        uint16_t port = srv->port;
         LOG_D (
             "%p socks5 session udp: using UDP server address %s:%d (mode=%s)",
             base, srv->addr, port, srv->udp_relay ? "UDP" : "TCP");
@@ -515,7 +515,9 @@ hev_socks5_session_udp_run (HevSocks5SessionUDP *self)
     int read_write_timeout;
     int connect_timeout;
     int res;
+    time_t start_time, connect_time, handshake_time, splice_time;
 
+    start_time = get_current_time_ms ();
     LOG_D ("%p socks5 session udp run", self);
 
     /* 使用UDP块的配置而不是TCP块 */
@@ -527,10 +529,14 @@ hev_socks5_session_udp_run (HevSocks5SessionUDP *self)
 
     res = hev_socks5_client_connect (HEV_SOCKS5_CLIENT (self), srv->addr,
                                      srv->port);
+    connect_time = get_current_time_ms ();
     if (res < 0) {
-        LOG_E ("%p socks5 session udp connect", self);
+        LOG_E ("%p socks5 session udp connect (connect_time=%ldms)", self,
+               connect_time - start_time);
         return;
     }
+    LOG_I ("%p socks5 session udp connected (connect_time=%ldms)", self,
+           connect_time - start_time);
 
     hev_socks5_set_timeout (HEV_SOCKS5 (self), read_write_timeout);
 
@@ -542,11 +548,20 @@ hev_socks5_session_udp_run (HevSocks5SessionUDP *self)
     }
 
     res = hev_socks5_client_handshake (HEV_SOCKS5_CLIENT (self), srv->pipeline);
+    handshake_time = get_current_time_ms ();
     if (res < 0) {
-        LOG_E ("%p socks5 session udp handshake", self);
+        LOG_E ("%p socks5 session udp handshake (handshake_time=%ldms)", self,
+               handshake_time - connect_time);
         return;
     }
+    LOG_I ("%p socks5 session udp handshake done (handshake_time=%ldms)", self,
+           handshake_time - connect_time);
 
     /* 运行UDP splicer */
     hev_socks5_session_udp_splice (HEV_SOCKS5_SESSION (self));
+
+    splice_time = get_current_time_ms ();
+    LOG_I ("%p socks5 session udp ended (total_time=%ldms, connect=%ldms, handshake=%ldms, data=%ldms)",
+           self, splice_time - start_time, connect_time - start_time,
+           handshake_time - connect_time, splice_time - handshake_time);
 }
