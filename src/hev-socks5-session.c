@@ -67,9 +67,10 @@ hev_socks5_session_run (HevSocks5Session *self)
     iface->splicer (self);
 
     splice_time = get_current_time_ms ();
-    LOG_I ("%p socks5 session ended (total_time=%ldms, connect=%ldms, handshake=%ldms, data=%ldms)",
-           self, splice_time - start_time, connect_time - start_time,
-           handshake_time - connect_time, splice_time - handshake_time);
+    LOG_I (
+        "%p socks5 session ended (total_time=%ldms, connect=%ldms, handshake=%ldms, data=%ldms)",
+        self, splice_time - start_time, connect_time - start_time,
+        handshake_time - connect_time, splice_time - handshake_time);
 }
 
 void
