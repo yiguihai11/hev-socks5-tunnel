@@ -1,0 +1,1242 @@
+========== tproxy.conf ==========
+tunnel:
+  mtu: 1500
+socks5:
+  tcp:
+    port: 1080
+    address: '64.69.34.166'
+    username: 'yiguihai'
+    password: 'ygh15177542493'
+  udp:
+    address: '64.69.34.166'
+    port: 1080
+    udp-relay: 'tcp'
+    username: 'yiguihai'
+    password: 'ygh15177542493'
+dns-split-tunnel:
+  enabled: true
+  foreign-dns:
+    - "1.1.1.1"
+    - "8.8.8.8"
+    - "2606:4700:4700::1111"
+    - "2001:4860:4860::8888"
+dns-forwarder:
+  enabled: false
+mapdns:
+  address: 198.18.0.2
+  address6: 'fd00::1'
+  port: 53
+  network: 240.0.0.0
+  netmask: 240.0.0.0
+  network6: 'fd00::'
+  prefixlen: 96
+  cache-size: 10000
+dns-latency-optimize:
+  enabled: true
+  timeout-ms: 250
+smart-proxy:
+  enabled: true
+  timeout-ms: 500
+  blocked-ip-expiry-minutes: 360
+  probe-ports:
+    - 80
+    - 443
+chnroutes:
+  enabled: true
+  file-path: "/data/user/0/hev.sockstun/cache/chnroutes.txt"
+acl:
+  enabled: true
+  file-path: "/data/user/0/hev.sockstun/cache/acl.txt"
+misc:
+  task-stack-size: 81920
+  tcp-buffer-size: 65536
+  udp-recv-buffer-size: 524288
+  udp-copy-buffer-nums: 20
+  connect-timeout: 5000
+  tcp-read-write-timeout: 5000
+  udp-read-write-timeout: 5000
+  log-file: '/data/user/0/hev.sockstun/cache/tunnel.log'
+  log-level: debug
+
+========== End of Config ==========
+
+========== tunnel.log ==========
+028e10 socks5 session tcp construct: pcb->local_ip=34.36.57.103, pcb->local_port=443
+[2026-01-16 10:22:01] [D] addr_from_lwip: IP 34.36.57.103:47873 (no hostname mapping)
+[2026-01-16 10:22:01] [D] 0xb400007630028e10 socks5 construct
+[2026-01-16 10:22:01] [D] 0xb400007630028e10 socks5 client construct
+[2026-01-16 10:22:01] [D] 0xb400007630028e10 socks5 client tcp construct
+[2026-01-16 10:22:01] [I] 0xb400007630028e10 socks5 client tcp -> [34.36.57.103]:443
+[2026-01-16 10:22:01] [D] 0xb400007630028e10 socks5 session tcp construct for 198.18.0.1:54784
+[2026-01-16 10:22:01] [D] 0xb400007630028e10 socks5 session tcp new
+[2026-01-16 10:22:01] [I] 0xb400007630028e10 [smart-proxy] started 198.18.0.1:54784 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb400007630028e10 socks5 session tcp set task 0xb400007600029f20
+[2026-01-16 10:22:01] [D] 0xb40000763002a9d0 socks5 session tcp destruct
+[2026-01-16 10:22:01] [D] 0xb40000763002a9d0 socks5 client tcp destruct
+[2026-01-16 10:22:01] [D] 0xb40000763002a9d0 socks5 client destruct
+[2026-01-16 10:22:01] [D] 0xb40000763002a9d0 socks5 destruct
+[2026-01-16 10:22:01] [I] 0xb400007630027de0 [DIRECT] Idle timeout
+[2026-01-16 10:22:01] [D] 0x758833bce8 filter: Incomplete TLS record
+[2026-01-16 10:22:01] [D] 0xb40000763002ac20 [DOMAIN-FIRST] Foreign IP -> SOCKS5
+[2026-01-16 10:22:01] [D] 0xb40000763002ac20 [DOMAIN-FIRST] Preserving 1036 bytes of queued data for next session
+[2026-01-16 10:22:01] [I] 0xb40000763002ac20 [DOMAIN-FIRST] Route: Smart Proxy (probe mode)
+[2026-01-16 10:22:01] [D] 0xb40000763002a9d0 socks5 session tcp construct: pcb->local_ip=34.36.57.103, pcb->local_port=443
+[2026-01-16 10:22:01] [D] addr_from_lwip: IP 34.36.57.103:47873 (no hostname mapping)
+[2026-01-16 10:22:01] [D] 0xb40000763002a9d0 socks5 construct
+[2026-01-16 10:22:01] [D] 0xb40000763002a9d0 socks5 client construct
+[2026-01-16 10:22:01] [D] 0xb40000763002a9d0 socks5 client tcp construct
+[2026-01-16 10:22:01] [I] 0xb40000763002a9d0 socks5 client tcp -> [34.36.57.103]:443
+[2026-01-16 10:22:01] [D] 0xb40000763002a9d0 socks5 session tcp construct for 198.18.0.1:54792
+[2026-01-16 10:22:01] [D] 0xb40000763002a9d0 socks5 session tcp new
+[2026-01-16 10:22:01] [I] 0xb40000763002a9d0 [smart-proxy] started 198.18.0.1:54792 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb40000763002a9d0 socks5 session tcp set task 0xb400007600025ca0
+[2026-01-16 10:22:01] [D] 0xb40000763002ac20 socks5 session tcp destruct
+[2026-01-16 10:22:01] [D] 0xb40000763002ac20 socks5 client tcp destruct
+[2026-01-16 10:22:01] [D] 0xb40000763002ac20 socks5 client destruct
+[2026-01-16 10:22:01] [D] 0xb40000763002ac20 socks5 destruct
+[2026-01-16 10:22:01] [D] 0x758833bbe8 filter: Incomplete TLS record
+[2026-01-16 10:22:01] [D] 0xb400007630028bc0 [DOMAIN-FIRST] Foreign IP -> SOCKS5
+[2026-01-16 10:22:01] [D] 0xb400007630028bc0 [DOMAIN-FIRST] Preserving 1036 bytes of queued data for next session
+[2026-01-16 10:22:01] [I] 0xb400007630028bc0 [DOMAIN-FIRST] Route: Smart Proxy (probe mode)
+[2026-01-16 10:22:01] [D] 0xb40000763002ac20 socks5 session tcp construct: pcb->local_ip=34.36.57.103, pcb->local_port=443
+[2026-01-16 10:22:01] [D] addr_from_lwip: IP 34.36.57.103:47873 (no hostname mapping)
+[2026-01-16 10:22:01] [D] 0xb40000763002ac20 socks5 construct
+[2026-01-16 10:22:01] [D] 0xb40000763002ac20 socks5 client construct
+[2026-01-16 10:22:01] [D] 0xb40000763002ac20 socks5 client tcp construct
+[2026-01-16 10:22:01] [I] 0xb40000763002ac20 socks5 client tcp -> [34.36.57.103]:443
+[2026-01-16 10:22:01] [D] 0xb40000763002ac20 socks5 session tcp construct for 198.18.0.1:54800
+[2026-01-16 10:22:01] [D] 0xb40000763002ac20 socks5 session tcp new
+[2026-01-16 10:22:01] [I] 0xb40000763002ac20 [smart-proxy] started 198.18.0.1:54800 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb40000763002ac20 socks5 session tcp set task 0xb400007600028860
+[2026-01-16 10:22:01] [D] 0xb400007630028bc0 socks5 session tcp destruct
+[2026-01-16 10:22:01] [D] 0xb400007630028bc0 socks5 client tcp destruct
+[2026-01-16 10:22:01] [D] 0xb400007630028bc0 socks5 client destruct
+[2026-01-16 10:22:01] [D] 0xb400007630028bc0 socks5 destruct
+[2026-01-16 10:22:01] [D] 0x758833bae8 filter: Incomplete TLS record
+[2026-01-16 10:22:01] [D] 0xb40000763002ca30 [DOMAIN-FIRST] Foreign IP -> SOCKS5
+[2026-01-16 10:22:01] [D] 0xb40000763002ca30 [DOMAIN-FIRST] Preserving 1036 bytes of queued data for next session
+[2026-01-16 10:22:01] [I] 0xb40000763002ca30 [DOMAIN-FIRST] Route: Smart Proxy (probe mode)
+[2026-01-16 10:22:01] [D] 0xb400007630028bc0 socks5 session tcp construct: pcb->local_ip=34.36.57.103, pcb->local_port=443
+[2026-01-16 10:22:01] [D] addr_from_lwip: IP 34.36.57.103:47873 (no hostname mapping)
+[2026-01-16 10:22:01] [D] 0xb400007630028bc0 socks5 construct
+[2026-01-16 10:22:01] [D] 0xb400007630028bc0 socks5 client construct
+[2026-01-16 10:22:01] [D] 0xb400007630028bc0 socks5 client tcp construct
+[2026-01-16 10:22:01] [I] 0xb400007630028bc0 socks5 client tcp -> [34.36.57.103]:443
+[2026-01-16 10:22:01] [D] 0xb400007630028bc0 socks5 session tcp construct for 198.18.0.1:54810
+[2026-01-16 10:22:01] [D] 0xb400007630028bc0 socks5 session tcp new
+[2026-01-16 10:22:01] [I] 0xb400007630028bc0 [smart-proxy] started 198.18.0.1:54810 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb400007630028bc0 socks5 session tcp set task 0xb400007600026c60
+[2026-01-16 10:22:01] [D] 0xb40000763002ca30 socks5 session tcp destruct
+[2026-01-16 10:22:01] [D] 0xb40000763002ca30 socks5 client tcp destruct
+[2026-01-16 10:22:01] [D] 0xb40000763002ca30 socks5 client destruct
+[2026-01-16 10:22:01] [D] 0xb40000763002ca30 socks5 destruct
+[2026-01-16 10:22:01] [D] 0x758833b9e8 filter: Incomplete TLS record
+[2026-01-16 10:22:01] [D] 0xb400007630027250 [DOMAIN-FIRST] Foreign IP -> SOCKS5
+[2026-01-16 10:22:01] [D] 0xb400007630027250 [DOMAIN-FIRST] Preserving 1036 bytes of queued data for next session
+[2026-01-16 10:22:01] [I] 0xb400007630027250 [DOMAIN-FIRST] Route: Smart Proxy (probe mode)
+[2026-01-16 10:22:01] [D] 0xb40000763002ca30 socks5 session tcp construct: pcb->local_ip=34.36.57.103, pcb->local_port=443
+[2026-01-16 10:22:01] [D] addr_from_lwip: IP 34.36.57.103:47873 (no hostname mapping)
+[2026-01-16 10:22:01] [D] 0xb40000763002ca30 socks5 construct
+[2026-01-16 10:22:01] [D] 0xb40000763002ca30 socks5 client construct
+[2026-01-16 10:22:01] [D] 0xb40000763002ca30 socks5 client tcp construct
+[2026-01-16 10:22:01] [I] 0xb40000763002ca30 socks5 client tcp -> [34.36.57.103]:443
+[2026-01-16 10:22:01] [D] 0xb40000763002ca30 socks5 session tcp construct for 198.18.0.1:54824
+[2026-01-16 10:22:01] [D] 0xb40000763002ca30 socks5 session tcp new
+[2026-01-16 10:22:01] [I] 0xb40000763002ca30 [smart-proxy] started 198.18.0.1:54824 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb40000763002ca30 socks5 session tcp set task 0xb400007600029d60
+[2026-01-16 10:22:01] [D] 0xb400007630027250 socks5 session tcp destruct
+[2026-01-16 10:22:01] [D] 0xb400007630027250 socks5 client tcp destruct
+[2026-01-16 10:22:01] [D] 0xb400007630027250 socks5 client destruct
+[2026-01-16 10:22:01] [D] 0xb400007630027250 socks5 destruct
+[2026-01-16 10:22:01] [D] 0x758833b8e8 filter: Incomplete TLS record
+[2026-01-16 10:22:01] [D] 0xb400007630029060 [DOMAIN-FIRST] Foreign IP -> SOCKS5
+[2026-01-16 10:22:01] [D] 0xb400007630029060 [DOMAIN-FIRST] Preserving 1036 bytes of queued data for next session
+[2026-01-16 10:22:01] [I] 0xb400007630029060 [DOMAIN-FIRST] Route: Smart Proxy (probe mode)
+[2026-01-16 10:22:01] [D] 0xb400007630027250 socks5 session tcp construct: pcb->local_ip=34.36.57.103, pcb->local_port=443
+[2026-01-16 10:22:01] [D] addr_from_lwip: IP 34.36.57.103:47873 (no hostname mapping)
+[2026-01-16 10:22:01] [D] 0xb400007630027250 socks5 construct
+[2026-01-16 10:22:01] [D] 0xb400007630027250 socks5 client construct
+[2026-01-16 10:22:01] [D] 0xb400007630027250 socks5 client tcp construct
+[2026-01-16 10:22:01] [I] 0xb400007630027250 socks5 client tcp -> [34.36.57.103]:443
+[2026-01-16 10:22:01] [D] 0xb400007630027250 socks5 session tcp construct for 198.18.0.1:54836
+[2026-01-16 10:22:01] [D] 0xb400007630027250 socks5 session tcp new
+[2026-01-16 10:22:01] [I] 0xb400007630027250 [smart-proxy] started 198.18.0.1:54836 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb400007630027250 socks5 session tcp set task 0xb4000076000255a0
+[2026-01-16 10:22:01] [D] 0xb400007630029060 socks5 session tcp destruct
+[2026-01-16 10:22:01] [D] 0xb400007630029060 socks5 client tcp destruct
+[2026-01-16 10:22:01] [D] 0xb400007630029060 socks5 client destruct
+[2026-01-16 10:22:01] [D] 0xb400007630029060 socks5 destruct
+[2026-01-16 10:22:01] [D] 0x758833b7e8 filter: Incomplete TLS record
+[2026-01-16 10:22:01] [D] 0xb400007630031d70 [DOMAIN-FIRST] Foreign IP -> SOCKS5
+[2026-01-16 10:22:01] [D] 0xb400007630031d70 [DOMAIN-FIRST] Preserving 1036 bytes of queued data for next session
+[2026-01-16 10:22:01] [I] 0xb400007630031d70 [DOMAIN-FIRST] Route: Smart Proxy (probe mode)
+[2026-01-16 10:22:01] [D] 0xb400007630029060 socks5 session tcp construct: pcb->local_ip=34.36.57.103, pcb->local_port=443
+[2026-01-16 10:22:01] [D] addr_from_lwip: IP 34.36.57.103:47873 (no hostname mapping)
+[2026-01-16 10:22:01] [D] 0xb400007630029060 socks5 construct
+[2026-01-16 10:22:01] [D] 0xb400007630029060 socks5 client construct
+[2026-01-16 10:22:01] [D] 0xb400007630029060 socks5 client tcp construct
+[2026-01-16 10:22:01] [I] 0xb400007630029060 socks5 client tcp -> [34.36.57.103]:443
+[2026-01-16 10:22:01] [D] 0xb400007630029060 socks5 session tcp construct for 198.18.0.1:54848
+[2026-01-16 10:22:01] [D] 0xb400007630029060 socks5 session tcp new
+[2026-01-16 10:22:01] [I] 0xb400007630029060 [smart-proxy] started 198.18.0.1:54848 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb400007630029060 socks5 session tcp set task 0xb400007600028f60
+[2026-01-16 10:22:01] [D] 0xb400007630031d70 socks5 session tcp destruct
+[2026-01-16 10:22:01] [D] 0xb400007630031d70 socks5 client tcp destruct
+[2026-01-16 10:22:01] [D] 0xb400007630031d70 socks5 client destruct
+[2026-01-16 10:22:01] [D] 0xb400007630031d70 socks5 destruct
+[2026-01-16 10:22:01] [D] 0x758833b6e8 filter: Incomplete TLS record
+[2026-01-16 10:22:01] [D] 0xb400007630034020 [DOMAIN-FIRST] Foreign IP -> SOCKS5
+[2026-01-16 10:22:01] [D] 0xb400007630034020 [DOMAIN-FIRST] Preserving 1036 bytes of queued data for next session
+[2026-01-16 10:22:01] [I] 0xb400007630034020 [DOMAIN-FIRST] Route: Smart Proxy (probe mode)
+[2026-01-16 10:22:01] [D] 0xb400007630031d70 socks5 session tcp construct: pcb->local_ip=34.36.57.103, pcb->local_port=443
+[2026-01-16 10:22:01] [D] addr_from_lwip: IP 34.36.57.103:47873 (no hostname mapping)
+[2026-01-16 10:22:01] [D] 0xb400007630031d70 socks5 construct
+[2026-01-16 10:22:01] [D] 0xb400007630031d70 socks5 client construct
+[2026-01-16 10:22:01] [D] 0xb400007630031d70 socks5 client tcp construct
+[2026-01-16 10:22:01] [I] 0xb400007630031d70 socks5 client tcp -> [34.36.57.103]:443
+[2026-01-16 10:22:01] [D] 0xb400007630031d70 socks5 session tcp construct for 198.18.0.1:54858
+[2026-01-16 10:22:01] [D] 0xb400007630031d70 socks5 session tcp new
+[2026-01-16 10:22:01] [I] 0xb400007630031d70 [smart-proxy] started 198.18.0.1:54858 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb400007630031d70 socks5 session tcp set task 0xb40000760002a7e0
+[2026-01-16 10:22:01] [D] 0xb400007630034020 socks5 session tcp destruct
+[2026-01-16 10:22:01] [D] 0xb400007630034020 socks5 client tcp destruct
+[2026-01-16 10:22:01] [D] 0xb400007630034020 socks5 client destruct
+[2026-01-16 10:22:01] [D] 0xb400007630034020 socks5 destruct
+[2026-01-16 10:22:01] [D] 0x758833b5e8 filter: Incomplete TLS record
+[2026-01-16 10:22:01] [D] 0xb40000763002f870 [DOMAIN-FIRST] Foreign IP -> SOCKS5
+[2026-01-16 10:22:01] [D] 0xb40000763002f870 [DOMAIN-FIRST] Preserving 1036 bytes of queued data for next session
+[2026-01-16 10:22:01] [I] 0xb40000763002f870 [DOMAIN-FIRST] Route: Smart Proxy (probe mode)
+[2026-01-16 10:22:01] [D] 0xb400007630034020 socks5 session tcp construct: pcb->local_ip=34.36.57.103, pcb->local_port=443
+[2026-01-16 10:22:01] [D] addr_from_lwip: IP 34.36.57.103:47873 (no hostname mapping)
+[2026-01-16 10:22:01] [D] 0xb400007630034020 socks5 construct
+[2026-01-16 10:22:01] [D] 0xb400007630034020 socks5 client construct
+[2026-01-16 10:22:01] [D] 0xb400007630034020 socks5 client tcp construct
+[2026-01-16 10:22:01] [I] 0xb400007630034020 socks5 client tcp -> [34.36.57.103]:443
+[2026-01-16 10:22:01] [D] 0xb400007630034020 socks5 session tcp construct for 198.18.0.1:54862
+[2026-01-16 10:22:01] [D] 0xb400007630034020 socks5 session tcp new
+[2026-01-16 10:22:01] [I] 0xb400007630034020 [smart-proxy] started 198.18.0.1:54862 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb400007630034020 socks5 session tcp set task 0xb40000760002a460
+[2026-01-16 10:22:01] [D] 0xb40000763002f870 socks5 session tcp destruct
+[2026-01-16 10:22:01] [D] 0xb40000763002f870 socks5 client tcp destruct
+[2026-01-16 10:22:01] [D] 0xb40000763002f870 socks5 client destruct
+[2026-01-16 10:22:01] [D] 0xb40000763002f870 socks5 destruct
+[2026-01-16 10:22:01] [D] 0x758833b4e8 filter: Incomplete TLS record
+[2026-01-16 10:22:01] [D] 0xb40000763002dcb0 [DOMAIN-FIRST] Foreign IP -> SOCKS5
+[2026-01-16 10:22:01] [D] 0xb40000763002dcb0 [DOMAIN-FIRST] Preserving 1036 bytes of queued data for next session
+[2026-01-16 10:22:01] [I] 0xb40000763002dcb0 [DOMAIN-FIRST] Route: Smart Proxy (probe mode)
+[2026-01-16 10:22:01] [D] 0xb40000763002f870 socks5 session tcp construct: pcb->local_ip=34.36.57.103, pcb->local_port=443
+[2026-01-16 10:22:01] [D] addr_from_lwip: IP 34.36.57.103:47873 (no hostname mapping)
+[2026-01-16 10:22:01] [D] 0xb40000763002f870 socks5 construct
+[2026-01-16 10:22:01] [D] 0xb40000763002f870 socks5 client construct
+[2026-01-16 10:22:01] [D] 0xb40000763002f870 socks5 client tcp construct
+[2026-01-16 10:22:01] [I] 0xb40000763002f870 socks5 client tcp -> [34.36.57.103]:443
+[2026-01-16 10:22:01] [D] 0xb40000763002f870 socks5 session tcp construct for 198.18.0.1:54870
+[2026-01-16 10:22:01] [D] 0xb40000763002f870 socks5 session tcp new
+[2026-01-16 10:22:01] [I] 0xb40000763002f870 [smart-proxy] started 198.18.0.1:54870 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb40000763002f870 socks5 session tcp set task 0xb4000076000286a0
+[2026-01-16 10:22:01] [D] 0xb40000763002dcb0 socks5 session tcp destruct
+[2026-01-16 10:22:01] [D] 0xb40000763002dcb0 socks5 client tcp destruct
+[2026-01-16 10:22:01] [D] 0xb40000763002dcb0 socks5 client destruct
+[2026-01-16 10:22:01] [D] 0xb40000763002dcb0 socks5 destruct
+[2026-01-16 10:22:01] [D] 0xb40000777001b020 socks5 client udp destruct
+[2026-01-16 10:22:01] [D] 0xb40000777001b020 socks5 client destruct
+[2026-01-16 10:22:01] [D] 0xb40000777001b020 socks5 destruct
+[2026-01-16 10:22:01] [I] 0xb4000076a00669a0 [UDP] Direct connect cleanup (sent 1 packets/35 bytes, alive=0x00)
+[2026-01-16 10:22:01] [D] 0xb4000076a00669a0 [UDP] Cleanup started 198.18.0.1:39010 -> 223.5.5.5:53
+[2026-01-16 10:22:01] [I] 0xb4000076a00669a0 [UDP] Direct connect 198.18.0.1:39010 -> 223.5.5.5:53 ended (duration=23000 ms, packets_dropped=0)
+[2026-01-16 10:22:01] [D] 0xb40000763002f870 socks5 session tcp: received 915 bytes from client
+[2026-01-16 10:22:01] [D] 0xb400007630034020 socks5 session tcp: received 915 bytes from client
+[2026-01-16 10:22:01] [D] 0xb400007630031d70 socks5 session tcp: received 915 bytes from client
+[2026-01-16 10:22:01] [D] 0xb400007630029060 socks5 session tcp: received 915 bytes from client
+[2026-01-16 10:22:01] [D] 0xb400007630027250 socks5 session tcp: received 915 bytes from client
+[2026-01-16 10:22:01] [D] 0xb40000763002ca30 socks5 session tcp: received 915 bytes from client
+[2026-01-16 10:22:01] [D] 0xb400007630028bc0 socks5 session tcp: received 915 bytes from client
+[2026-01-16 10:22:01] [D] 0xb40000763002ac20 socks5 session tcp: received 915 bytes from client
+[2026-01-16 10:22:01] [D] 0xb40000763002a9d0 socks5 session tcp: received 915 bytes from client
+[2026-01-16 10:22:01] [D] 0xb400007630028e10 socks5 session tcp: received 915 bytes from client
+[2026-01-16 10:22:01] [D] 0xb400007630025fd0 socks5 session tcp: received 915 bytes from client
+[2026-01-16 10:22:01] [D] 0xb4000076300274a0 socks5 session tcp: received 915 bytes from client
+[2026-01-16 10:22:01] [D] 0xb40000763002c0f0 socks5 session tcp: received 915 bytes from client
+[2026-01-16 10:22:01] [D] 0xb40000763002a780 socks5 session tcp: received 915 bytes from client
+[2026-01-16 10:22:01] [D] 0xb40000763002b310 socks5 session tcp: received 915 bytes from client
+[2026-01-16 10:22:01] [D] 0xb400007630025b30 socks5 session tcp: received 915 bytes from client
+[2026-01-16 10:22:01] [D] 0xb40000763002a2e0 socks5 session tcp: received 915 bytes from client
+[2026-01-16 10:22:01] [D] 0xb40000763002ced0 socks5 session tcp: received 915 bytes from client
+[2026-01-16 10:22:01] [D] 0xb4000076300299a0 socks5 session tcp: received 915 bytes from client
+[2026-01-16 10:22:01] [D] 0xb400007630026db0 socks5 session tcp: received 915 bytes from client
+[2026-01-16 10:22:01] [D] 0xb400007630029750 socks5 session tcp: received 915 bytes from client
+[2026-01-16 10:22:01] [D] 0xb400007630026470 socks5 session tcp: received 915 bytes from client
+[2026-01-16 10:22:01] [D] 0xb400007630022160 socks5 session tcp: received 915 bytes from client
+[2026-01-16 10:22:01] [D] 0xb40000763002da60 socks5 session tcp: received 1036 bytes from client
+[2026-01-16 10:22:01] [D] 0xb4000076300336e0 socks5 session tcp: received 1036 bytes from client
+[2026-01-16 10:22:01] [D] 0xb40000763002d370 socks5 session tcp: received 1036 bytes from client
+[2026-01-16 10:22:01] [D] 0xb40000763002e3a0 socks5 session tcp: received 1036 bytes from client
+[2026-01-16 10:22:01] [D] 0xb40000763002fd10 socks5 session tcp: received 1036 bytes from client
+[2026-01-16 10:22:01] [D] 0xb400007630033930 socks5 session tcp: received 1036 bytes from client
+[2026-01-16 10:22:01] [D] 0xb40000763002e5f0 socks5 session tcp: received 1036 bytes from client
+[2026-01-16 10:22:01] [D] 0xb40000763002e5f0 socks5 session tcp: received 915 bytes from client
+[2026-01-16 10:22:01] [D] 0xb40000763002f3d0 socks5 session tcp: received 1036 bytes from client
+[2026-01-16 10:22:01] [D] 0xb40000763002f3d0 socks5 session tcp: received 915 bytes from client
+[2026-01-16 10:22:01] [D] 0xb40000763002b0c0 socks5 session tcp: received 1036 bytes from client
+[2026-01-16 10:22:01] [D] 0xb40000763002b0c0 socks5 session tcp: received 826 bytes from client
+[2026-01-16 10:22:01] [D] 0xb40000763002c590 socks5 session tcp: received 1036 bytes from client
+[2026-01-16 10:22:01] [D] 0xb40000763002c590 socks5 session tcp: received 826 bytes from client
+[2026-01-16 10:22:01] [D] 0xb40000763002a090 socks5 session tcp: received 1036 bytes from client
+[2026-01-16 10:22:01] [D] 0xb40000763002a090 socks5 session tcp: received 826 bytes from client
+[2026-01-16 10:22:01] [D] 0xb400007630027de0 socks5 session tcp: received 1036 bytes from client
+[2026-01-16 10:22:01] [D] 0xb400007630027de0 socks5 session tcp: received 856 bytes from client
+[2026-01-16 10:22:01] [D] 0xb4000076a0067880 [UDP] queued packet (414 bytes, queue_size=1)
+[2026-01-16 10:22:01] [D] 0xb400007630029500 socks5 session tcp: received EOF from client
+[2026-01-16 10:22:01] [D] 0xb40000763002bc50 socks5 session tcp: received EOF from client
+[2026-01-16 10:22:01] [D] 0xb4000076a0065ba0 [UDP] queued packet (34 bytes, queue_size=1)
+[2026-01-16 10:22:01] [D] 0xb4000076a0067260 [UDP] queued packet (34 bytes, queue_size=1)
+[2026-01-16 10:22:01] [D] 0xb4000076a0067880 [UDP] queued packet (433 bytes, queue_size=2)
+[2026-01-16 10:22:01] [D] 0xb4000076a0067880 [UDP] queued packet (438 bytes, queue_size=3)
+[2026-01-16 10:22:01] [D] 0xb4000076300336e0 socks5 session tcp: received 915 bytes from client
+[2026-01-16 10:22:01] [D] 0xb4000076300336e0 socks5 session tcp: received EOF from client
+[2026-01-16 10:22:01] [D] 0xb40000763002d370 socks5 session tcp: received 915 bytes from client
+[2026-01-16 10:22:01] [D] 0xb40000763002d370 socks5 session tcp: received EOF from client
+[2026-01-16 10:22:01] [D] 0xb40000763002da60 socks5 session tcp: received 915 bytes from client
+[2026-01-16 10:22:01] [D] 0xb40000763002da60 socks5 session tcp: received EOF from client
+[2026-01-16 10:22:01] [D] 0xb400007630022160 socks5 session tcp: received EOF from client
+[2026-01-16 10:22:01] [D] 0xb400007630026470 socks5 session tcp: received EOF from client
+[2026-01-16 10:22:01] [D] 0xb400007630029750 socks5 session tcp: received EOF from client
+[2026-01-16 10:22:01] [D] 0xb400007630026db0 socks5 session tcp: received EOF from client
+[2026-01-16 10:22:01] [D] 0xb4000076300299a0 socks5 session tcp: received EOF from client
+[2026-01-16 10:22:01] [D] 0xb400007630034020 socks5 session tcp: received EOF from client
+[2026-01-16 10:22:01] [D] 0xb40000763002f870 socks5 session tcp: received EOF from client
+[2026-01-16 10:22:01] [D] 0xb400007630029060 socks5 session tcp: received EOF from client
+[2026-01-16 10:22:01] [D] 0xb400007630027250 socks5 session tcp: received EOF from client
+[2026-01-16 10:22:01] [D] 0xb400007630031d70 socks5 session tcp: received EOF from client
+[2026-01-16 10:22:01] [D] 0xb40000763002ca30 socks5 session tcp: received EOF from client
+[2026-01-16 10:22:01] [D] 0xb400007630028bc0 socks5 session tcp: received EOF from client
+[2026-01-16 10:22:01] [D] 0xb40000763002ac20 socks5 session tcp: received EOF from client
+[2026-01-16 10:22:01] [D] 0xb40000763002a9d0 socks5 session tcp: received EOF from client
+[2026-01-16 10:22:01] [D] 0xb400007630028e10 socks5 session tcp: received EOF from client
+[2026-01-16 10:22:01] [D] 0xb400007630025fd0 socks5 session tcp: received EOF from client
+[2026-01-16 10:22:01] [D] 0xb4000076300274a0 socks5 session tcp: received EOF from client
+[2026-01-16 10:22:01] [D] 0xb40000763002c0f0 socks5 session tcp: received EOF from client
+[2026-01-16 10:22:01] [D] 0xb40000763002a780 socks5 session tcp: received EOF from client
+[2026-01-16 10:22:01] [D] 0xb40000763002b310 socks5 session tcp: received EOF from client
+[2026-01-16 10:22:01] [D] 0xb40000763002a2e0 socks5 session tcp: received EOF from client
+[2026-01-16 10:22:01] [D] 0xb400007630025b30 socks5 session tcp: received EOF from client
+[2026-01-16 10:22:01] [D] 0xb40000763002ced0 socks5 session tcp: received EOF from client
+[2026-01-16 10:22:01] [D] 0xb400007630033930 socks5 session tcp: received 915 bytes from client
+[2026-01-16 10:22:01] [D] 0xb400007630033930 socks5 session tcp: received EOF from client
+[2026-01-16 10:22:01] [D] 0xb40000763002fd10 socks5 session tcp: received 915 bytes from client
+[2026-01-16 10:22:01] [D] 0xb40000763002fd10 socks5 session tcp: received EOF from client
+[2026-01-16 10:22:01] [D] 0xb40000763002e3a0 socks5 session tcp: received 915 bytes from client
+[2026-01-16 10:22:01] [D] 0xb40000763002e3a0 socks5 session tcp: received EOF from client
+[2026-01-16 10:22:01] [D] 0xb4000076a0067880 [UDP] queued packet (424 bytes, queue_size=4)
+[2026-01-16 10:22:01] [D] 0x758823e59c socks5 tunnel: UDP packet received from 198.18.0.1:59146 to 223.5.5.5:53 (size=42 bytes)
+[2026-01-16 10:22:01] [D] 0x758823e59c router: UDP routing decision for 198.18.0.1:59146 -> 223.5.5.5:53 (packet_size=42)
+[2026-01-16 10:22:01] [D] dns-cache: Detected UDP header in packet, skipping 8 bytes
+[2026-01-16 10:22:01] [D] dns-cache: extract_dns_domain: result=0, domain='open.bigmodel.cn' (len=16)
+[2026-01-16 10:22:01] [D] dns-cache: Checking cache for domain: open.bigmodel.cn (domain_len=16)
+[2026-01-16 10:22:01] [D] dns-cache: Cache miss for domain: open.bigmodel.cn (domain_len=16)
+[2026-01-16 10:22:01] [I] 0x758823e59c router: DNS query to domestic 223.5.5.5:53 (cache miss), using DIRECT for pollution detection
+[2026-01-16 10:22:01] [I] 0xb4000076a00669a0 [UDP] Direct connect started 198.18.0.1:59146 -> 223.5.5.5:53 (first_packet=42 bytes)
+[2026-01-16 10:22:01] [D] 0x758823e59c socks5 tunnel: UDP packet handled by traffic router (direct connect or DNS forward)
+[2026-01-16 10:22:01] [D] 0x758833e4e8 socks5 tunnel: TCP connection accepted from 198.18.0.1:51586 to 142.250.141.188:5228
+[2026-01-16 10:22:01] [D] 0x758833e4e8 router: TCP routing decision for 198.18.0.1:51586 -> 142.250.141.188:5228
+[2026-01-16 10:22:01] [D] 0xb40000763002dcb0 socks5 session tcp construct: pcb->local_ip=142.250.141.188, pcb->local_port=5228
+[2026-01-16 10:22:01] [D] addr_from_lwip: IP 142.250.141.188:27668 (no hostname mapping)
+[2026-01-16 10:22:01] [D] 0xb40000763002dcb0 socks5 construct
+[2026-01-16 10:22:01] [D] 0xb40000763002dcb0 socks5 client construct
+[2026-01-16 10:22:01] [D] 0xb40000763002dcb0 socks5 client tcp construct
+[2026-01-16 10:22:01] [I] 0xb40000763002dcb0 socks5 client tcp -> [142.250.141.188]:5228
+[2026-01-16 10:22:01] [D] 0xb40000763002dcb0 socks5 session tcp construct for 198.18.0.1:51586
+[2026-01-16 10:22:01] [D] 0xb40000763002dcb0 socks5 session tcp new
+[2026-01-16 10:22:01] [I] 0xb40000763002dcb0 [domain-first] started 198.18.0.1:51586 -> 142.250.141.188:5228
+[2026-01-16 10:22:01] [D] 0xb40000763002dcb0 socks5 session tcp set task 0xb40000760001d0a0
+[2026-01-16 10:22:01] [D] 0xb40000763002dcb0 socks5 session tcp: received 532 bytes from client
+[2026-01-16 10:22:01] [D] 0xb400007630021cc0 socks5 session tcp: received EOF from client
+[2026-01-16 10:22:01] [D] 0x758833d9e8 socks5 tunnel: TCP connection accepted from 198.18.0.1:55284 to 160.79.104.10:443
+[2026-01-16 10:22:01] [D] 0x758833d9e8 router: TCP routing decision for 198.18.0.1:55284 -> 160.79.104.10:443
+[2026-01-16 10:22:01] [D] 0xb400007630027b90 socks5 session tcp construct: pcb->local_ip=160.79.104.10, pcb->local_port=443
+[2026-01-16 10:22:01] [D] addr_from_lwip: IP 160.79.104.10:47873 (no hostname mapping)
+[2026-01-16 10:22:01] [D] 0xb400007630027b90 socks5 construct
+[2026-01-16 10:22:01] [D] 0xb400007630027b90 socks5 client construct
+[2026-01-16 10:22:01] [D] 0xb400007630027b90 socks5 client tcp construct
+[2026-01-16 10:22:01] [I] 0xb400007630027b90 socks5 client tcp -> [160.79.104.10]:443
+[2026-01-16 10:22:01] [D] 0xb400007630027b90 socks5 session tcp construct for 198.18.0.1:55284
+[2026-01-16 10:22:01] [D] 0xb400007630027b90 socks5 session tcp new
+[2026-01-16 10:22:01] [I] 0xb400007630027b90 [domain-first] started 198.18.0.1:55284 -> 160.79.104.10:443
+[2026-01-16 10:22:01] [D] 0xb400007630027b90 socks5 session tcp set task 0xb400007600029820
+[2026-01-16 10:22:01] [D] 0x758833d2e8 socks5 tunnel: TCP connection accepted from 198.18.0.1:56478 to 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0x758833d2e8 router: TCP routing decision for 198.18.0.1:56478 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb40000763002bea0 socks5 session tcp construct: pcb->local_ip=34.36.57.103, pcb->local_port=443
+[2026-01-16 10:22:01] [D] addr_from_lwip: IP 34.36.57.103:47873 (no hostname mapping)
+[2026-01-16 10:22:01] [D] 0xb40000763002bea0 socks5 construct
+[2026-01-16 10:22:01] [D] 0xb40000763002bea0 socks5 client construct
+[2026-01-16 10:22:01] [D] 0xb40000763002bea0 socks5 client tcp construct
+[2026-01-16 10:22:01] [I] 0xb40000763002bea0 socks5 client tcp -> [34.36.57.103]:443
+[2026-01-16 10:22:01] [D] 0xb40000763002bea0 socks5 session tcp construct for 198.18.0.1:56478
+[2026-01-16 10:22:01] [D] 0xb40000763002bea0 socks5 session tcp new
+[2026-01-16 10:22:01] [I] 0xb40000763002bea0 [domain-first] started 198.18.0.1:56478 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb40000763002bea0 socks5 session tcp set task 0xb400007600018fe0
+[2026-01-16 10:22:01] [D] 0x758833d6e8 socks5 tunnel: TCP connection accepted from 198.18.0.1:56488 to 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0x758833d6e8 router: TCP routing decision for 198.18.0.1:56488 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb40000763001fa10 socks5 session tcp construct: pcb->local_ip=34.36.57.103, pcb->local_port=443
+[2026-01-16 10:22:01] [D] addr_from_lwip: IP 34.36.57.103:47873 (no hostname mapping)
+[2026-01-16 10:22:01] [D] 0xb40000763001fa10 socks5 construct
+[2026-01-16 10:22:01] [D] 0xb40000763001fa10 socks5 client construct
+[2026-01-16 10:22:01] [D] 0xb40000763001fa10 socks5 client tcp construct
+[2026-01-16 10:22:01] [I] 0xb40000763001fa10 socks5 client tcp -> [34.36.57.103]:443
+[2026-01-16 10:22:01] [D] 0xb40000763001fa10 socks5 session tcp construct for 198.18.0.1:56488
+[2026-01-16 10:22:01] [D] 0xb40000763001fa10 socks5 session tcp new
+[2026-01-16 10:22:01] [I] 0xb40000763001fa10 [domain-first] started 198.18.0.1:56488 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb40000763001fa10 socks5 session tcp set task 0xb400007600021f60
+[2026-01-16 10:22:01] [D] 0x758833d4e8 socks5 tunnel: TCP connection accepted from 198.18.0.1:56502 to 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0x758833d4e8 router: TCP routing decision for 198.18.0.1:56502 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb400007630027940 socks5 session tcp construct: pcb->local_ip=34.36.57.103, pcb->local_port=443
+[2026-01-16 10:22:01] [D] addr_from_lwip: IP 34.36.57.103:47873 (no hostname mapping)
+[2026-01-16 10:22:01] [D] 0xb400007630027940 socks5 construct
+[2026-01-16 10:22:01] [D] 0xb400007630027940 socks5 client construct
+[2026-01-16 10:22:01] [D] 0xb400007630027940 socks5 client tcp construct
+[2026-01-16 10:22:01] [I] 0xb400007630027940 socks5 client tcp -> [34.36.57.103]:443
+[2026-01-16 10:22:01] [D] 0xb400007630027940 socks5 session tcp construct for 198.18.0.1:56502
+[2026-01-16 10:22:01] [D] 0xb400007630027940 socks5 session tcp new
+[2026-01-16 10:22:01] [I] 0xb400007630027940 [domain-first] started 198.18.0.1:56502 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb400007630027940 socks5 session tcp set task 0xb4000076000294a0
+[2026-01-16 10:22:01] [D] 0x758833d7e8 socks5 tunnel: TCP connection accepted from 198.18.0.1:56516 to 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0x758833d7e8 router: TCP routing decision for 198.18.0.1:56516 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb40000763002c340 socks5 session tcp construct: pcb->local_ip=34.36.57.103, pcb->local_port=443
+[2026-01-16 10:22:01] [D] addr_from_lwip: IP 34.36.57.103:47873 (no hostname mapping)
+[2026-01-16 10:22:01] [D] 0xb40000763002c340 socks5 construct
+[2026-01-16 10:22:01] [D] 0xb40000763002c340 socks5 client construct
+[2026-01-16 10:22:01] [D] 0xb40000763002c340 socks5 client tcp construct
+[2026-01-16 10:22:01] [I] 0xb40000763002c340 socks5 client tcp -> [34.36.57.103]:443
+[2026-01-16 10:22:01] [D] 0xb40000763002c340 socks5 session tcp construct for 198.18.0.1:56516
+[2026-01-16 10:22:01] [D] 0xb40000763002c340 socks5 session tcp new
+[2026-01-16 10:22:01] [I] 0xb40000763002c340 [domain-first] started 198.18.0.1:56516 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb40000763002c340 socks5 session tcp set task 0xb400007600028a20
+[2026-01-16 10:22:01] [D] 0x758833d5e8 socks5 tunnel: TCP connection accepted from 198.18.0.1:56530 to 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0x758833d5e8 router: TCP routing decision for 198.18.0.1:56530 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb40000763002ba00 socks5 session tcp construct: pcb->local_ip=34.36.57.103, pcb->local_port=443
+[2026-01-16 10:22:01] [D] addr_from_lwip: IP 34.36.57.103:47873 (no hostname mapping)
+[2026-01-16 10:22:01] [D] 0xb40000763002ba00 socks5 construct
+[2026-01-16 10:22:01] [D] 0xb40000763002ba00 socks5 client construct
+[2026-01-16 10:22:01] [D] 0xb40000763002ba00 socks5 client tcp construct
+[2026-01-16 10:22:01] [I] 0xb40000763002ba00 socks5 client tcp -> [34.36.57.103]:443
+[2026-01-16 10:22:01] [D] 0xb40000763002ba00 socks5 session tcp construct for 198.18.0.1:56530
+[2026-01-16 10:22:01] [D] 0xb40000763002ba00 socks5 session tcp new
+[2026-01-16 10:22:01] [I] 0xb40000763002ba00 [domain-first] started 198.18.0.1:56530 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb40000763002ba00 socks5 session tcp set task 0xb4000076000276e0
+[2026-01-16 10:22:01] [D] 0x758833e1e8 socks5 tunnel: TCP connection accepted from 198.18.0.1:56536 to 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0x758833e1e8 router: TCP routing decision for 198.18.0.1:56536 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb400007630029e40 socks5 session tcp construct: pcb->local_ip=34.36.57.103, pcb->local_port=443
+[2026-01-16 10:22:01] [D] addr_from_lwip: IP 34.36.57.103:47873 (no hostname mapping)
+[2026-01-16 10:22:01] [D] 0xb400007630029e40 socks5 construct
+[2026-01-16 10:22:01] [D] 0xb400007630029e40 socks5 client construct
+[2026-01-16 10:22:01] [D] 0xb400007630029e40 socks5 client tcp construct
+[2026-01-16 10:22:01] [I] 0xb400007630029e40 socks5 client tcp -> [34.36.57.103]:443
+[2026-01-16 10:22:01] [D] 0xb400007630029e40 socks5 session tcp construct for 198.18.0.1:56536
+[2026-01-16 10:22:01] [D] 0xb400007630029e40 socks5 session tcp new
+[2026-01-16 10:22:01] [I] 0xb400007630029e40 [domain-first] started 198.18.0.1:56536 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb400007630029e40 socks5 session tcp set task 0xb400007600027360
+[2026-01-16 10:22:01] [D] 0x758833e3e8 socks5 tunnel: TCP connection accepted from 198.18.0.1:56546 to 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0x758833e3e8 router: TCP routing decision for 198.18.0.1:56546 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb400007630016860 socks5 session tcp construct: pcb->local_ip=34.36.57.103, pcb->local_port=443
+[2026-01-16 10:22:01] [D] addr_from_lwip: IP 34.36.57.103:47873 (no hostname mapping)
+[2026-01-16 10:22:01] [D] 0xb400007630016860 socks5 construct
+[2026-01-16 10:22:01] [D] 0xb400007630016860 socks5 client construct
+[2026-01-16 10:22:01] [D] 0xb400007630016860 socks5 client tcp construct
+[2026-01-16 10:22:01] [I] 0xb400007630016860 socks5 client tcp -> [34.36.57.103]:443
+[2026-01-16 10:22:01] [D] 0xb400007630016860 socks5 session tcp construct for 198.18.0.1:56546
+[2026-01-16 10:22:01] [D] 0xb400007630016860 socks5 session tcp new
+[2026-01-16 10:22:01] [I] 0xb400007630016860 [domain-first] started 198.18.0.1:56546 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb400007630016860 socks5 session tcp set task 0xb400007600026020
+[2026-01-16 10:22:01] [D] 0x758833ace8 socks5 tunnel: TCP connection accepted from 198.18.0.1:56552 to 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0x758833ace8 router: TCP routing decision for 198.18.0.1:56552 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb400007630032da0 socks5 session tcp construct: pcb->local_ip=34.36.57.103, pcb->local_port=443
+[2026-01-16 10:22:01] [D] addr_from_lwip: IP 34.36.57.103:47873 (no hostname mapping)
+[2026-01-16 10:22:01] [D] 0xb400007630032da0 socks5 construct
+[2026-01-16 10:22:01] [D] 0xb400007630032da0 socks5 client construct
+[2026-01-16 10:22:01] [D] 0xb400007630032da0 socks5 client tcp construct
+[2026-01-16 10:22:01] [I] 0xb400007630032da0 socks5 client tcp -> [34.36.57.103]:443
+[2026-01-16 10:22:01] [D] 0xb400007630032da0 socks5 session tcp construct for 198.18.0.1:56552
+[2026-01-16 10:22:01] [D] 0xb400007630032da0 socks5 session tcp new
+[2026-01-16 10:22:01] [I] 0xb400007630032da0 [domain-first] started 198.18.0.1:56552 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb400007630032da0 socks5 session tcp set task 0xb4000076000278a0
+[2026-01-16 10:22:01] [D] 0x758833abe8 socks5 tunnel: TCP connection accepted from 198.18.0.1:56566 to 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0x758833abe8 router: TCP routing decision for 198.18.0.1:56566 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb40000763002fac0 socks5 session tcp construct: pcb->local_ip=34.36.57.103, pcb->local_port=443
+[2026-01-16 10:22:01] [D] addr_from_lwip: IP 34.36.57.103:47873 (no hostname mapping)
+[2026-01-16 10:22:01] [D] 0xb40000763002fac0 socks5 construct
+[2026-01-16 10:22:01] [D] 0xb40000763002fac0 socks5 client construct
+[2026-01-16 10:22:01] [D] 0xb40000763002fac0 socks5 client tcp construct
+[2026-01-16 10:22:01] [I] 0xb40000763002fac0 socks5 client tcp -> [34.36.57.103]:443
+[2026-01-16 10:22:01] [D] 0xb40000763002fac0 socks5 session tcp construct for 198.18.0.1:56566
+[2026-01-16 10:22:01] [D] 0xb40000763002fac0 socks5 session tcp new
+[2026-01-16 10:22:01] [I] 0xb40000763002fac0 [domain-first] started 198.18.0.1:56566 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb40000763002fac0 socks5 session tcp set task 0xb40000760002ab60
+[2026-01-16 10:22:01] [D] 0x758833aae8 socks5 tunnel: TCP connection accepted from 198.18.0.1:56580 to 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0x758833aae8 router: TCP routing decision for 198.18.0.1:56580 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb4000076300344c0 socks5 session tcp construct: pcb->local_ip=34.36.57.103, pcb->local_port=443
+[2026-01-16 10:22:01] [D] addr_from_lwip: IP 34.36.57.103:47873 (no hostname mapping)
+[2026-01-16 10:22:01] [D] 0xb4000076300344c0 socks5 construct
+[2026-01-16 10:22:01] [D] 0xb4000076300344c0 socks5 client construct
+[2026-01-16 10:22:01] [D] 0xb4000076300344c0 socks5 client tcp construct
+[2026-01-16 10:22:01] [I] 0xb4000076300344c0 socks5 client tcp -> [34.36.57.103]:443
+[2026-01-16 10:22:01] [D] 0xb4000076300344c0 socks5 session tcp construct for 198.18.0.1:56580
+[2026-01-16 10:22:01] [D] 0xb4000076300344c0 socks5 session tcp new
+[2026-01-16 10:22:01] [I] 0xb4000076300344c0 [domain-first] started 198.18.0.1:56580 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb4000076300344c0 socks5 session tcp set task 0xb400007600025760
+[2026-01-16 10:22:01] [D] 0x758833a9e8 socks5 tunnel: TCP connection accepted from 198.18.0.1:56592 to 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0x758833a9e8 router: TCP routing decision for 198.18.0.1:56592 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb40000763002df00 socks5 session tcp construct: pcb->local_ip=34.36.57.103, pcb->local_port=443
+[2026-01-16 10:22:01] [D] addr_from_lwip: IP 34.36.57.103:47873 (no hostname mapping)
+[2026-01-16 10:22:01] [D] 0xb40000763002df00 socks5 construct
+[2026-01-16 10:22:01] [D] 0xb40000763002df00 socks5 client construct
+[2026-01-16 10:22:01] [D] 0xb40000763002df00 socks5 client tcp construct
+[2026-01-16 10:22:01] [I] 0xb40000763002df00 socks5 client tcp -> [34.36.57.103]:443
+[2026-01-16 10:22:01] [D] 0xb40000763002df00 socks5 session tcp construct for 198.18.0.1:56592
+[2026-01-16 10:22:01] [D] 0xb40000763002df00 socks5 session tcp new
+[2026-01-16 10:22:01] [I] 0xb40000763002df00 [domain-first] started 198.18.0.1:56592 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb40000763002df00 socks5 session tcp set task 0xb40000760002a620
+[2026-01-16 10:22:01] [D] 0x758833a8e8 socks5 tunnel: TCP connection accepted from 198.18.0.1:56600 to 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0x758833a8e8 router: TCP routing decision for 198.18.0.1:56600 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb400007630030d40 socks5 session tcp construct: pcb->local_ip=34.36.57.103, pcb->local_port=443
+[2026-01-16 10:22:01] [D] addr_from_lwip: IP 34.36.57.103:47873 (no hostname mapping)
+[2026-01-16 10:22:01] [D] 0xb400007630030d40 socks5 construct
+[2026-01-16 10:22:01] [D] 0xb400007630030d40 socks5 client construct
+[2026-01-16 10:22:01] [D] 0xb400007630030d40 socks5 client tcp construct
+[2026-01-16 10:22:01] [I] 0xb400007630030d40 socks5 client tcp -> [34.36.57.103]:443
+[2026-01-16 10:22:01] [D] 0xb400007630030d40 socks5 session tcp construct for 198.18.0.1:56600
+[2026-01-16 10:22:01] [D] 0xb400007630030d40 socks5 session tcp new
+[2026-01-16 10:22:01] [I] 0xb400007630030d40 [domain-first] started 198.18.0.1:56600 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb400007630030d40 socks5 session tcp set task 0xb400007600029120
+[2026-01-16 10:22:01] [D] 0x758833a7e8 socks5 tunnel: TCP connection accepted from 198.18.0.1:56616 to 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0x758833a7e8 router: TCP routing decision for 198.18.0.1:56616 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb400007630032900 socks5 session tcp construct: pcb->local_ip=34.36.57.103, pcb->local_port=443
+[2026-01-16 10:22:01] [D] addr_from_lwip: IP 34.36.57.103:47873 (no hostname mapping)
+[2026-01-16 10:22:01] [D] 0xb400007630032900 socks5 construct
+[2026-01-16 10:22:01] [D] 0xb400007630032900 socks5 client construct
+[2026-01-16 10:22:01] [D] 0xb400007630032900 socks5 client tcp construct
+[2026-01-16 10:22:01] [I] 0xb400007630032900 socks5 client tcp -> [34.36.57.103]:443
+[2026-01-16 10:22:01] [D] 0xb400007630032900 socks5 session tcp construct for 198.18.0.1:56616
+[2026-01-16 10:22:01] [D] 0xb400007630032900 socks5 session tcp new
+[2026-01-16 10:22:01] [I] 0xb400007630032900 [domain-first] started 198.18.0.1:56616 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb400007630032900 socks5 session tcp set task 0xb400007600027520
+[2026-01-16 10:22:01] [D] 0x758833a6e8 socks5 tunnel: TCP connection accepted from 198.18.0.1:56622 to 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0x758833a6e8 router: TCP routing decision for 198.18.0.1:56622 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb400007630030400 socks5 session tcp construct: pcb->local_ip=34.36.57.103, pcb->local_port=443
+[2026-01-16 10:22:01] [D] addr_from_lwip: IP 34.36.57.103:47873 (no hostname mapping)
+[2026-01-16 10:22:01] [D] 0xb400007630030400 socks5 construct
+[2026-01-16 10:22:01] [D] 0xb400007630030400 socks5 client construct
+[2026-01-16 10:22:01] [D] 0xb400007630030400 socks5 client tcp construct
+[2026-01-16 10:22:01] [I] 0xb400007630030400 socks5 client tcp -> [34.36.57.103]:443
+[2026-01-16 10:22:01] [D] 0xb400007630030400 socks5 session tcp construct for 198.18.0.1:56622
+[2026-01-16 10:22:01] [D] 0xb400007630030400 socks5 session tcp new
+[2026-01-16 10:22:01] [I] 0xb400007630030400 [domain-first] started 198.18.0.1:56622 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb400007630030400 socks5 session tcp set task 0xb400007600026fe0
+[2026-01-16 10:22:01] [D] 0x758833a5e8 socks5 tunnel: TCP connection accepted from 198.18.0.1:56634 to 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0x758833a5e8 router: TCP routing decision for 198.18.0.1:56634 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb40000763002ff60 socks5 session tcp construct: pcb->local_ip=34.36.57.103, pcb->local_port=443
+[2026-01-16 10:22:01] [D] addr_from_lwip: IP 34.36.57.103:47873 (no hostname mapping)
+[2026-01-16 10:22:01] [D] 0xb40000763002ff60 socks5 construct
+[2026-01-16 10:22:01] [D] 0xb40000763002ff60 socks5 client construct
+[2026-01-16 10:22:01] [D] 0xb40000763002ff60 socks5 client tcp construct
+[2026-01-16 10:22:01] [I] 0xb40000763002ff60 socks5 client tcp -> [34.36.57.103]:443
+[2026-01-16 10:22:01] [D] 0xb40000763002ff60 socks5 session tcp construct for 198.18.0.1:56634
+[2026-01-16 10:22:01] [D] 0xb40000763002ff60 socks5 session tcp new
+[2026-01-16 10:22:01] [I] 0xb40000763002ff60 [domain-first] started 198.18.0.1:56634 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb40000763002ff60 socks5 session tcp set task 0xb400007600027a60
+[2026-01-16 10:22:01] [D] 0x758833a4e8 socks5 tunnel: TCP connection accepted from 198.18.0.1:56636 to 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0x758833a4e8 router: TCP routing decision for 198.18.0.1:56636 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb400007630034710 socks5 session tcp construct: pcb->local_ip=34.36.57.103, pcb->local_port=443
+[2026-01-16 10:22:01] [D] addr_from_lwip: IP 34.36.57.103:47873 (no hostname mapping)
+[2026-01-16 10:22:01] [D] 0xb400007630034710 socks5 construct
+[2026-01-16 10:22:01] [D] 0xb400007630034710 socks5 client construct
+[2026-01-16 10:22:01] [D] 0xb400007630034710 socks5 client tcp construct
+[2026-01-16 10:22:01] [I] 0xb400007630034710 socks5 client tcp -> [34.36.57.103]:443
+[2026-01-16 10:22:01] [D] 0xb400007630034710 socks5 session tcp construct for 198.18.0.1:56636
+[2026-01-16 10:22:01] [D] 0xb400007630034710 socks5 session tcp new
+[2026-01-16 10:22:01] [I] 0xb400007630034710 [domain-first] started 198.18.0.1:56636 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb400007630034710 socks5 session tcp set task 0xb400007600028be0
+[2026-01-16 10:22:01] [D] 0x758833a3e8 socks5 tunnel: TCP connection accepted from 198.18.0.1:56646 to 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0x758833a3e8 router: TCP routing decision for 198.18.0.1:56646 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb400007630034270 socks5 session tcp construct: pcb->local_ip=34.36.57.103, pcb->local_port=443
+[2026-01-16 10:22:01] [D] addr_from_lwip: IP 34.36.57.103:47873 (no hostname mapping)
+[2026-01-16 10:22:01] [D] 0xb400007630034270 socks5 construct
+[2026-01-16 10:22:01] [D] 0xb400007630034270 socks5 client construct
+[2026-01-16 10:22:01] [D] 0xb400007630034270 socks5 client tcp construct
+[2026-01-16 10:22:01] [I] 0xb400007630034270 socks5 client tcp -> [34.36.57.103]:443
+[2026-01-16 10:22:01] [D] 0xb400007630034270 socks5 session tcp construct for 198.18.0.1:56646
+[2026-01-16 10:22:01] [D] 0xb400007630034270 socks5 session tcp new
+[2026-01-16 10:22:01] [I] 0xb400007630034270 [domain-first] started 198.18.0.1:56646 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb400007630034270 socks5 session tcp set task 0xb400007600029ba0
+[2026-01-16 10:22:01] [D] 0x758833a2e8 socks5 tunnel: TCP connection accepted from 198.18.0.1:56656 to 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0x758833a2e8 router: TCP routing decision for 198.18.0.1:56656 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb400007630030f90 socks5 session tcp construct: pcb->local_ip=34.36.57.103, pcb->local_port=443
+[2026-01-16 10:22:01] [D] addr_from_lwip: IP 34.36.57.103:47873 (no hostname mapping)
+[2026-01-16 10:22:01] [D] 0xb400007630030f90 socks5 construct
+[2026-01-16 10:22:01] [D] 0xb400007630030f90 socks5 client construct
+[2026-01-16 10:22:01] [D] 0xb400007630030f90 socks5 client tcp construct
+[2026-01-16 10:22:01] [I] 0xb400007630030f90 socks5 client tcp -> [34.36.57.103]:443
+[2026-01-16 10:22:01] [D] 0xb400007630030f90 socks5 session tcp construct for 198.18.0.1:56656
+[2026-01-16 10:22:01] [D] 0xb400007630030f90 socks5 session tcp new
+[2026-01-16 10:22:01] [I] 0xb400007630030f90 [domain-first] started 198.18.0.1:56656 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb400007630030f90 socks5 session tcp set task 0xb400007600026e20
+[2026-01-16 10:22:01] [D] 0x758833a1e8 socks5 tunnel: TCP connection accepted from 198.18.0.1:56668 to 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0x758833a1e8 router: TCP routing decision for 198.18.0.1:56668 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb40000763002ef30 socks5 session tcp construct: pcb->local_ip=34.36.57.103, pcb->local_port=443
+[2026-01-16 10:22:01] [D] addr_from_lwip: IP 34.36.57.103:47873 (no hostname mapping)
+[2026-01-16 10:22:01] [D] 0xb40000763002ef30 socks5 construct
+[2026-01-16 10:22:01] [D] 0xb40000763002ef30 socks5 client construct
+[2026-01-16 10:22:01] [D] 0xb40000763002ef30 socks5 client tcp construct
+[2026-01-16 10:22:01] [I] 0xb40000763002ef30 socks5 client tcp -> [34.36.57.103]:443
+[2026-01-16 10:22:01] [D] 0xb40000763002ef30 socks5 session tcp construct for 198.18.0.1:56668
+[2026-01-16 10:22:01] [D] 0xb40000763002ef30 socks5 session tcp new
+[2026-01-16 10:22:01] [I] 0xb40000763002ef30 [domain-first] started 198.18.0.1:56668 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb40000763002ef30 socks5 session tcp set task 0xb4000076000299e0
+[2026-01-16 10:22:01] [D] 0x758833a0e8 socks5 tunnel: TCP connection accepted from 198.18.0.1:56676 to 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0x758833a0e8 router: TCP routing decision for 198.18.0.1:56676 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb400007630032b50 socks5 session tcp construct: pcb->local_ip=34.36.57.103, pcb->local_port=443
+[2026-01-16 10:22:01] [D] addr_from_lwip: IP 34.36.57.103:47873 (no hostname mapping)
+[2026-01-16 10:22:01] [D] 0xb400007630032b50 socks5 construct
+[2026-01-16 10:22:01] [D] 0xb400007630032b50 socks5 client construct
+[2026-01-16 10:22:01] [D] 0xb400007630032b50 socks5 client tcp construct
+[2026-01-16 10:22:01] [I] 0xb400007630032b50 socks5 client tcp -> [34.36.57.103]:443
+[2026-01-16 10:22:01] [D] 0xb400007630032b50 socks5 session tcp construct for 198.18.0.1:56676
+[2026-01-16 10:22:01] [D] 0xb400007630032b50 socks5 session tcp new
+[2026-01-16 10:22:01] [I] 0xb400007630032b50 [domain-first] started 198.18.0.1:56676 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb400007630032b50 socks5 session tcp set task 0xb400007600029660
+[2026-01-16 10:22:01] [D] 0xb400007630027b90 socks5 session tcp: received 1036 bytes from client
+[2026-01-16 10:22:01] [D] 0xb400007630027b90 socks5 session tcp: received 565 bytes from client
+[2026-01-16 10:22:01] [D] 0x7588339fe8 socks5 tunnel: TCP connection accepted from 198.18.0.1:56692 to 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0x7588339fe8 router: TCP routing decision for 198.18.0.1:56692 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb400007630031b20 socks5 session tcp construct: pcb->local_ip=34.36.57.103, pcb->local_port=443
+[2026-01-16 10:22:01] [D] addr_from_lwip: IP 34.36.57.103:47873 (no hostname mapping)
+[2026-01-16 10:22:01] [D] 0xb400007630031b20 socks5 construct
+[2026-01-16 10:22:01] [D] 0xb400007630031b20 socks5 client construct
+[2026-01-16 10:22:01] [D] 0xb400007630031b20 socks5 client tcp construct
+[2026-01-16 10:22:01] [I] 0xb400007630031b20 socks5 client tcp -> [34.36.57.103]:443
+[2026-01-16 10:22:01] [D] 0xb400007630031b20 socks5 session tcp construct for 198.18.0.1:56692
+[2026-01-16 10:22:01] [D] 0xb400007630031b20 socks5 session tcp new
+[2026-01-16 10:22:01] [I] 0xb400007630031b20 [domain-first] started 198.18.0.1:56692 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb400007630031b20 socks5 session tcp set task 0xb40000760002a2a0
+[2026-01-16 10:22:01] [D] 0x7588339ee8 socks5 tunnel: TCP connection accepted from 198.18.0.1:56700 to 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0x7588339ee8 router: TCP routing decision for 198.18.0.1:56700 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb40000763002ece0 socks5 session tcp construct: pcb->local_ip=34.36.57.103, pcb->local_port=443
+[2026-01-16 10:22:01] [D] addr_from_lwip: IP 34.36.57.103:47873 (no hostname mapping)
+[2026-01-16 10:22:01] [D] 0xb40000763002ece0 socks5 construct
+[2026-01-16 10:22:01] [D] 0xb40000763002ece0 socks5 client construct
+[2026-01-16 10:22:01] [D] 0xb40000763002ece0 socks5 client tcp construct
+[2026-01-16 10:22:01] [I] 0xb40000763002ece0 socks5 client tcp -> [34.36.57.103]:443
+[2026-01-16 10:22:01] [D] 0xb40000763002ece0 socks5 session tcp construct for 198.18.0.1:56700
+[2026-01-16 10:22:01] [D] 0xb40000763002ece0 socks5 session tcp new
+[2026-01-16 10:22:01] [I] 0xb40000763002ece0 [domain-first] started 198.18.0.1:56700 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb40000763002ece0 socks5 session tcp set task 0xb40000760002a0e0
+[2026-01-16 10:22:01] [D] 0x7588339de8 socks5 tunnel: TCP connection accepted from 198.18.0.1:56704 to 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0x7588339de8 router: TCP routing decision for 198.18.0.1:56704 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb4000076300326b0 socks5 session tcp construct: pcb->local_ip=34.36.57.103, pcb->local_port=443
+[2026-01-16 10:22:01] [D] addr_from_lwip: IP 34.36.57.103:47873 (no hostname mapping)
+[2026-01-16 10:22:01] [D] 0xb4000076300326b0 socks5 construct
+[2026-01-16 10:22:01] [D] 0xb4000076300326b0 socks5 client construct
+[2026-01-16 10:22:01] [D] 0xb4000076300326b0 socks5 client tcp construct
+[2026-01-16 10:22:01] [I] 0xb4000076300326b0 socks5 client tcp -> [34.36.57.103]:443
+[2026-01-16 10:22:01] [D] 0xb4000076300326b0 socks5 session tcp construct for 198.18.0.1:56704
+[2026-01-16 10:22:01] [D] 0xb4000076300326b0 socks5 session tcp new
+[2026-01-16 10:22:01] [I] 0xb4000076300326b0 [domain-first] started 198.18.0.1:56704 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb4000076300326b0 socks5 session tcp set task 0xb4000076000271a0
+[2026-01-16 10:22:01] [D] 0x7588339ce8 socks5 tunnel: TCP connection accepted from 198.18.0.1:56708 to 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0x7588339ce8 router: TCP routing decision for 198.18.0.1:56708 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb400007630032460 socks5 session tcp construct: pcb->local_ip=34.36.57.103, pcb->local_port=443
+[2026-01-16 10:22:01] [D] addr_from_lwip: IP 34.36.57.103:47873 (no hostname mapping)
+[2026-01-16 10:22:01] [D] 0xb400007630032460 socks5 construct
+[2026-01-16 10:22:01] [D] 0xb400007630032460 socks5 client construct
+[2026-01-16 10:22:01] [D] 0xb400007630032460 socks5 client tcp construct
+[2026-01-16 10:22:01] [I] 0xb400007630032460 socks5 client tcp -> [34.36.57.103]:443
+[2026-01-16 10:22:01] [D] 0xb400007630032460 socks5 session tcp construct for 198.18.0.1:56708
+[2026-01-16 10:22:01] [D] 0xb400007630032460 socks5 session tcp new
+[2026-01-16 10:22:01] [I] 0xb400007630032460 [domain-first] started 198.18.0.1:56708 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb400007630032460 socks5 session tcp set task 0xb4000076000268e0
+[2026-01-16 10:22:01] [D] 0x7588339be8 socks5 tunnel: TCP connection accepted from 198.18.0.1:56718 to 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0x7588339be8 router: TCP routing decision for 198.18.0.1:56718 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb400007630032210 socks5 session tcp construct: pcb->local_ip=34.36.57.103, pcb->local_port=443
+[2026-01-16 10:22:01] [D] addr_from_lwip: IP 34.36.57.103:47873 (no hostname mapping)
+[2026-01-16 10:22:01] [D] 0xb400007630032210 socks5 construct
+[2026-01-16 10:22:01] [D] 0xb400007630032210 socks5 client construct
+[2026-01-16 10:22:01] [D] 0xb400007630032210 socks5 client tcp construct
+[2026-01-16 10:22:01] [I] 0xb400007630032210 socks5 client tcp -> [34.36.57.103]:443
+[2026-01-16 10:22:01] [D] 0xb400007630032210 socks5 session tcp construct for 198.18.0.1:56718
+[2026-01-16 10:22:01] [D] 0xb400007630032210 socks5 session tcp new
+[2026-01-16 10:22:01] [I] 0xb400007630032210 [domain-first] started 198.18.0.1:56718 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb400007630032210 socks5 session tcp set task 0xb400007600027fa0
+[2026-01-16 10:22:01] [D] 0x7588339ae8 socks5 tunnel: TCP connection accepted from 198.18.0.1:56730 to 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0x7588339ae8 router: TCP routing decision for 198.18.0.1:56730 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb40000763002f620 socks5 session tcp construct: pcb->local_ip=34.36.57.103, pcb->local_port=443
+[2026-01-16 10:22:01] [D] addr_from_lwip: IP 34.36.57.103:47873 (no hostname mapping)
+[2026-01-16 10:22:01] [D] 0xb40000763002f620 socks5 construct
+[2026-01-16 10:22:01] [D] 0xb40000763002f620 socks5 client construct
+[2026-01-16 10:22:01] [D] 0xb40000763002f620 socks5 client tcp construct
+[2026-01-16 10:22:01] [I] 0xb40000763002f620 socks5 client tcp -> [34.36.57.103]:443
+[2026-01-16 10:22:01] [D] 0xb40000763002f620 socks5 session tcp construct for 198.18.0.1:56730
+[2026-01-16 10:22:01] [D] 0xb40000763002f620 socks5 session tcp new
+[2026-01-16 10:22:01] [I] 0xb40000763002f620 [domain-first] started 198.18.0.1:56730 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb40000763002f620 socks5 session tcp set task 0xb400007600025ae0
+[2026-01-16 10:22:01] [D] 0x75883399e8 socks5 tunnel: TCP connection accepted from 198.18.0.1:56736 to 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0x75883399e8 router: TCP routing decision for 198.18.0.1:56736 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb40000763002d810 socks5 session tcp construct: pcb->local_ip=34.36.57.103, pcb->local_port=443
+[2026-01-16 10:22:01] [D] addr_from_lwip: IP 34.36.57.103:47873 (no hostname mapping)
+[2026-01-16 10:22:01] [D] 0xb40000763002d810 socks5 construct
+[2026-01-16 10:22:01] [D] 0xb40000763002d810 socks5 client construct
+[2026-01-16 10:22:01] [D] 0xb40000763002d810 socks5 client tcp construct
+[2026-01-16 10:22:01] [I] 0xb40000763002d810 socks5 client tcp -> [34.36.57.103]:443
+[2026-01-16 10:22:01] [D] 0xb40000763002d810 socks5 session tcp construct for 198.18.0.1:56736
+[2026-01-16 10:22:01] [D] 0xb40000763002d810 socks5 session tcp new
+[2026-01-16 10:22:01] [I] 0xb40000763002d810 [domain-first] started 198.18.0.1:56736 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb40000763002d810 socks5 session tcp set task 0xb400007600028320
+[2026-01-16 10:22:01] [D] 0x75883398e8 socks5 tunnel: TCP connection accepted from 198.18.0.1:56750 to 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0x75883398e8 router: TCP routing decision for 198.18.0.1:56750 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb400007630033240 socks5 session tcp construct: pcb->local_ip=34.36.57.103, pcb->local_port=443
+[2026-01-16 10:22:01] [D] addr_from_lwip: IP 34.36.57.103:47873 (no hostname mapping)
+[2026-01-16 10:22:01] [D] 0xb400007630033240 socks5 construct
+[2026-01-16 10:22:01] [D] 0xb400007630033240 socks5 client construct
+[2026-01-16 10:22:01] [D] 0xb400007630033240 socks5 client tcp construct
+[2026-01-16 10:22:01] [I] 0xb400007630033240 socks5 client tcp -> [34.36.57.103]:443
+[2026-01-16 10:22:01] [D] 0xb400007630033240 socks5 session tcp construct for 198.18.0.1:56750
+[2026-01-16 10:22:01] [D] 0xb400007630033240 socks5 session tcp new
+[2026-01-16 10:22:01] [I] 0xb400007630033240 [domain-first] started 198.18.0.1:56750 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb400007630033240 socks5 session tcp set task 0xb400007600026560
+[2026-01-16 10:22:01] [D] 0x75883397e8 socks5 tunnel: TCP connection accepted from 198.18.0.1:56764 to 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0x75883397e8 router: TCP routing decision for 198.18.0.1:56764 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb40000763002ea90 socks5 session tcp construct: pcb->local_ip=34.36.57.103, pcb->local_port=443
+[2026-01-16 10:22:01] [D] addr_from_lwip: IP 34.36.57.103:47873 (no hostname mapping)
+[2026-01-16 10:22:01] [D] 0xb40000763002ea90 socks5 construct
+[2026-01-16 10:22:01] [D] 0xb40000763002ea90 socks5 client construct
+[2026-01-16 10:22:01] [D] 0xb40000763002ea90 socks5 client tcp construct
+[2026-01-16 10:22:01] [I] 0xb40000763002ea90 socks5 client tcp -> [34.36.57.103]:443
+[2026-01-16 10:22:01] [D] 0xb40000763002ea90 socks5 session tcp construct for 198.18.0.1:56764
+[2026-01-16 10:22:01] [D] 0xb40000763002ea90 socks5 session tcp new
+[2026-01-16 10:22:01] [I] 0xb40000763002ea90 [domain-first] started 198.18.0.1:56764 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb40000763002ea90 socks5 session tcp set task 0xb400007600028160
+[2026-01-16 10:22:01] [D] 0x75883396e8 socks5 tunnel: TCP connection accepted from 198.18.0.1:56778 to 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0x75883396e8 router: TCP routing decision for 198.18.0.1:56778 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb40000763002d120 socks5 session tcp construct: pcb->local_ip=34.36.57.103, pcb->local_port=443
+[2026-01-16 10:22:01] [D] addr_from_lwip: IP 34.36.57.103:47873 (no hostname mapping)
+[2026-01-16 10:22:01] [D] 0xb40000763002d120 socks5 construct
+[2026-01-16 10:22:01] [D] 0xb40000763002d120 socks5 client construct
+[2026-01-16 10:22:01] [D] 0xb40000763002d120 socks5 client tcp construct
+[2026-01-16 10:22:01] [I] 0xb40000763002d120 socks5 client tcp -> [34.36.57.103]:443
+[2026-01-16 10:22:01] [D] 0xb40000763002d120 socks5 session tcp construct for 198.18.0.1:56778
+[2026-01-16 10:22:01] [D] 0xb40000763002d120 socks5 session tcp new
+[2026-01-16 10:22:01] [I] 0xb40000763002d120 [domain-first] started 198.18.0.1:56778 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb40000763002d120 socks5 session tcp set task 0xb40000760002dc60
+[2026-01-16 10:22:01] [D] 0x75883395e8 socks5 tunnel: TCP connection accepted from 198.18.0.1:56782 to 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0x75883395e8 router: TCP routing decision for 198.18.0.1:56782 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb400007630033490 socks5 session tcp construct: pcb->local_ip=34.36.57.103, pcb->local_port=443
+[2026-01-16 10:22:01] [D] addr_from_lwip: IP 34.36.57.103:47873 (no hostname mapping)
+[2026-01-16 10:22:01] [D] 0xb400007630033490 socks5 construct
+[2026-01-16 10:22:01] [D] 0xb400007630033490 socks5 client construct
+[2026-01-16 10:22:01] [D] 0xb400007630033490 socks5 client tcp construct
+[2026-01-16 10:22:01] [I] 0xb400007630033490 socks5 client tcp -> [34.36.57.103]:443
+[2026-01-16 10:22:01] [D] 0xb400007630033490 socks5 session tcp construct for 198.18.0.1:56782
+[2026-01-16 10:22:01] [D] 0xb400007630033490 socks5 session tcp new
+[2026-01-16 10:22:01] [I] 0xb400007630033490 [domain-first] started 198.18.0.1:56782 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb400007630033490 socks5 session tcp set task 0xb40000760002aee0
+[2026-01-16 10:22:01] [D] 0x75883394e8 socks5 tunnel: TCP connection accepted from 198.18.0.1:56786 to 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0x75883394e8 router: TCP routing decision for 198.18.0.1:56786 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb400007630030650 socks5 session tcp construct: pcb->local_ip=34.36.57.103, pcb->local_port=443
+[2026-01-16 10:22:01] [D] addr_from_lwip: IP 34.36.57.103:47873 (no hostname mapping)
+[2026-01-16 10:22:01] [D] 0xb400007630030650 socks5 construct
+[2026-01-16 10:22:01] [D] 0xb400007630030650 socks5 client construct
+[2026-01-16 10:22:01] [D] 0xb400007630030650 socks5 client tcp construct
+[2026-01-16 10:22:01] [I] 0xb400007630030650 socks5 client tcp -> [34.36.57.103]:443
+[2026-01-16 10:22:01] [D] 0xb400007630030650 socks5 session tcp construct for 198.18.0.1:56786
+[2026-01-16 10:22:01] [D] 0xb400007630030650 socks5 session tcp new
+[2026-01-16 10:22:01] [I] 0xb400007630030650 [domain-first] started 198.18.0.1:56786 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb400007630030650 socks5 session tcp set task 0xb40000760002e360
+[2026-01-16 10:22:01] [D] 0x75883393e8 socks5 tunnel: TCP connection accepted from 198.18.0.1:56790 to 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0x75883393e8 router: TCP routing decision for 198.18.0.1:56790 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb400007630033b80 socks5 session tcp construct: pcb->local_ip=34.36.57.103, pcb->local_port=443
+[2026-01-16 10:22:01] [D] addr_from_lwip: IP 34.36.57.103:47873 (no hostname mapping)
+[2026-01-16 10:22:01] [D] 0xb400007630033b80 socks5 construct
+[2026-01-16 10:22:01] [D] 0xb400007630033b80 socks5 client construct
+[2026-01-16 10:22:01] [D] 0xb400007630033b80 socks5 client tcp construct
+[2026-01-16 10:22:01] [I] 0xb400007630033b80 socks5 client tcp -> [34.36.57.103]:443
+[2026-01-16 10:22:01] [D] 0xb400007630033b80 socks5 session tcp construct for 198.18.0.1:56790
+[2026-01-16 10:22:01] [D] 0xb400007630033b80 socks5 session tcp new
+[2026-01-16 10:22:01] [I] 0xb400007630033b80 [domain-first] started 198.18.0.1:56790 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb400007630033b80 socks5 session tcp set task 0xb40000760002de20
+[2026-01-16 10:22:01] [D] 0x75883392e8 socks5 tunnel: TCP connection accepted from 198.18.0.1:56794 to 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0x75883392e8 router: TCP routing decision for 198.18.0.1:56794 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb40000763002d5c0 socks5 session tcp construct: pcb->local_ip=34.36.57.103, pcb->local_port=443
+[2026-01-16 10:22:01] [D] addr_from_lwip: IP 34.36.57.103:47873 (no hostname mapping)
+[2026-01-16 10:22:01] [D] 0xb40000763002d5c0 socks5 construct
+[2026-01-16 10:22:01] [D] 0xb40000763002d5c0 socks5 client construct
+[2026-01-16 10:22:01] [D] 0xb40000763002d5c0 socks5 client tcp construct
+[2026-01-16 10:22:01] [I] 0xb40000763002d5c0 socks5 client tcp -> [34.36.57.103]:443
+[2026-01-16 10:22:01] [D] 0xb40000763002d5c0 socks5 session tcp construct for 198.18.0.1:56794
+[2026-01-16 10:22:01] [D] 0xb40000763002d5c0 socks5 session tcp new
+[2026-01-16 10:22:01] [I] 0xb40000763002d5c0 [domain-first] started 198.18.0.1:56794 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb40000763002d5c0 socks5 session tcp set task 0xb40000760002cae0
+[2026-01-16 10:22:01] [D] 0xb40000763002bea0 socks5 session tcp: received 1036 bytes from client
+[2026-01-16 10:22:01] [D] 0xb40000763002bea0 socks5 session tcp: received 915 bytes from client
+[2026-01-16 10:22:01] [D] 0xb40000763001fa10 socks5 session tcp: received 1036 bytes from client
+[2026-01-16 10:22:01] [D] 0xb40000763001fa10 socks5 session tcp: received 915 bytes from client
+[2026-01-16 10:22:01] [D] 0x75883391e8 socks5 tunnel: TCP connection accepted from 198.18.0.1:56810 to 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0x75883391e8 router: TCP routing decision for 198.18.0.1:56810 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb400007630033dd0 socks5 session tcp construct: pcb->local_ip=34.36.57.103, pcb->local_port=443
+[2026-01-16 10:22:01] [D] addr_from_lwip: IP 34.36.57.103:47873 (no hostname mapping)
+[2026-01-16 10:22:01] [D] 0xb400007630033dd0 socks5 construct
+[2026-01-16 10:22:01] [D] 0xb400007630033dd0 socks5 client construct
+[2026-01-16 10:22:01] [D] 0xb400007630033dd0 socks5 client tcp construct
+[2026-01-16 10:22:01] [I] 0xb400007630033dd0 socks5 client tcp -> [34.36.57.103]:443
+[2026-01-16 10:22:01] [D] 0xb400007630033dd0 socks5 session tcp construct for 198.18.0.1:56810
+[2026-01-16 10:22:01] [D] 0xb400007630033dd0 socks5 session tcp new
+[2026-01-16 10:22:01] [I] 0xb400007630033dd0 [domain-first] started 198.18.0.1:56810 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [D] 0xb400007630033dd0 socks5 session tcp set task 0xb40000760002fda0
+[2026-01-16 10:22:01] [D] 0xb400007630026b60 [DIRECT] Cleaning up connection
+[2026-01-16 10:22:01] [I] 0xb400007630026b60 session: Direct connect 198.18.0.1:56458 -> 101.89.42.68:443 ended (duration=16995 ms)
+[2026-01-16 10:22:01] [D] 0xb400007630026b60 socks5 session terminate
+[2026-01-16 10:22:01] [D] 0xb400007630026b60 socks5 session tcp destruct
+[2026-01-16 10:22:01] [D] 0xb400007630026b60 socks5 client tcp destruct
+[2026-01-16 10:22:01] [D] 0xb400007630026b60 socks5 client destruct
+[2026-01-16 10:22:01] [D] 0xb400007630026b60 socks5 destruct
+[2026-01-16 10:22:01] [I] 0xb40000777001dd80 io timeout
+[2026-01-16 10:22:01] [I] 0xb4000076a0065ba0 [UDP] recv task idle timeout
+[2026-01-16 10:22:01] [D] 0xb4000076a0065ba0 [UDP] recv task end (received 0 packets, 0 bytes)
+[2026-01-16 10:22:01] [I] 0xb40000777001cee0 io timeout
+[2026-01-16 10:22:01] [I] 0xb4000076a0067880 [UDP] recv task idle timeout
+[2026-01-16 10:22:01] [D] 0xb4000076a0067880 [UDP] recv task end (received 0 packets, 0 bytes)
+[2026-01-16 10:22:01] [I] 0xb40000777001dfc0 io timeout
+[2026-01-16 10:22:01] [I] 0xb4000076a0066a80 [UDP] recv task idle timeout
+[2026-01-16 10:22:01] [D] 0xb4000076a0066a80 [UDP] recv task end (received 0 packets, 0 bytes)
+[2026-01-16 10:22:01] [I] 0xb40000777001b2c0 io timeout
+[2026-01-16 10:22:01] [I] 0xb4000076a0067260 [UDP] recv task idle timeout
+[2026-01-16 10:22:01] [D] 0xb4000076a0067260 [UDP] recv task end (received 0 packets, 0 bytes)
+[2026-01-16 10:22:01] [I] 0xb40000763002bc50 io timeout
+[2026-01-16 10:22:01] [E] 0xb40000763002bc50 socks5 client connect
+[2026-01-16 10:22:01] [E] 0xb40000763002bc50 socks5 session connect
+[2026-01-16 10:22:01] [I] 0xb40000763002bc50 [SMART-PROXY-V2] SOCKS5 fallback ended
+[2026-01-16 10:22:01] [D] 0xb40000763002bc50 socks5 session terminate
+[2026-01-16 10:22:01] [D] 0xb40000763002bc50 socks5 session tcp destruct
+[2026-01-16 10:22:01] [D] 0xb40000763002bc50 socks5 session tcp destruct: aborting pcb
+[2026-01-16 10:22:01] [D] 0xb40000763002bc50 socks5 session tcp destruct: freeing queued data
+[2026-01-16 10:22:01] [D] 0xb40000763002bc50 socks5 client tcp destruct
+[2026-01-16 10:22:01] [D] 0xb40000763002bc50 socks5 client destruct
+[2026-01-16 10:22:01] [D] 0xb40000763002bc50 socks5 destruct
+[2026-01-16 10:22:01] [I] 0xb400007630017890 io timeout
+[2026-01-16 10:22:01] [D] 0xb400007630017890 socks5 session tcp splice: yielder returned error
+[2026-01-16 10:22:01] [D] 0xb400007630017890 socks5 session tcp splice: draining remaining data
+[2026-01-16 10:22:01] [D] 0xb400007630017890 socks5 session tcp splice: completed (forward_cycles=2, backward_cycles=3)
+[2026-01-16 10:22:01] [D] 0xb400007630017890 socks5 session tcp: marked as successful (data transferred)
+[2026-01-16 10:22:01] [I] 0xb400007630017890 [SMART-PROXY-V2] SOCKS5 fallback ended
+[2026-01-16 10:22:01] [I] filter: Added IP 0.0.0.0 to blacklist (ttl=360m)
+[2026-01-16 10:22:01] [W] 0xb400007630017890 [SMART-PROXY-V2] Added IP '0.0.0.0' to blacklist
+[2026-01-16 10:22:01] [D] 0xb400007630017890 socks5 session terminate
+[2026-01-16 10:22:01] [D] 0xb400007630017890 socks5 session tcp destruct
+[2026-01-16 10:22:01] [D] 0xb400007630017890 socks5 session tcp destruct: aborting pcb
+[2026-01-16 10:22:01] [D] 0xb400007630017890 socks5 client tcp destruct
+[2026-01-16 10:22:01] [D] 0xb400007630017890 socks5 client destruct
+[2026-01-16 10:22:01] [D] 0xb400007630017890 socks5 destruct
+[2026-01-16 10:22:01] [I] 0xb400007630029500 io timeout
+[2026-01-16 10:22:01] [E] 0xb400007630029500 socks5 client read auth
+[2026-01-16 10:22:01] [E] 0xb400007630029500 socks5 session handshake
+[2026-01-16 10:22:01] [I] 0xb400007630029500 [SMART-PROXY-V2] SOCKS5 fallback ended
+[2026-01-16 10:22:01] [D] 0xb400007630029500 socks5 session terminate
+[2026-01-16 10:22:01] [D] 0xb400007630029500 socks5 session tcp destruct
+[2026-01-16 10:22:01] [D] 0xb400007630029500 socks5 session tcp destruct: aborting pcb
+[2026-01-16 10:22:01] [D] 0xb400007630029500 socks5 session tcp destruct: freeing queued data
+[2026-01-16 10:22:01] [D] 0xb400007630029500 socks5 client tcp destruct
+[2026-01-16 10:22:01] [D] 0xb400007630029500 socks5 client destruct
+[2026-01-16 10:22:01] [D] 0xb400007630029500 socks5 destruct
+[2026-01-16 10:22:01] [D] 0xb400007630027000 [SPLICE] backward received 1306 bytes (iovc=1)
+[2026-01-16 10:22:01] [I] 0xb400007630028720 io timeout
+[2026-01-16 10:22:01] [D] 0xb400007630028720 socks5 session tcp splice: yielder returned error
+[2026-01-16 10:22:01] [D] 0xb400007630028720 socks5 session tcp splice: draining remaining data
+[2026-01-16 10:22:01] [D] 0xb400007630028720 socks5 session tcp splice: completed (forward_cycles=3, backward_cycles=2)
+[2026-01-16 10:22:01] [D] 0xb400007630028720 socks5 session tcp: marked as successful (data transferred)
+[2026-01-16 10:22:01] [I] 0xb400007630028720 [SMART-PROXY-V2] SOCKS5 fallback ended
+[2026-01-16 10:22:01] [I] filter: Added IP 0.0.0.0 to blacklist (ttl=360m)
+[2026-01-16 10:22:01] [W] 0xb400007630028720 [SMART-PROXY-V2] Added IP '0.0.0.0' to blacklist
+[2026-01-16 10:22:01] [D] 0xb400007630028720 socks5 session terminate
+[2026-01-16 10:22:01] [D] 0xb400007630028720 socks5 session tcp destruct
+[2026-01-16 10:22:01] [D] 0xb400007630028720 socks5 session tcp destruct: aborting pcb
+[2026-01-16 10:22:01] [D] 0xb400007630028720 socks5 client tcp destruct
+[2026-01-16 10:22:01] [D] 0xb400007630028720 socks5 client destruct
+[2026-01-16 10:22:01] [D] 0xb400007630028720 socks5 destruct
+[2026-01-16 10:22:01] [I] 0xb400007630021cc0 io timeout
+[2026-01-16 10:22:01] [D] 0xb400007630021cc0 socks5 session tcp splice: yielder returned error
+[2026-01-16 10:22:01] [D] 0xb400007630021cc0 socks5 session tcp splice: draining remaining data
+[2026-01-16 10:22:01] [D] 0xb400007630021cc0 socks5 session tcp splice: completed (forward_cycles=3, backward_cycles=2)
+[2026-01-16 10:22:01] [D] 0xb400007630021cc0 socks5 session tcp: marked as successful (data transferred)
+[2026-01-16 10:22:01] [I] 0xb400007630021cc0 [SMART-PROXY-V2] SOCKS5 fallback ended
+[2026-01-16 10:22:01] [I] filter: Added IP 0.0.0.0 to blacklist (ttl=360m)
+[2026-01-16 10:22:01] [W] 0xb400007630021cc0 [SMART-PROXY-V2] Added IP '0.0.0.0' to blacklist
+[2026-01-16 10:22:01] [D] 0xb400007630021cc0 socks5 session terminate
+[2026-01-16 10:22:01] [D] 0xb400007630021cc0 socks5 session tcp destruct
+[2026-01-16 10:22:01] [D] 0xb400007630021cc0 socks5 session tcp destruct: aborting pcb
+[2026-01-16 10:22:01] [D] 0xb400007630021cc0 socks5 client tcp destruct
+[2026-01-16 10:22:01] [D] 0xb400007630021cc0 socks5 client destruct
+[2026-01-16 10:22:01] [D] 0xb400007630021cc0 socks5 destruct
+[2026-01-16 10:22:01] [I] 0xb400007630022160 io timeout
+[2026-01-16 10:22:01] [E] 0xb400007630022160 socks5 client connect
+[2026-01-16 10:22:01] [E] 0xb400007630022160 socks5 session connect
+[2026-01-16 10:22:01] [I] 0xb400007630022160 [SMART-PROXY-V2] SOCKS5 fallback ended
+[2026-01-16 10:22:01] [D] 0xb400007630022160 socks5 session terminate
+[2026-01-16 10:22:01] [D] 0xb400007630022160 socks5 session tcp destruct
+[2026-01-16 10:22:01] [D] 0xb400007630022160 socks5 session tcp destruct: aborting pcb
+[2026-01-16 10:22:01] [D] 0xb400007630022160 socks5 session tcp destruct: freeing queued data
+[2026-01-16 10:22:01] [D] 0xb400007630022160 socks5 client tcp destruct
+[2026-01-16 10:22:01] [D] 0xb400007630022160 socks5 client destruct
+[2026-01-16 10:22:01] [D] 0xb400007630022160 socks5 destruct
+[2026-01-16 10:22:01] [D] 0xb400007630026470 socks5 client connect server fd 139
+[2026-01-16 10:22:01] [D] 0xb400007630026470 socks5 client set auth
+[2026-01-16 10:22:01] [D] 0xb400007630026470 socks5 client auth yiguihai:ygh15177542493
+[2026-01-16 10:22:01] [D] 0xb400007630026470 socks5 client handshake standard
+[2026-01-16 10:22:01] [D] 0xb400007630026470 socks5 client write auth methods
+[2026-01-16 10:22:01] [D] 0xb400007630026470 socks5 client read auth method
+[2026-01-16 10:22:01] [D] 0xb400007630029750 socks5 client connect server fd 142
+[2026-01-16 10:22:01] [D] 0xb400007630029750 socks5 client set auth
+[2026-01-16 10:22:01] [D] 0xb400007630029750 socks5 client auth yiguihai:ygh15177542493
+[2026-01-16 10:22:01] [D] 0xb400007630029750 socks5 client handshake standard
+[2026-01-16 10:22:01] [D] 0xb400007630029750 socks5 client write auth methods
+[2026-01-16 10:22:01] [D] 0xb400007630029750 socks5 client read auth method
+[2026-01-16 10:22:01] [D] 0xb4000076300299a0 socks5 client connect server fd 144
+[2026-01-16 10:22:01] [D] 0xb4000076300299a0 socks5 client set auth
+[2026-01-16 10:22:01] [D] 0xb4000076300299a0 socks5 client auth yiguihai:ygh15177542493
+[2026-01-16 10:22:01] [D] 0xb4000076300299a0 socks5 client handshake standard
+[2026-01-16 10:22:01] [D] 0xb4000076300299a0 socks5 client write auth methods
+[2026-01-16 10:22:01] [D] 0xb4000076300299a0 socks5 client read auth method
+[2026-01-16 10:22:01] [D] 0xb40000763002ced0 socks5 client connect server fd 145
+[2026-01-16 10:22:01] [D] 0xb40000763002ced0 socks5 client set auth
+[2026-01-16 10:22:01] [D] 0xb40000763002ced0 socks5 client auth yiguihai:ygh15177542493
+[2026-01-16 10:22:01] [D] 0xb40000763002ced0 socks5 client handshake standard
+[2026-01-16 10:22:01] [D] 0xb40000763002ced0 socks5 client write auth methods
+[2026-01-16 10:22:01] [D] 0xb40000763002ced0 socks5 client read auth method
+[2026-01-16 10:22:01] [D] 0xb40000763002b0c0 [SPLICE] backward EOF, shutting down pcb write
+[2026-01-16 10:22:01] [D] 0xb40000763002b0c0 [SPLICE-B] direct backward splice task end
+[2026-01-16 10:22:01] [D] 0xb40000763002a2e0 socks5 client connect server fd 146
+[2026-01-16 10:22:01] [D] 0xb40000763002a2e0 socks5 client set auth
+[2026-01-16 10:22:01] [D] 0xb40000763002a2e0 socks5 client auth yiguihai:ygh15177542493
+[2026-01-16 10:22:01] [D] 0xb40000763002a2e0 socks5 client handshake standard
+[2026-01-16 10:22:01] [D] 0xb40000763002a2e0 socks5 client write auth methods
+[2026-01-16 10:22:01] [D] 0xb40000763002a2e0 socks5 client read auth method
+[2026-01-16 10:22:01] [D] 0xb40000763002b310 [SMART-PROXY-V2] Task run 198.18.0.1:54722 -> 34.36.57.103:443
+[2026-01-16 10:22:01] [I] 0xb40000763002b310 [SMART-PROXY-V2] Starting probe to 34.36.57.103:443 (timeout=500ms)
+[2026-01-16 10:22:01] [I] 0xb40000763002b310 [PROBE] Creating independent probe socket
+[2026-01-16 10:22:01] [D] 0xb40000763002b310 [PROBE] Connecting to target...
+[2026-01-16 10:22:02] [I] 0xb40000763002b310 [PROBE] TCP handshake successful
+[2026-01-16 10:22:02] [I] 0xb40000763002b310 [PROBE] Sending browser data (1951 bytes)...
+[2026-01-16 10:22:02] [D] [PROBE] Sent 1951 bytes (2 iovs)
+[2026-01-16 10:22:02] [I] 0xb40000763002b310 [PROBE] Sent 1951 bytes, waiting for response...
+[2026-01-16 10:22:02] [D] [PROBE] Waiting for response (timeout=500ms)...
+[2026-01-16 10:22:02] [D] socks5 tunnel: Statistics requested
+[2026-01-16 10:22:02] [D] [PROBE] Timeout waiting for response
+[2026-01-16 10:22:02] [W] 0xb40000763002b310 [PROBE] Probe failed (3) in 857ms, closing connection
+[2026-01-16 10:22:02] [I] 0xb40000763002b310 [SMART-PROXY-V2] Probe result: 3 (duration=857ms)
+[2026-01-16 10:22:02] [W] 0xb40000763002b310 [SMART-PROXY-V2] Probe timeout after 857ms, using SOCKS5
+[2026-01-16 10:22:02] [I] 0xb40000763002b310 [SMART-PROXY-V2] Falling back to SOCKS5 for 198.18.0.1:54722 -> 0.0.0.0:443
+[2026-01-16 10:22:02] [D] 0xb40000763002b310 socks5 session run
+[2026-01-16 10:22:02] [D] 0xb40000763002b310 socks5 client connect [64.69.34.166]:1080
+[2026-01-16 10:22:02] [D] 0xb40000763002b310 socks5 session tcp bind
+[2026-01-16 10:22:02] [D] 0xb40000763002a780 [SMART-PROXY-V2] Task run 198.18.0.1:54736 -> 34.36.57.103:443
+[2026-01-16 10:22:02] [I] 0xb40000763002a780 [SMART-PROXY-V2] Starting probe to 34.36.57.103:443 (timeout=500ms)
+[2026-01-16 10:22:02] [I] 0xb40000763002a780 [PROBE] Creating independent probe socket
+[2026-01-16 10:22:02] [D] 0xb40000763002a780 [PROBE] Connecting to target...
+[2026-01-16 10:22:02] [I] 0xb40000763002a780 [PROBE] TCP handshake successful
+[2026-01-16 10:22:02] [I] 0xb40000763002a780 [PROBE] Sending browser data (1951 bytes)...
+[2026-01-16 10:22:02] [D] [PROBE] Sent 1951 bytes (2 iovs)
+[2026-01-16 10:22:02] [I] 0xb40000763002a780 [PROBE] Sent 1951 bytes, waiting for response...
+[2026-01-16 10:22:02] [D] [PROBE] Waiting for response (timeout=500ms)...
+[2026-01-16 10:22:03] [D] [PROBE] Timeout waiting for response
+[2026-01-16 10:22:03] [W] 0xb40000763002a780 [PROBE] Probe failed (3) in 870ms, closing connection
+[2026-01-16 10:22:03] [I] 0xb40000763002a780 [SMART-PROXY-V2] Probe result: 3 (duration=870ms)
+[2026-01-16 10:22:03] [W] 0xb40000763002a780 [SMART-PROXY-V2] Probe timeout after 870ms, using SOCKS5
+[2026-01-16 10:22:03] [I] 0xb40000763002a780 [SMART-PROXY-V2] Falling back to SOCKS5 for 198.18.0.1:54736 -> 0.0.0.0:443
+[2026-01-16 10:22:03] [D] 0xb40000763002a780 socks5 session run
+[2026-01-16 10:22:03] [D] 0xb40000763002a780 socks5 client connect [64.69.34.166]:1080
+[2026-01-16 10:22:03] [D] 0xb40000763002a780 socks5 session tcp bind
+[2026-01-16 10:22:03] [D] 0xb40000763002c0f0 [SMART-PROXY-V2] Task run 198.18.0.1:54748 -> 34.36.57.103:443
+[2026-01-16 10:22:03] [I] 0xb40000763002c0f0 [SMART-PROXY-V2] Starting probe to 34.36.57.103:443 (timeout=500ms)
+[2026-01-16 10:22:03] [I] 0xb40000763002c0f0 [PROBE] Creating independent probe socket
+[2026-01-16 10:22:03] [D] 0xb40000763002c0f0 [PROBE] Connecting to target...
+[2026-01-16 10:22:03] [I] 0xb40000763002c0f0 [PROBE] TCP handshake successful
+[2026-01-16 10:22:03] [I] 0xb40000763002c0f0 [PROBE] Sending browser data (1951 bytes)...
+[2026-01-16 10:22:03] [D] [PROBE] Sent 1951 bytes (2 iovs)
+[2026-01-16 10:22:03] [I] 0xb40000763002c0f0 [PROBE] Sent 1951 bytes, waiting for response...
+[2026-01-16 10:22:03] [D] [PROBE] Waiting for response (timeout=500ms)...
+[2026-01-16 10:22:04] [I] [PROBE] Received 16 bytes from server
+[2026-01-16 10:22:04] [I] 0xb40000763002c0f0 [PROBE] Probe SUCCESS in 677ms, closing probe connection
+[2026-01-16 10:22:04] [I] 0xb40000763002c0f0 [SMART-PROXY-V2] Probe result: 1 (duration=677ms)
+[2026-01-16 10:22:04] [I] 0xb40000763002c0f0 [SMART-PROXY-V2] Probe SUCCESS in 677ms, establishing new direct connection
+[2026-01-16 10:22:04] [D] socks5 tunnel: Statistics requested
+[2026-01-16 10:22:04] [D] Direct connection established (fd=102)
+[2026-01-16 10:22:04] [I] 0xb40000763002c0f0 [DIRECT] Setting up splice with probe connection fd=102
+[2026-01-16 10:22:04] [I] 0xb40000763002c0f0 [DIRECT] Starting bidirectional splice
+[2026-01-16 10:22:04] [D] 0xb40000763002c0f0 [SPLICE] forward sent 1951 bytes (iovc=2)
+[2026-01-16 10:22:04] [D] 0xb4000076300274a0 [SMART-PROXY-V2] Task run 198.18.0.1:54752 -> 34.36.57.103:443
+[2026-01-16 10:22:04] [I] 0xb4000076300274a0 [SMART-PROXY-V2] Starting probe to 34.36.57.103:443 (timeout=500ms)
+[2026-01-16 10:22:04] [I] 0xb4000076300274a0 [PROBE] Creating independent probe socket
+[2026-01-16 10:22:04] [D] 0xb4000076300274a0 [PROBE] Connecting to target...
+[2026-01-16 10:22:05] [W] 0xb4000076300274a0 [PROBE] Connect timeout
+[2026-01-16 10:22:05] [I] 0xb4000076300274a0 [SMART-PROXY-V2] Probe result: 3 (duration=503ms)
+[2026-01-16 10:22:05] [W] 0xb4000076300274a0 [SMART-PROXY-V2] Probe timeout after 503ms, using SOCKS5
+[2026-01-16 10:22:05] [I] 0xb4000076300274a0 [SMART-PROXY-V2] Falling back to SOCKS5 for 198.18.0.1:54752 -> 0.0.0.0:443
+[2026-01-16 10:22:05] [D] 0xb4000076300274a0 socks5 session run
+[2026-01-16 10:22:05] [D] 0xb4000076300274a0 socks5 client connect [64.69.34.166]:1080
+[2026-01-16 10:22:05] [D] 0xb4000076300274a0 socks5 session tcp bind
+[2026-01-16 10:22:05] [D] 0xb400007630025fd0 [SMART-PROXY-V2] Task run 198.18.0.1:54768 -> 34.36.57.103:443
+[2026-01-16 10:22:05] [I] 0xb400007630025fd0 [SMART-PROXY-V2] Starting probe to 34.36.57.103:443 (timeout=500ms)
+[2026-01-16 10:22:05] [I] 0xb400007630025fd0 [PROBE] Creating independent probe socket
+[2026-01-16 10:22:05] [D] 0xb400007630025fd0 [PROBE] Connecting to target...
+[2026-01-16 10:22:05] [I] 0xb400007630025fd0 [PROBE] TCP handshake successful
+[2026-01-16 10:22:05] [I] 0xb400007630025fd0 [PROBE] Sending browser data (1951 bytes)...
+[2026-01-16 10:22:05] [D] [PROBE] Sent 1951 bytes (2 iovs)
+[2026-01-16 10:22:05] [I] 0xb400007630025fd0 [PROBE] Sent 1951 bytes, waiting for response...
+[2026-01-16 10:22:05] [D] [PROBE] Waiting for response (timeout=500ms)...
+[2026-01-16 10:22:06] [I] [PROBE] Received 16 bytes from server
+[2026-01-16 10:22:06] [I] 0xb400007630025fd0 [PROBE] Probe SUCCESS in 813ms, closing probe connection
+[2026-01-16 10:22:06] [I] 0xb400007630025fd0 [SMART-PROXY-V2] Probe result: 1 (duration=813ms)
+[2026-01-16 10:22:06] [I] 0xb400007630025fd0 [SMART-PROXY-V2] Probe SUCCESS in 813ms, establishing new direct connection
+[2026-01-16 10:22:06] [D] socks5 tunnel: Statistics requested
+[2026-01-16 10:22:06] [D] Direct connection established (fd=105)
+[2026-01-16 10:22:06] [I] 0xb400007630025fd0 [DIRECT] Setting up splice with probe connection fd=105
+[2026-01-16 10:22:06] [I] 0xb400007630025fd0 [DIRECT] Starting bidirectional splice
+[2026-01-16 10:22:06] [D] 0xb400007630025fd0 [SPLICE] forward sent 1951 bytes (iovc=2)
+[2026-01-16 10:22:06] [D] 0xb40000763002c590 [SPLICE] backward EOF, shutting down pcb write
+[2026-01-16 10:22:06] [D] 0xb40000763002c590 [SPLICE-B] direct backward splice task end
+[2026-01-16 10:22:06] [D] 0xb40000763002a090 [SPLICE] backward EOF, shutting down pcb write
+[2026-01-16 10:22:06] [D] 0xb40000763002a090 [SPLICE-B] direct backward splice task end
+[2026-01-16 10:22:06] [D] 0xb400007630028e10 [SMART-PROXY-V2] Task run 198.18.0.1:54784 -> 34.36.57.103:443
+[2026-01-16 10:22:06] [I] 0xb400007630028e10 [SMART-PROXY-V2] Starting probe to 34.36.57.103:443 (timeout=500ms)
+[2026-01-16 10:22:06] [I] 0xb400007630028e10 [PROBE] Creating independent probe socket
+[2026-01-16 10:22:06] [D] 0xb400007630028e10 [PROBE] Connecting to target...
+[2026-01-16 10:22:07] [I] 0xb400007630028e10 [PROBE] TCP handshake successful
+[2026-01-16 10:22:07] [I] 0xb400007630028e10 [PROBE] Sending browser data (1951 bytes)...
+[2026-01-16 10:22:07] [D] [PROBE] Sent 1951 bytes (2 iovs)
+[2026-01-16 10:22:07] [I] 0xb400007630028e10 [PROBE] Sent 1951 bytes, waiting for response...
+[2026-01-16 10:22:07] [D] [PROBE] Waiting for response (timeout=500ms)...
+[2026-01-16 10:22:07] [D] [PROBE] Timeout waiting for response
+[2026-01-16 10:22:07] [W] 0xb400007630028e10 [PROBE] Probe failed (3) in 910ms, closing connection
+[2026-01-16 10:22:07] [I] 0xb400007630028e10 [SMART-PROXY-V2] Probe result: 3 (duration=910ms)
+[2026-01-16 10:22:07] [W] 0xb400007630028e10 [SMART-PROXY-V2] Probe timeout after 910ms, using SOCKS5
+[2026-01-16 10:22:07] [I] 0xb400007630028e10 [SMART-PROXY-V2] Falling back to SOCKS5 for 198.18.0.1:54784 -> 0.0.0.0:443
+[2026-01-16 10:22:07] [D] 0xb400007630028e10 socks5 session run
+[2026-01-16 10:22:07] [D] 0xb400007630028e10 socks5 client connect [64.69.34.166]:1080
+[2026-01-16 10:22:07] [D] 0xb400007630028e10 socks5 session tcp bind
+[2026-01-16 10:22:07] [D] 0xb400007630027de0 [SPLICE] backward EOF, shutting down pcb write
+[2026-01-16 10:22:07] [D] 0xb400007630027de0 [SPLICE-B] direct backward splice task end
+[2026-01-16 10:22:07] [D] 0xb40000763002a9d0 [SMART-PROXY-V2] Task run 198.18.0.1:54792 -> 34.36.57.103:443
+[2026-01-16 10:22:07] [I] 0xb40000763002a9d0 [SMART-PROXY-V2] Starting probe to 34.36.57.103:443 (timeout=500ms)
+[2026-01-16 10:22:07] [I] 0xb40000763002a9d0 [PROBE] Creating independent probe socket
+[2026-01-16 10:22:07] [D] 0xb40000763002a9d0 [PROBE] Connecting to target...
+[2026-01-16 10:22:08] [I] 0xb40000763002a9d0 [PROBE] TCP handshake successful
+[2026-01-16 10:22:08] [I] 0xb40000763002a9d0 [PROBE] Sending browser data (1951 bytes)...
+[2026-01-16 10:22:08] [D] [PROBE] Sent 1951 bytes (2 iovs)
+[2026-01-16 10:22:08] [I] 0xb40000763002a9d0 [PROBE] Sent 1951 bytes, waiting for response...
+[2026-01-16 10:22:08] [D] [PROBE] Waiting for response (timeout=500ms)...
+[2026-01-16 10:22:08] [I] [PROBE] Received 16 bytes from server
+[2026-01-16 10:22:08] [I] 0xb40000763002a9d0 [PROBE] Probe SUCCESS in 781ms, closing probe connection
+[2026-01-16 10:22:08] [I] 0xb40000763002a9d0 [SMART-PROXY-V2] Probe result: 1 (duration=781ms)
+[2026-01-16 10:22:08] [I] 0xb40000763002a9d0 [SMART-PROXY-V2] Probe SUCCESS in 781ms, establishing new direct connection
+[2026-01-16 10:22:08] [D] socks5 tunnel: Statistics requested
+[2026-01-16 10:22:08] [I] jni: stopping native service with 2000 ms timeout
+[2026-01-16 10:22:08] [I] socks5 tunnel: SIGINT received, initiating shutdown
+[2026-01-16 10:22:08] [D] socks5 tunnel: writing stop signal to event_fd=94
+[2026-01-16 10:22:08] [D] socks5 tunnel: write result: 1 (errno=0)
+[2026-01-16 10:22:08] [D] Direct connection established (fd=112)
+[2026-01-16 10:22:08] [I] 0xb40000763002a9d0 [DIRECT] Setting up splice with probe connection fd=112
+[2026-01-16 10:22:08] [I] 0xb40000763002a9d0 [DIRECT] Starting bidirectional splice
+[2026-01-16 10:22:08] [D] 0xb40000763002a9d0 [DIRECT] Tunnel stopped, exiting
+[2026-01-16 10:22:08] [I] 0xb40000763002a9d0 [DIRECT] Splice ended
+[2026-01-16 10:22:08] [D] 0xb40000763002a9d0 socks5 session terminate
+[2026-01-16 10:22:08] [D] 0xb40000763002a9d0 socks5 session tcp destruct
+[2026-01-16 10:22:08] [D] 0xb40000763002a9d0 socks5 session tcp destruct: aborting pcb
+[2026-01-16 10:22:08] [D] 0xb40000763002a9d0 socks5 session tcp destruct: freeing queued data
+[2026-01-16 10:22:08] [D] 0xb40000763002a9d0 socks5 client tcp destruct
+[2026-01-16 10:22:08] [D] 0xb40000763002a9d0 socks5 client destruct
+[2026-01-16 10:22:08] [D] 0xb40000763002a9d0 socks5 destruct
+[2026-01-16 10:22:08] [D] 0xb40000763002ac20 [SMART-PROXY-V2] Task run 198.18.0.1:54800 -> 34.36.57.103:443
+[2026-01-16 10:22:08] [I] 0xb40000763002ac20 [SMART-PROXY-V2] Starting probe to 34.36.57.103:443 (timeout=500ms)
+[2026-01-16 10:22:08] [I] 0xb40000763002ac20 [PROBE] Creating independent probe socket
+[2026-01-16 10:22:08] [D] 0xb40000763002ac20 [PROBE] Connecting to target...
+[2026-01-16 10:22:09] [I] 0xb40000763002ac20 [PROBE] TCP handshake successful
+[2026-01-16 10:22:09] [I] 0xb40000763002ac20 [PROBE] Sending browser data (1951 bytes)...
+[2026-01-16 10:22:09] [D] [PROBE] Sent 1951 bytes (2 iovs)
+[2026-01-16 10:22:09] [I] 0xb40000763002ac20 [PROBE] Sent 1951 bytes, waiting for response...
+[2026-01-16 10:22:09] [D] [PROBE] Waiting for response (timeout=500ms)...
+[2026-01-16 10:22:09] [D] [PROBE] Timeout waiting for response
+[2026-01-16 10:22:09] [W] 0xb40000763002ac20 [PROBE] Probe failed (3) in 913ms, closing connection
+[2026-01-16 10:22:09] [I] 0xb40000763002ac20 [SMART-PROXY-V2] Probe result: 3 (duration=913ms)
+[2026-01-16 10:22:09] [W] 0xb40000763002ac20 [SMART-PROXY-V2] Probe timeout after 913ms, using SOCKS5
+[2026-01-16 10:22:09] [I] 0xb40000763002ac20 [SMART-PROXY-V2] Falling back to SOCKS5 for 198.18.0.1:54800 -> 0.0.0.0:443
+[2026-01-16 10:22:09] [D] 0xb40000763002ac20 socks5 session run
+[2026-01-16 10:22:09] [D] 0xb40000763002ac20 socks5 client connect [64.69.34.166]:1080
+[2026-01-16 10:22:09] [D] 0xb40000763002ac20 socks5 session tcp bind
+[2026-01-16 10:22:09] [D] 0xb400007630028bc0 [SMART-PROXY-V2] Task run 198.18.0.1:54810 -> 34.36.57.103:443
+[2026-01-16 10:22:09] [I] 0xb400007630028bc0 [SMART-PROXY-V2] Starting probe to 34.36.57.103:443 (timeout=500ms)
+[2026-01-16 10:22:09] [I] 0xb400007630028bc0 [PROBE] Creating independent probe socket
+[2026-01-16 10:22:09] [D] 0xb400007630028bc0 [PROBE] Connecting to target...
+[2026-01-16 10:22:10] [I] 0xb400007630028bc0 [PROBE] TCP handshake successful
+[2026-01-16 10:22:10] [I] 0xb400007630028bc0 [PROBE] Sending browser data (1951 bytes)...
+[2026-01-16 10:22:10] [D] [PROBE] Sent 1951 bytes (2 iovs)
+[2026-01-16 10:22:10] [I] 0xb400007630028bc0 [PROBE] Sent 1951 bytes, waiting for response...
+[2026-01-16 10:22:10] [D] [PROBE] Waiting for response (timeout=500ms)...
+[2026-01-16 10:22:10] [I] [PROBE] Received 16 bytes from server
+[2026-01-16 10:22:10] [I] 0xb400007630028bc0 [PROBE] Probe SUCCESS in 723ms, closing probe connection
+[2026-01-16 10:22:10] [I] 0xb400007630028bc0 [SMART-PROXY-V2] Probe result: 1 (duration=723ms)
+[2026-01-16 10:22:10] [I] 0xb400007630028bc0 [SMART-PROXY-V2] Probe SUCCESS in 723ms, establishing new direct connection
+[2026-01-16 10:22:10] [W] jni: native thread did not exit after 2000 ms timeout
+[2026-01-16 10:22:10] [E] jni: native thread still running after timeout - may cause issues
+[2026-01-16 10:22:10] [D] Direct connection established (fd=115)
+[2026-01-16 10:22:10] [I] 0xb400007630028bc0 [DIRECT] Setting up splice with probe connection fd=115
+[2026-01-16 10:22:10] [I] 0xb400007630028bc0 [DIRECT] Starting bidirectional splice
+[2026-01-16 10:22:10] [D] 0xb400007630028bc0 [DIRECT] Tunnel stopped, exiting
+[2026-01-16 10:22:10] [I] 0xb400007630028bc0 [DIRECT] Splice ended
+[2026-01-16 10:22:10] [D] 0xb400007630028bc0 socks5 session terminate
+[2026-01-16 10:22:10] [D] 0xb400007630028bc0 socks5 session tcp destruct
+[2026-01-16 10:22:10] [D] 0xb400007630028bc0 socks5 session tcp destruct: aborting pcb
+[2026-01-16 10:22:10] [W] socks5 tunnel write
+[2026-01-16 10:22:10] [D] 0xb400007630028bc0 socks5 session tcp destruct: freeing queued data
+[2026-01-16 10:22:10] [D] 0xb400007630028bc0 socks5 client tcp destruct
+[2026-01-16 10:22:10] [D] 0xb400007630028bc0 socks5 client destruct
+[2026-01-16 10:22:10] [D] 0xb400007630028bc0 socks5 destruct
+[2026-01-16 10:22:10] [D] 0xb40000763002ca30 [SMART-PROXY-V2] Task run 198.18.0.1:54824 -> 34.36.57.103:443
+[2026-01-16 10:22:10] [I] 0xb40000763002ca30 [SMART-PROXY-V2] Starting probe to 34.36.57.103:443 (timeout=500ms)
+[2026-01-16 10:22:10] [I] 0xb40000763002ca30 [PROBE] Creating independent probe socket
+[2026-01-16 10:22:10] [D] 0xb40000763002ca30 [PROBE] Connecting to target...
+[2026-01-16 10:22:11] [I] 0xb40000763002ca30 [PROBE] TCP handshake successful
+[2026-01-16 10:22:11] [I] 0xb40000763002ca30 [PROBE] Sending browser data (1951 bytes)...
+[2026-01-16 10:22:11] [D] [PROBE] Sent 1951 bytes (2 iovs)
+[2026-01-16 10:22:11] [I] 0xb40000763002ca30 [PROBE] Sent 1951 bytes, waiting for response...
+[2026-01-16 10:22:11] [D] [PROBE] Waiting for response (timeout=500ms)...
+[2026-01-16 10:22:12] [I] [PROBE] Received 16 bytes from server
+[2026-01-16 10:22:12] [I] 0xb40000763002ca30 [PROBE] Probe SUCCESS in 1548ms, closing probe connection
+[2026-01-16 10:22:12] [I] 0xb40000763002ca30 [SMART-PROXY-V2] Probe result: 1 (duration=1548ms)
+[2026-01-16 10:22:12] [I] 0xb40000763002ca30 [SMART-PROXY-V2] Probe SUCCESS in 1548ms, establishing new direct connection
+[2026-01-16 10:22:13] [D] Direct connection established (fd=90)
+[2026-01-16 10:22:13] [I] 0xb40000763002ca30 [DIRECT] Setting up splice with probe connection fd=90
+[2026-01-16 10:22:13] [I] 0xb40000763002ca30 [DIRECT] Starting bidirectional splice
+[2026-01-16 10:22:13] [D] 0xb40000763002ca30 [DIRECT] Tunnel stopped, exiting
+[2026-01-16 10:22:13] [I] 0xb40000763002ca30 [DIRECT] Splice ended
+[2026-01-16 10:22:13] [D] 0xb40000763002ca30 socks5 session terminate
+[2026-01-16 10:22:13] [D] 0xb40000763002ca30 socks5 session tcp destruct
+[2026-01-16 10:22:13] [D] 0xb40000763002ca30 socks5 session tcp destruct: aborting pcb
+[2026-01-16 10:22:13] [W] socks5 tunnel write
+[2026-01-16 10:22:13] [D] 0xb40000763002ca30 socks5 session tcp destruct: freeing queued data
+[2026-01-16 10:22:13] [D] 0xb40000763002ca30 socks5 client tcp destruct
+[2026-01-16 10:22:13] [D] 0xb40000763002ca30 socks5 client destruct
+[2026-01-16 10:22:13] [D] 0xb40000763002ca30 socks5 destruct
+[2026-01-16 10:22:13] [D] 0xb400007630027250 [SMART-PROXY-V2] Task run 198.18.0.1:54836 -> 34.36.57.103:443
+[2026-01-16 10:22:13] [I] 0xb400007630027250 [SMART-PROXY-V2] Starting probe to 34.36.57.103:443 (timeout=500ms)
+[2026-01-16 10:22:13] [I] 0xb400007630027250 [PROBE] Creating independent probe socket
+[2026-01-16 10:22:13] [D] 0xb400007630027250 [PROBE] Connecting to target...
+[2026-01-16 10:22:13] [I] 0xb400007630027250 [PROBE] TCP handshake successful
+[2026-01-16 10:22:13] [I] 0xb400007630027250 [PROBE] Sending browser data (1951 bytes)...
+[2026-01-16 10:22:13] [D] [PROBE] Sent 1951 bytes (2 iovs)
+[2026-01-16 10:22:13] [I] 0xb400007630027250 [PROBE] Sent 1951 bytes, waiting for response...
+[2026-01-16 10:22:13] [D] [PROBE] Waiting for response (timeout=500ms)...
+[2026-01-16 10:22:13] [I] [PROBE] Received 16 bytes from server
+[2026-01-16 10:22:13] [I] 0xb400007630027250 [PROBE] Probe SUCCESS in 686ms, closing probe connection
+[2026-01-16 10:22:13] [I] 0xb400007630027250 [SMART-PROXY-V2] Probe result: 1 (duration=686ms)
+[2026-01-16 10:22:13] [I] 0xb400007630027250 [SMART-PROXY-V2] Probe SUCCESS in 686ms, establishing new direct connection
+[2026-01-16 10:22:14] [D] Direct connection established (fd=90)
+[2026-01-16 10:22:14] [I] 0xb400007630027250 [DIRECT] Setting up splice with probe connection fd=90
+[2026-01-16 10:22:14] [I] 0xb400007630027250 [DIRECT] Starting bidirectional splice
+[2026-01-16 10:22:14] [D] 0xb400007630027250 [DIRECT] Tunnel stopped, exiting
+[2026-01-16 10:22:14] [I] 0xb400007630027250 [DIRECT] Splice ended
+[2026-01-16 10:22:14] [D] 0xb400007630027250 socks5 session terminate
+[2026-01-16 10:22:14] [D] 0xb400007630027250 socks5 session tcp destruct
+[2026-01-16 10:22:14] [D] 0xb400007630027250 socks5 session tcp destruct: aborting pcb
+[2026-01-16 10:22:14] [W] socks5 tunnel write
+[2026-01-16 10:22:14] [D] 0xb400007630027250 socks5 session tcp destruct: freeing queued data
+[2026-01-16 10:22:14] [D] 0xb400007630027250 socks5 client tcp destruct
+[2026-01-16 10:22:14] [D] 0xb400007630027250 socks5 client destruct
+[2026-01-16 10:22:14] [D] 0xb400007630027250 socks5 destruct
+[2026-01-16 10:22:14] [D] 0xb400007630029060 [SMART-PROXY-V2] Task run 198.18.0.1:54848 -> 34.36.57.103:443
+[2026-01-16 10:22:14] [I] 0xb400007630029060 [SMART-PROXY-V2] Starting probe to 34.36.57.103:443 (timeout=500ms)
+[2026-01-16 10:22:14] [I] 0xb400007630029060 [PROBE] Creating independent probe socket
+[2026-01-16 10:22:14] [D] 0xb400007630029060 [PROBE] Connecting to target...
+[2026-01-16 10:22:14] [W] 0xb400007630029060 [PROBE] Connect timeout
+[2026-01-16 10:22:14] [I] 0xb400007630029060 [SMART-PROXY-V2] Probe result: 3 (duration=508ms)
+[2026-01-16 10:22:14] [W] 0xb400007630029060 [SMART-PROXY-V2] Probe timeout after 508ms, using SOCKS5
+[2026-01-16 10:22:14] [I] 0xb400007630029060 [SMART-PROXY-V2] Falling back to SOCKS5 for 198.18.0.1:54848 -> 0.0.0.0:443
+[2026-01-16 10:22:14] [D] 0xb400007630029060 socks5 session run
+[2026-01-16 10:22:14] [D] 0xb400007630029060 socks5 client connect [64.69.34.166]:1080
+[2026-01-16 10:22:14] [D] 0xb400007630029060 socks5 session tcp bind
+[2026-01-16 10:22:14] [D] 0xb400007630031d70 [SMART-PROXY-V2] Task run 198.18.0.1:54858 -> 34.36.57.103:443
+[2026-01-16 10:22:14] [I] 0xb400007630031d70 [SMART-PROXY-V2] Starting probe to 34.36.57.103:443 (timeout=500ms)
+[2026-01-16 10:22:14] [I] 0xb400007630031d70 [PROBE] Creating independent probe socket
+[2026-01-16 10:22:14] [D] 0xb400007630031d70 [PROBE] Connecting to target...
+[2026-01-16 10:22:14] [I] 0xb400007630031d70 [PROBE] TCP handshake successful
+[2026-01-16 10:22:14] [I] 0xb400007630031d70 [PROBE] Sending browser data (1951 bytes)...
+[2026-01-16 10:22:14] [D] [PROBE] Sent 1951 bytes (2 iovs)
+[2026-01-16 10:22:14] [I] 0xb400007630031d70 [PROBE] Sent 1951 bytes, waiting for response...
+[2026-01-16 10:22:14] [D] [PROBE] Waiting for response (timeout=500ms)...
+[2026-01-16 10:22:15] [I] [PROBE] Received 16 bytes from server
+[2026-01-16 10:22:15] [I] 0xb400007630031d70 [PROBE] Probe SUCCESS in 791ms, closing probe connection
+[2026-01-16 10:22:15] [I] 0xb400007630031d70 [SMART-PROXY-V2] Probe result: 1 (duration=791ms)
+[2026-01-16 10:22:15] [I] 0xb400007630031d70 [SMART-PROXY-V2] Probe SUCCESS in 791ms, establishing new direct connection
+[2026-01-16 10:22:15] [D] Direct connection established (fd=115)
+[2026-01-16 10:22:15] [I] 0xb400007630031d70 [DIRECT] Setting up splice with probe connection fd=115
+[2026-01-16 10:22:15] [I] 0xb400007630031d70 [DIRECT] Starting bidirectional splice
+[2026-01-16 10:22:15] [D] 0xb400007630031d70 [DIRECT] Tunnel stopped, exiting
+[2026-01-16 10:22:15] [I] 0xb400007630031d70 [DIRECT] Splice ended
+[2026-01-16 10:22:15] [D] 0xb400007630031d70 socks5 session terminate
+[2026-01-16 10:22:15] [D] 0xb400007630031d70 socks5 session tcp destruct
+[2026-01-16 10:22:15] [D] 0xb400007630031d70 socks5 session tcp destruct: aborting pcb
+[2026-01-16 10:22:15] [D] 0xb400007630031d70 socks5 session tcp destruct: freeing queued data
+[2026-01-16 10:22:15] [D] 0xb400007630031d70 socks5 client tcp destruct
+[2026-01-16 10:22:15] [D] 0xb400007630031d70 socks5 client destruct
+[2026-01-16 10:22:15] [D] 0xb400007630031d70 socks5 destruct
+[2026-01-16 10:22:15] [D] 0xb400007630034020 [SMART-PROXY-V2] Task run 198.18.0.1:54862 -> 34.36.57.103:443
+[2026-01-16 10:22:15] [I] 0xb400007630034020 [SMART-PROXY-V2] Starting probe to 34.36.57.103:443 (timeout=500ms)
+[2026-01-16 10:22:15] [I] 0xb400007630034020 [PROBE] Creating independent probe socket
+[2026-01-16 10:22:15] [D] 0xb400007630034020 [PROBE] Connecting to target...
+[2026-01-16 10:22:16] [I] 0xb400007630034020 [PROBE] TCP handshake successful
+[2026-01-16 10:22:16] [I] 0xb400007630034020 [PROBE] Sending browser data (1951 bytes)...
+[2026-01-16 10:22:16] [D] [PROBE] Sent 1951 bytes (2 iovs)
+[2026-01-16 10:22:16] [I] 0xb400007630034020 [PROBE] Sent 1951 bytes, waiting for response...
+[2026-01-16 10:22:16] [D] [PROBE] Waiting for response (timeout=500ms)...
+[2026-01-16 10:30:24] [D] [PROBE] Socket error event: error=103 (Software caused connection abort)
+[2026-01-16 10:30:24] [W] 0xb400007630034020 [PROBE] Probe failed (2) in 488223ms, closing connection
+[2026-01-16 10:30:24] [I] 0xb400007630034020 [SMART-PROXY-V2] Probe result: 2 (duration=488223ms)
+[2026-01-16 10:30:24] [W] 0xb400007630034020 [SMART-PROXY-V2] Probe received RST in 488223ms (GFW blocked), using SOCKS5
+[2026-01-16 10:30:24] [I] 0xb400007630034020 [SMART-PROXY-V2] Falling back to SOCKS5 for 198.18.0.1:54862 -> 0.0.0.0:443
+[2026-01-16 10:30:24] [D] 0xb400007630034020 socks5 session run
+[2026-01-16 10:30:24] [D] 0xb400007630034020 socks5 client connect [64.69.34.166]:1080
+[2026-01-16 10:30:24] [D] 0xb400007630034020 socks5 session tcp bind
+[2026-01-16 10:30:24] [D] 0x758833b3e8 filter: ClientHello detected (version=0x0301, len=1942)
+[2026-01-16 10:30:24] [D] 0x758833b3e8 filter: Parsing extensions (len=1765)
+[2026-01-16 10:30:24] [D] 0x758833b3e8 filter: Found SNI extension
+[2026-01-16 10:30:24] [D] 0x758833b3e8 filter: Found ALPN extension
+[2026-01-16 10:30:24] [I] 0x758833b3e8 filter: Detected TLS hostname: statsig.anthropic.com
+[2026-01-16 10:30:24] [I] 0xb40000763002da60 [DOMAIN-FIRST] Detected hostname: statsig.anthropic.com (target: 34.36.57.103:443)
+[2026-01-16 10:30:24] [D] 0xb40000763002da60 [DOMAIN-FIRST] Foreign IP -> SOCKS5
+[2026-01-16 10:30:24] [D] 0xb40000763002da60 [DOMAIN-FIRST] Preserving 1951 bytes of queued data for next session
+[2026-01-16 10:30:24] [I] 0xb40000763002da60 [DOMAIN-FIRST] Route: Smart Proxy (probe mode)
+[2026-01-16 10:30:24] [D] 0xb400007630031d70 socks5 session tcp construct: pcb->local_ip=34.36.57.103, pcb->local_port=443
+[2026-01-16 10:30:24] [D] addr_from_lwip: IP 34.36.57.103:47873 (no hostname mapping)
+[2026-01-16 10:30:24] [D] 0xb400007630031d70 socks5 construct
+[2026-01-16 10:30:24] [D] 0xb400007630031d70 socks5 client construct
+[2026-01-16 10:30:24] [D] 0xb400007630031d70 socks5 client tcp construct
+[2026-01-16 10:30:24] [I] 0xb400007630031d70 socks5 client tcp -> [34.36.57.103]:443
+[2026-01-16 10:30:24] [D] 0xb400007630031d70 socks5 session tcp construct for 198.18.0.1:54882
+[2026-01-16 10:30:24] [D] 0xb400007630031d70 socks5 session tcp new
+[2026-01-16 10:30:24] [D] 0xb400007630031d70 [smart-proxy] Transferred hostname 'statsig.anthropic.com' to new session
+[2026-01-16 10:30:24] [I] 0xb400007630031d70 [smart-proxy] started 198.18.0.1:54882 -> 34.36.57.103:443
+[2026-01-16 10:30:24] [D] 0xb400007630031d70 socks5 session tcp set task 0xb40000760002a7e0
+[2026-01-16 10:30:24] [D] 0xb40000763002da60 socks5 session tcp destruct
+[2026-01-16 10:30:24] [D] 0xb40000763002da60 socks5 client tcp destruct
+[2026-01-16 10:30:24] [D] 0xb40000763002da60 socks5 client destruct
+[2026-01-16 10:30:24] [D] 0xb40000763002da60 socks5 destruct
+[2026-01-16 10:30:24] [D] 0xb40000763002f870 [SMART-PROXY-V2] Task run 198.18.0.1:54870 -> 34.36.57.103:443
+[2026-01-16 10:30:24] [I] 0xb40000763002f870 [SMART-PROXY-V2] Starting probe to 34.36.57.103:443 (timeout=500ms)
+[2026-01-16 10:30:24] [I] 0xb40000763002f870 [PROBE] Creating independent probe socket
+[2026-01-16 10:30:24] [D] 0xb40000763002f870 [PROBE] Connecting to target...
+[2026-01-16 10:30:24] [I] 0xb40000763002f870 [PROBE] TCP handshake successful
+[2026-01-16 10:30:24] [I] 0xb40000763002f870 [PROBE] Sending browser data (1951 bytes)...
+[2026-01-16 10:30:24] [D] [PROBE] Sent 1951 bytes (2 iovs)
+[2026-01-16 10:30:24] [I] 0xb40000763002f870 [PROBE] Sent 1951 bytes, waiting for response...
+[2026-01-16 10:30:24] [D] [PROBE] Waiting for response (timeout=500ms)...
+[2026-01-16 10:30:24] [I] [PROBE] Received 16 bytes from server
+[2026-01-16 10:30:24] [I] 0xb40000763002f870 [PROBE] Probe SUCCESS in 769ms, closing probe connection
+[2026-01-16 10:30:24] [I] 0xb40000763002f870 [SMART-PROXY-V2] Probe result: 1 (duration=769ms)
+[2026-01-16 10:30:24] [I] 0xb40000763002f870 [SMART-PROXY-V2] Probe SUCCESS in 769ms, establishing new direct connection
+
+========== End of Logs ==========

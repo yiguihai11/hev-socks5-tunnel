@@ -284,25 +284,6 @@ hev_socks5_session_udp_bind (HevSocks5 *self, int fd,
     return 0;
 }
 
-static uint16_t
-hev_socks5_addr_get_port (const HevSocks5Addr *addr)
-{
-    uint16_t port = 0;
-
-    switch (addr->atype) {
-    case HEV_SOCKS5_ADDR_TYPE_IPV4:
-        port = addr->ipv4.port;
-        break;
-    case HEV_SOCKS5_ADDR_TYPE_IPV6:
-        port = addr->ipv6.port;
-        break;
-    case HEV_SOCKS5_ADDR_TYPE_NAME:
-        memcpy (&port, addr->domain.addr + addr->domain.len, 2);
-    }
-
-    return port;
-}
-
 static int
 hev_socks5_session_udp_set_upstream_addr (HevSocks5Client *base,
                                           HevSocks5Addr *addr)
