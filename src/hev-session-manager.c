@@ -941,7 +941,7 @@ run_smart_proxy_task (void *data)
     /* Save target IP and port for fallback (pcb may be freed later) */
     LOG_D ("%p [SMART-PROXY-V2] Before copy: pcb->local_ip=%s", self,
            ipaddr_ntoa (&pcb->local_ip));
-    ip_addr_copy (pcb->local_ip, dst_ip_copy);
+    ip_addr_copy (dst_ip_copy, pcb->local_ip);
     dst_port_copy = pcb->local_port;
     LOG_D ("%p [SMART-PROXY-V2] After copy: dst_ip_copy=%s", self,
            ipaddr_ntoa (&dst_ip_copy));
@@ -1321,6 +1321,24 @@ probe_target_connection (HevSocks5SessionTCP *self, struct sockaddr *saddr,
 
     /* Connect to target */
     LOG_D ("%p [PROBE] Connecting to target...", self);
+
+    /* Debug: print the address we're connecting to */
+    if (saddr->sa_family == AF_INET6) {
+        struct sockaddr_in6 *sa6 = (struct sockaddr_in6 *)saddr;
+        char addr_str[INET6_ADDRSTRLEN];
+        inet_ntop (AF_INET6, &sa6->sin6_addr, addr_str, sizeof (addr_str));
+        LOG_D ("%p [PROBE] Connecting to [%s]:%d (IPv6 socket, addrlen=%d)", self,
+               addr_str, ntohs (sa6->sin6_port), saddr_len);
+    } else if (saddr->sa_family == AF_INET) {
+        struct sockaddr_in *sa4 = (struct sockaddr_in *)saddr;
+        char addr_str[INET_ADDRSTRLEN];
+        inet_ntop (AF_INET, &sa4->sin_addr, addr_str, sizeof (addr_str));
+        LOG_D ("%p [PROBE] Connecting to %s:%d (IPv4 socket, addrlen=%d)", self,
+               addr_str, ntohs (sa4->sin_port), saddr_len);
+    } else {
+        LOG_D ("%p [PROBE] Unknown address family: %d", self, saddr->sa_family);
+    }
+
     ret = connect (probe_fd, saddr, saddr_len);
 
     if (ret < 0 && errno != EINPROGRESS) {
