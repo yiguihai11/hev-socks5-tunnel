@@ -35,6 +35,7 @@
 #include <hev-socks5-client-udp.h>
 
 #include "hev-config.h"
+#include "hev-utils.h"
 #include "hev-logger.h"
 #include "hev-compiler.h"
 #include "hev-socks5-session.h"
@@ -79,23 +80,8 @@ static void tcp_splice_task_b (void *data);
 
 /* ============================================================================
    High-Precision Time Functions
+   Note: get_current_time_ms and get_current_time_seconds are now in hev-utils.c
    ============================================================================ */
-
-static time_t
-get_current_time_ms (void)
-{
-    struct timeval tv;
-    gettimeofday (&tv, NULL);
-    return (time_t)tv.tv_sec * 1000 + tv.tv_usec / 1000;
-}
-
-static time_t
-get_current_time_seconds (void)
-{
-    struct timeval tv;
-    gettimeofday (&tv, NULL);
-    return tv.tv_sec;
-}
 
 /* High-precision timeout check for smart proxy (placeholder for future use) */
 /* static int check_smart_proxy_timeout_ms (time_t start_time_ms, int timeout_ms); */

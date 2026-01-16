@@ -12,6 +12,7 @@
 #include "hev-logger.h"
 #include "hev-config.h"
 #include "hev-socks5-client.h"
+#include "hev-utils.h"
 
 #include "hev-socks5-session.h"
 

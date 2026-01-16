@@ -12,6 +12,7 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/resource.h>
+#include <sys/time.h>
 
 #if defined(__APPLE__)
 #include <Availability.h>
@@ -130,4 +131,20 @@ hev_socks5_addr_into_lwip (const HevSocks5Addr *addr, ip_addr_t *ip,
     default:
         return -1;
     }
+}
+
+time_t
+get_current_time_ms (void)
+{
+    struct timeval tv;
+    gettimeofday (&tv, NULL);
+    return (time_t)tv.tv_sec * 1000 + tv.tv_usec / 1000;
+}
+
+time_t
+get_current_time_seconds (void)
+{
+    struct timeval tv;
+    gettimeofday (&tv, NULL);
+    return tv.tv_sec;
 }
