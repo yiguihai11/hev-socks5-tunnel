@@ -1327,8 +1327,8 @@ probe_target_connection (HevSocks5SessionTCP *self, struct sockaddr *saddr,
         struct sockaddr_in6 *sa6 = (struct sockaddr_in6 *)saddr;
         char addr_str[INET6_ADDRSTRLEN];
         inet_ntop (AF_INET6, &sa6->sin6_addr, addr_str, sizeof (addr_str));
-        LOG_D ("%p [PROBE] Connecting to [%s]:%d (IPv6 socket, addrlen=%d)", self,
-               addr_str, ntohs (sa6->sin6_port), saddr_len);
+        LOG_D ("%p [PROBE] Connecting to [%s]:%d (IPv6 socket, addrlen=%d)",
+               self, addr_str, ntohs (sa6->sin6_port), saddr_len);
     } else if (saddr->sa_family == AF_INET) {
         struct sockaddr_in *sa4 = (struct sockaddr_in *)saddr;
         char addr_str[INET_ADDRSTRLEN];
