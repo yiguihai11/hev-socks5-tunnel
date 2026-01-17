@@ -1723,7 +1723,8 @@ direct_udp_recv_task (void *data)
 
     session->alive |= UDP_ALIVE_RECV;
 
-    while ((session->alive & UDP_ALIVE_RECV) && hev_socks5_tunnel_is_running ()) {
+    while ((session->alive & UDP_ALIVE_RECV) &&
+           hev_socks5_tunnel_is_running ()) {
         addr_len = sizeof (remote_addr);
 
         hev_socks5_set_timeout (s5,

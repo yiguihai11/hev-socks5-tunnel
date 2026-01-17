@@ -645,7 +645,8 @@ hev_dns_cache_fini (void)
      * 手动释放会导致 double free 错误 */
     for (int shard = 0; shard < DNS_CACHE_SHARD_COUNT; shard++) {
         /* 清理属于这个分片的哈希桶 */
-        for (int i = shard; i < DNS_CACHE_HASH_SIZE; i += DNS_CACHE_SHARD_COUNT) {
+        for (int i = shard; i < DNS_CACHE_HASH_SIZE;
+             i += DNS_CACHE_SHARD_COUNT) {
             dns_cache_table[i] = NULL;
         }
     }
