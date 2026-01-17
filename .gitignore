@@ -4,3 +4,4 @@ HevSocks5Tunnel.xcframework
 obj
 libs
 tunnel.log
+*.log
