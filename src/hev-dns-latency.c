@@ -1073,8 +1073,8 @@ hev_dns_latency_test_concurrent (const ip_addr_t *ips, int ip_count,
     int total_wait_ms = 0;
     int max_wait_ms = ctx.timeout_ms + 2000; /* 额外2秒缓冲时间 */
 
-    while (ctx.winner_index < 0 && ctx.completed_count < ctx.ip_count
-           && total_wait_ms < max_wait_ms) {
+    while (ctx.winner_index < 0 && ctx.completed_count < ctx.ip_count &&
+           total_wait_ms < max_wait_ms) {
         hev_task_mutex_lock (&ctx.mutex);
 
         /* 检查超时 */
