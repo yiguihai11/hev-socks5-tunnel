@@ -640,7 +640,7 @@ hev_dns_cache_fini (void)
     /* 等待清理任务完全退出（简单忙等待）*/
     volatile int wait_count = 0;
     while (cache_cleaner_started && wait_count < 1000000) {
-        hev_task_yield ();
+        hev_task_yield (HEV_TASK_YIELD);
         wait_count++;
     }
 
