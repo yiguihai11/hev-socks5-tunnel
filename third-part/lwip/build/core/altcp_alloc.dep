@@ -1,0 +1,5 @@
+build/core/altcp_alloc.o: src/core/altcp_alloc.c src/include/lwip/opt.h \
+ src/ports/include/lwipopts.h src/ports/include/lwipopts.h \
+ src/include/lwip/debug.h src/include/lwip/arch.h \
+ src/ports/include/arch/cc.h \
+ src/ports/include/arch/../../unix/include/cc.h

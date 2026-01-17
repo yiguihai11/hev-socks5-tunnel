@@ -1,0 +1,1 @@
+build/dumper.o: src/dumper.c src/yaml_private.h src/yaml.h

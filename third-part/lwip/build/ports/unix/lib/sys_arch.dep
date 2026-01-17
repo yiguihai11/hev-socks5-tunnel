@@ -1,0 +1,9 @@
+build/ports/unix/lib/sys_arch.o: src/ports/unix/lib/sys_arch.c \
+ src/include/lwip/debug.h src/include/lwip/arch.h \
+ src/ports/include/arch/cc.h \
+ src/ports/include/arch/../../unix/include/cc.h src/include/lwip/opt.h \
+ src/ports/include/lwipopts.h src/ports/include/lwipopts.h \
+ src/include/lwip/def.h src/include/lwip/sys.h src/include/lwip/stats.h \
+ src/include/lwip/mem.h src/include/lwip/memp.h \
+ src/include/lwip/priv/memp_std.h src/include/lwip/priv/memp_priv.h \
+ src/include/lwip/priv/mem_priv.h src/include/lwip/tcpip.h

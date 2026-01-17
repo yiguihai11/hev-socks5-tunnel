@@ -1,0 +1,3 @@
+build/ports/unix/netif/list.o: src/ports/unix/netif/list.c \
+ src/ports/include/netif/list.h \
+ src/ports/include/netif/../../unix/include/netif/list.h

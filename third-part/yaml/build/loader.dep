@@ -1,0 +1,1 @@
+build/loader.o: src/loader.c src/yaml_private.h src/yaml.h

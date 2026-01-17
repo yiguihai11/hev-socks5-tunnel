@@ -1,0 +1,1 @@
+build/writer.o: src/writer.c src/yaml_private.h src/yaml.h
