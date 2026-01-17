@@ -29,6 +29,7 @@
 #include "hev-utils.h"
 #include "hev-dns-cache.h"
 #include "hev-test.h"
+#include "hev-socks5-tunnel.h"
 #include <hev-socks5-misc.h>
 
 /* DNS 缓存分片锁配置 */
@@ -482,7 +483,7 @@ dns_cache_cleaner_task (void *data)
 {
     LOG_I ("dns-cache: Cache cleaner task started");
 
-    while (cache_cleaner_running) {
+    while (cache_cleaner_running && hev_socks5_tunnel_is_running ()) {
         /* 清理过期条目 */
         size_t cleaned = hev_dns_cache_clean_expired ();
 
@@ -631,34 +632,25 @@ hev_dns_cache_fini (void)
 {
     /* 停止清理任务 */
     cache_cleaner_running = 0;
-    LOG_D ("dns-cache: Cache cleaner task stopping...");
 
-    /* 遍历所有分片，清理每个分片的哈希表 */
-    for (int shard = 0; shard < DNS_CACHE_SHARD_COUNT; shard++) {
-        hev_task_mutex_lock (&dns_cache_shards[shard]);
-
-        /* 清理属于这个分片的哈希桶 */
-        for (int i = shard; i < DNS_CACHE_HASH_SIZE;
-             i += DNS_CACHE_SHARD_COUNT) {
-            HevDNSCacheEntry *entry = dns_cache_table[i];
-            while (entry) {
-                HevDNSCacheEntry *next = entry->next;
-                if (entry->response_data)
-                    hev_free (entry->response_data);
-                /* 将条目归还到对象池，而非直接释放 */
-                if (dns_entry_pool)
-                    hev_object_pool_put (dns_entry_pool, entry);
-                else
-                    hev_free (entry);
-                entry = next;
-            }
-            dns_cache_table[i] = NULL;
-        }
-
-        hev_task_mutex_unlock (&dns_cache_shards[shard]);
+    /* 等待清理任务完全退出（简单忙等待）*/
+    volatile int wait_count = 0;
+    while (cache_cleaner_started && wait_count < 100000) {
+        __asm__ __volatile__ ("pause");
+        wait_count++;
     }
 
-    /* 最后销毁对象池（会释放池中所有对象） */
+    /* 清理哈希表：只清空指针，不释放条目
+     * 条目是从对象池分配的，对象池销毁时会统一处理所有条目
+     * 手动释放会导致 double free 错误 */
+    for (int shard = 0; shard < DNS_CACHE_SHARD_COUNT; shard++) {
+        /* 清理属于这个分片的哈希桶 */
+        for (int i = shard; i < DNS_CACHE_HASH_SIZE; i += DNS_CACHE_SHARD_COUNT) {
+            dns_cache_table[i] = NULL;
+        }
+    }
+
+    /* 销毁对象池（会释放所有池中的条目） */
     if (dns_entry_pool) {
         hev_object_pool_destroy (dns_entry_pool);
         dns_entry_pool = NULL;
@@ -671,9 +663,6 @@ hev_dns_cache_fini (void)
 
     /* 重置初始化标志 */
     dns_cache_initialized = 0;
-
-    LOG_I ("dns-cache: DNS cache module finalized (cleared %zu entries)",
-           total_cache_entries);
 }
 
 int
@@ -1096,7 +1085,6 @@ hev_dns_cache_check_only (struct udp_pcb *pcb, struct pbuf *p,
         if (response) {
             memcpy (response->payload, cached_response, cached_len);
 
-            /* 调试日志：显示PCB状态和发送目标 */
             char local_str[INET6_ADDRSTRLEN], dst_str[INET6_ADDRSTRLEN],
                 src_str[INET6_ADDRSTRLEN];
             ipaddr_ntoa_r (&pcb->local_ip, local_str, sizeof (local_str));

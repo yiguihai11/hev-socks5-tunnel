@@ -63,7 +63,6 @@ hev_socks5_tunnel_main_inner (int tun_fd)
     if (res < 0)
         return -2;
 
-    // 添加测试日志确认日志系统工作
     LOG_I ("hev-socks5-tunnel starting, log_level=%d, log_file=%s", log_level,
            log_file);
 
@@ -209,12 +208,6 @@ hev_socks5_tunnel_main_from_str (const unsigned char *config_str,
 int
 hev_socks5_tunnel_main (const char *config_path, int tun_fd)
 {
-    // 添加调试日志确认主函数被调用
-    printf (
-        "DEBUG: hev_socks5_tunnel_main called with config_path=%s, tun_fd=%d\n",
-        config_path ? config_path : "NULL", tun_fd);
-    fflush (stdout);
-
     return hev_socks5_tunnel_main_from_file (config_path, tun_fd);
 }
 

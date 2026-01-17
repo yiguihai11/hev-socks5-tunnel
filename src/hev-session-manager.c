@@ -1723,7 +1723,7 @@ direct_udp_recv_task (void *data)
 
     session->alive |= UDP_ALIVE_RECV;
 
-    while (session->alive & UDP_ALIVE_RECV) {
+    while ((session->alive & UDP_ALIVE_RECV) && hev_socks5_tunnel_is_running ()) {
         addr_len = sizeof (remote_addr);
 
         hev_socks5_set_timeout (s5,
@@ -1731,6 +1731,12 @@ direct_udp_recv_task (void *data)
         ssize_t received = hev_task_io_socket_recvfrom (
             fd, buffer, sizeof (buffer), 0, (struct sockaddr *)&remote_addr,
             &addr_len, hev_socks5_task_io_yielder, s5);
+
+        /* 检查是否应该在 recvfrom 返回后退出 */
+        if (!hev_socks5_tunnel_is_running ()) {
+            LOG_D ("%p [UDP] recv task exiting due to shutdown", session);
+            break;
+        }
 
         if (received <= 0) {
             LOG_I ("%p [UDP] recv task idle timeout", session);
@@ -1980,6 +1986,12 @@ run_direct_udp_task (void *data)
            src_ip, session->src_port, dst_ip, session->dest_port);
 
     for (;;) {
+        /* 检查是否应该退出 */
+        if (!hev_socks5_tunnel_is_running ()) {
+            LOG_D ("%p [UDP] send task exiting due to shutdown", session);
+            break;
+        }
+
         HevListNode *node = hev_list_first (&session->packet_queue);
         if (!node) {
             if (!(session->alive & UDP_ALIVE_SEND)) {

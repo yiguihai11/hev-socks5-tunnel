@@ -12,6 +12,8 @@ import argparse
 # ---------------------- 全局配置（可根据实际环境调整） ----------------------
 # 隧道进程全局变量：供终止函数访问
 tunnel_process = None
+tunnel_log_file = None
+tunnel_log_path = None
 # 核心配置项（根据实际路径/网卡修改）
 TUNNEL_EXE_REL_PATH = "bin/hev-socks5-tunnel"  # 隧道程序相对脚本的路径
 TUNNEL_CONF_REL_PATH = "conf/main.yml"          # 隧道配置文件相对路径
@@ -64,6 +66,26 @@ def auto_terminate_tunnel():
     if tunnel_process.poll() is not None:
         print(f"✅ 成功：隧道被 SIGINT(2) 终止（退出码：{tunnel_process.returncode}）")
         return
+
+    # SIGINT 失败，读取日志查看卡在哪里
+    print(f"⚠️  SIGINT(2) 超时未响应，读取日志查看原因...")
+    global tunnel_log_path
+    if tunnel_log_path and os.path.exists(tunnel_log_path):
+        try:
+            with open(tunnel_log_path, 'r', encoding='utf-8', errors='replace') as f:
+                lines = f.readlines()
+                # 显示最后 50 行日志
+                tail_lines = lines[-50:] if len(lines) > 50 else lines
+                print(f"\n{'='*60}")
+                print(f"隧道日志（最后 {len(tail_lines)} 行）：")
+                print(f"{'='*60}")
+                for line in tail_lines:
+                    print(line.rstrip())
+                print(f"{'='*60}\n")
+        except Exception as e:
+            print(f"❌ 读取日志失败：{e}")
+    else:
+        print(f"⚠️  日志文件不存在：{tunnel_log_path}")
 
     # 第二步：发送SIGTERM（信号15）（第一步失败后重试）
     print(f"2. SIGINT(2) 失败，发送 SIGTERM(15) → 隧道（优雅终止）...")
@@ -331,12 +353,11 @@ def test_tcp_servers(iface=None):
 
 # ---------------------- 主逻辑（启动隧道→执行测试→终止隧道） ----------------------
 def run_test_workflow(iface=DEFAULT_IFACE, start_tunnel=True):
-    global tunnel_process
+    global tunnel_process, tunnel_log_file, tunnel_log_path
     # 获取脚本所在目录（确保隧道程序路径正确，不受运行目录影响）
     script_dir = os.path.dirname(os.path.abspath(__file__))
     tunnel_exe = os.path.join(script_dir, TUNNEL_EXE_REL_PATH)
     tunnel_conf = os.path.join(script_dir, TUNNEL_CONF_REL_PATH)
-    tunnel_log_file = None
 
     try:
         # 第一步：启动隧道（仅当参数允许且程序存在）
@@ -346,8 +367,8 @@ def run_test_workflow(iface=DEFAULT_IFACE, start_tunnel=True):
                 raise FileNotFoundError(f"隧道程序不存在：{tunnel_exe}（请检查TUNNEL_EXE_REL_PATH配置）")
             # 启动隧道进程（日志输出到文件避免PIPE阻塞）
             print(f"=== 启动 hev-socks5-tunnel（配置：{tunnel_conf}）===")
-            log_file_path = os.path.join(script_dir, "tunnel.log")
-            tunnel_log_file = open(log_file_path, "w")
+            tunnel_log_path = os.path.join(script_dir, "tunnel.log")
+            tunnel_log_file = open(tunnel_log_path, "w")
             tunnel_process = subprocess.Popen(
                 args=[tunnel_exe, tunnel_conf],
                 stdout=tunnel_log_file,
@@ -417,7 +438,7 @@ def run_test_workflow(iface=DEFAULT_IFACE, start_tunnel=True):
         # 读取并打印隧道运行日志（若有）
         if start_tunnel and tunnel_process:
             try:
-                with open(log_file_path, "r") as f:
+                with open(tunnel_log_path, "r") as f:
                     tunnel_log = f.read()
                 if tunnel_log:
                     print(f"\n=== 隧道运行日志 ===")
