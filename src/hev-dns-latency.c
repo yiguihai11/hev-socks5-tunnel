@@ -891,13 +891,6 @@ single_ip_test_task (void *data)
     hev_task_mutex_unlock (&ctx->mutex);
 
     if (!has_winner && !is_timeout) {
-        /* 检查tunnel是否还在运行 */
-        if (!hev_socks5_tunnel_is_running ()) {
-            LOG_D ("dns-latency: [%d] Tunnel shutting down, skipping TCP443",
-                   ip_index);
-            goto done;
-        }
-
         int64_t remaining_ms =
             ctx->timeout_ms - (get_time_ms () - ctx->start_time_ms);
         if (remaining_ms > 0) {
@@ -937,13 +930,6 @@ single_ip_test_task (void *data)
     hev_task_mutex_unlock (&ctx->mutex);
 
     if (!has_winner && !is_timeout) {
-        /* 检查tunnel是否还在运行 */
-        if (!hev_socks5_tunnel_is_running ()) {
-            LOG_D ("dns-latency: [%d] Tunnel shutting down, skipping TCP80",
-                   ip_index);
-            goto done;
-        }
-
         int64_t remaining_ms =
             ctx->timeout_ms - (get_time_ms () - ctx->start_time_ms);
         if (remaining_ms > 0) {
@@ -982,13 +968,6 @@ single_ip_test_task (void *data)
     hev_task_mutex_unlock (&ctx->mutex);
 
     if (!has_winner && !is_timeout) {
-        /* 检查tunnel是否还在运行 */
-        if (!hev_socks5_tunnel_is_running ()) {
-            LOG_D ("dns-latency: [%d] Tunnel shutting down, skipping ICMP",
-                   ip_index);
-            goto done;
-        }
-
         int64_t remaining_ms =
             ctx->timeout_ms - (get_time_ms () - ctx->start_time_ms);
         if (remaining_ms > 0) {
