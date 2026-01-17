@@ -153,14 +153,15 @@ hev_socks5_tunnel_main_inner (int tun_fd)
     // DNS 延迟模块创建了异步任务,需要等待这些任务完成
     hev_dns_latency_fini ();
 
-    // 4. 清理任务系统 (在 dns_latency_fini 之后)
-    hev_task_system_fini ();
-
-    // 5. 清理流量路由器 (依赖 filter)
+    // 4. 清理流量路由器 (包括 DNS 缓存，必须在 task_system_fini 之前!)
+    // DNS 缓存清理任务需要任务系统仍然运行
     hev_traffic_router_fini ();
 
-    // 6. 清理过滤器 (最早加载数据的组件)
+    // 5. 清理过滤器 (使用 task mutex，必须在 task_system_fini 之前!)
     hev_filter_fini ();
+
+    // 6. 清理任务系统 (在所有使用任务的模块清理之后)
+    hev_task_system_fini ();
 
     // 7. 清理日志系统
     hev_socks5_logger_fini ();

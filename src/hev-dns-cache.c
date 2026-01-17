@@ -633,11 +633,19 @@ hev_dns_cache_fini (void)
     /* 停止清理任务 */
     cache_cleaner_running = 0;
 
+    /* 先将对象池设置为 NULL，防止清理任务继续使用 */
+    HevObjectPool *pool_to_destroy = dns_entry_pool;
+    dns_entry_pool = NULL;
+
     /* 等待清理任务完全退出（简单忙等待）*/
     volatile int wait_count = 0;
-    while (cache_cleaner_started && wait_count < 100000) {
-        __asm__ __volatile__ ("");
+    while (cache_cleaner_started && wait_count < 1000000) {
+        hev_task_yield ();
         wait_count++;
+    }
+
+    if (cache_cleaner_started) {
+        LOG_W ("dns-cache: Cleaner task did not exit after waiting, forcing cleanup");
     }
 
     /* 清理哈希表：只清空指针，不释放条目
@@ -652,9 +660,8 @@ hev_dns_cache_fini (void)
     }
 
     /* 销毁对象池（会释放所有池中的条目） */
-    if (dns_entry_pool) {
-        hev_object_pool_destroy (dns_entry_pool);
-        dns_entry_pool = NULL;
+    if (pool_to_destroy) {
+        hev_object_pool_destroy (pool_to_destroy);
     }
 
     /* 注意：hev_task_mutex 没有 destroy 函数，所以不销毁 mutex */

@@ -1,0 +1,1217 @@
+========== tproxy.conf ==========
+tunnel:
+  mtu: 1500
+socks5:
+  tcp:
+    port: 1080
+    address: '64.69.34.166'
+    username: 'yiguihai'
+    password: 'ygh15177542493'
+  udp:
+    address: '64.69.34.166'
+    port: 1080
+    udp-relay: 'udp'
+    username: 'yiguihai'
+    password: 'ygh15177542493'
+dns-split-tunnel:
+  enabled: true
+  foreign-dns:
+    - "1.1.1.1"
+    - "8.8.8.8"
+    - "2606:4700:4700::1111"
+    - "2001:4860:4860::8888"
+dns-forwarder:
+  enabled: false
+mapdns:
+  address: 198.18.0.2
+  address6: 'fd00::1'
+  port: 53
+  network: 240.0.0.0
+  netmask: 240.0.0.0
+  network6: 'fd00::'
+  prefixlen: 96
+  cache-size: 10000
+dns-latency-optimize:
+  enabled: true
+  timeout-ms: 250
+smart-proxy:
+  enabled: true
+  timeout-ms: 1400
+  blocked-ip-expiry-minutes: 360
+  probe-ports:
+    - 80
+    - 443
+chnroutes:
+  enabled: true
+  file-path: "/data/user/0/hev.sockstun/cache/chnroutes.txt"
+acl:
+  enabled: true
+  file-path: "/data/user/0/hev.sockstun/cache/acl.txt"
+misc:
+  task-stack-size: 81920
+  tcp-buffer-size: 65536
+  udp-recv-buffer-size: 524288
+  udp-copy-buffer-nums: 10
+  connect-timeout: 10000
+  tcp-read-write-timeout: 300000
+  udp-read-write-timeout: 5000
+  log-file: '/data/user/0/hev.sockstun/cache/tunnel.log'
+  log-level: debug
+
+========== End of Config ==========
+
+========== tunnel.log ==========
+meout
+[2026-01-18 04:44:35] [I] 0xb4000076a0066e00 [UDP] send task idle timeout
+[2026-01-18 04:44:35] [D] 0xb4000076a0066e00 [UDP] waiting for recv task to complete
+[2026-01-18 04:44:35] [D] 0xb400007770019460 socks5 client udp destruct
+[2026-01-18 04:44:35] [D] 0xb400007770019460 socks5 client destruct
+[2026-01-18 04:44:35] [D] 0xb400007770019460 socks5 destruct
+[2026-01-18 04:44:35] [I] 0xb4000076a00667e0 [UDP] Direct connect cleanup (sent 1 packets/35 bytes, alive=0x00)
+[2026-01-18 04:44:35] [D] 0xb4000076a00667e0 [UDP] Cleanup started 198.18.0.1:31482 -> 223.5.5.5:53
+[2026-01-18 04:44:35] [I] 0xb4000076a00667e0 [UDP] Direct connect 198.18.0.1:31482 -> 223.5.5.5:53 ended (duration=8000 ms, packets_dropped=0)
+[2026-01-18 04:44:35] [I] 0xb400007770019c40 io timeout
+[2026-01-18 04:44:35] [I] 0xb4000076a0066e00 [UDP] recv task idle timeout
+[2026-01-18 04:44:35] [D] 0xb4000076a0066e00 [UDP] recv task end (received 1 packets, 54 bytes)
+[2026-01-18 04:44:35] [I] 0xb40000777001a9c0 io timeout
+[2026-01-18 04:44:35] [I] 0xb4000076a0064be0 [UDP] send task idle timeout
+[2026-01-18 04:44:35] [D] 0xb4000076a0064be0 [UDP] waiting for recv task to complete
+[2026-01-18 04:44:35] [D] 0xb40000777001c100 socks5 client udp destruct
+[2026-01-18 04:44:35] [D] 0xb40000777001c100 socks5 client destruct
+[2026-01-18 04:44:35] [D] 0xb40000777001c100 socks5 destruct
+[2026-01-18 04:44:35] [I] 0xb4000076a0066e00 [UDP] Direct connect cleanup (sent 1 packets/26 bytes, alive=0x00)
+[2026-01-18 04:44:35] [D] 0xb4000076a0066e00 [UDP] Cleanup started 198.18.0.1:44268 -> 223.5.5.5:53
+[2026-01-18 04:44:35] [I] 0xb4000076a0066e00 [UDP] Direct connect 198.18.0.1:44268 -> 223.5.5.5:53 ended (duration=7000 ms, packets_dropped=0)
+[2026-01-18 04:44:35] [I] 0xb40000777001b1a0 io timeout
+[2026-01-18 04:44:35] [I] 0xb4000076a0064be0 [UDP] recv task idle timeout
+[2026-01-18 04:44:35] [D] 0xb4000076a0064be0 [UDP] recv task end (received 1 packets, 42 bytes)
+[2026-01-18 04:44:35] [D] 0xb40000777001a9c0 socks5 client udp destruct
+[2026-01-18 04:44:35] [D] 0xb40000777001a9c0 socks5 client destruct
+[2026-01-18 04:44:35] [D] 0xb40000777001a9c0 socks5 destruct
+[2026-01-18 04:44:35] [I] 0xb4000076a0064be0 [UDP] Direct connect cleanup (sent 1 packets/26 bytes, alive=0x00)
+[2026-01-18 04:44:35] [D] 0xb4000076a0064be0 [UDP] Cleanup started 198.18.0.1:18265 -> 223.5.5.5:53
+[2026-01-18 04:44:35] [I] 0xb4000076a0064be0 [UDP] Direct connect 198.18.0.1:18265 -> 223.5.5.5:53 ended (duration=7000 ms, packets_dropped=0)
+[2026-01-18 04:44:36] [D] socks5 tunnel: Statistics requested
+[2026-01-18 04:44:38] [D] socks5 tunnel: Statistics requested
+[2026-01-18 04:44:40] [D] socks5 tunnel: Statistics requested
+[2026-01-18 04:44:42] [D] socks5 tunnel: Statistics requested
+[2026-01-18 04:44:44] [D] socks5 tunnel: Statistics requested
+[2026-01-18 04:44:45] [D] 0x7589f37d08 socks5 tunnel: TCP connection accepted from 198.18.0.1:35504 to 160.79.104.10:443
+[2026-01-18 04:44:45] [D] 0x7589f37d08 router: TCP routing decision for 198.18.0.1:35504 -> 160.79.104.10:443
+[2026-01-18 04:44:45] [D] 0xb40000763002cc80 socks5 session tcp construct: pcb->local_ip=160.79.104.10, pcb->local_port=443
+[2026-01-18 04:44:45] [D] addr_from_lwip: IP 160.79.104.10:47873 (no hostname mapping)
+[2026-01-18 04:44:45] [D] 0xb40000763002cc80 socks5 construct
+[2026-01-18 04:44:45] [D] 0xb40000763002cc80 socks5 client construct
+[2026-01-18 04:44:45] [D] 0xb40000763002cc80 socks5 client tcp construct
+[2026-01-18 04:44:45] [I] 0xb40000763002cc80 socks5 client tcp -> [160.79.104.10]:443
+[2026-01-18 04:44:45] [D] 0xb40000763002cc80 socks5 session tcp construct for 198.18.0.1:35504
+[2026-01-18 04:44:45] [D] 0xb40000763002cc80 socks5 session tcp new
+[2026-01-18 04:44:45] [I] 0xb40000763002cc80 [domain-first] started 198.18.0.1:35504 -> 160.79.104.10:443
+[2026-01-18 04:44:45] [D] 0xb40000763002cc80 socks5 session tcp set task 0xb400007600014d60
+[2026-01-18 04:44:45] [D] 0xb40000763002cc80 socks5 session tcp: received 1036 bytes from client
+[2026-01-18 04:44:45] [D] 0xb40000763002cc80 socks5 session tcp: received 820 bytes from client
+[2026-01-18 04:44:45] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Routing 198.18.0.1:35504 -> 160.79.104.10:443
+[2026-01-18 04:44:45] [D] 0x7589f37d08 filter: ClientHello detected (version=0x0301, len=1847)
+[2026-01-18 04:44:45] [D] 0x7589f37d08 filter: Parsing extensions (len=1670)
+[2026-01-18 04:44:45] [D] 0x7589f37d08 filter: Found SNI extension
+[2026-01-18 04:44:45] [I] 0x7589f37d08 filter: Detected TLS hostname: api.anthropic.com
+[2026-01-18 04:44:45] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Detected hostname: api.anthropic.com (target: 160.79.104.10:443)
+[2026-01-18 04:44:45] [D] ACL Stage2: Domain 'api.anthropic.com' matched exact rule 'api.anthropic.com' -> action=1
+[2026-01-18 04:44:45] [W] 0xb40000763002cc80 [DOMAIN-FIRST] ACL BLOCK -> Reject
+[2026-01-18 04:44:45] [W] 0xb40000763002cc80 socks5 session tcp: error occurred (err=-13), terminating
+[2026-01-18 04:44:45] [D] 0xb40000763002cc80 socks5 session terminate
+[2026-01-18 04:44:45] [D] 0xb40000763002cc80 socks5 session tcp destruct
+[2026-01-18 04:44:45] [D] 0xb40000763002cc80 socks5 session tcp destruct: freeing queued data
+[2026-01-18 04:44:45] [D] 0xb40000763002cc80 socks5 client tcp destruct
+[2026-01-18 04:44:45] [D] 0xb40000763002cc80 socks5 client destruct
+[2026-01-18 04:44:45] [D] 0xb40000763002cc80 socks5 destruct
+[2026-01-18 04:44:46] [D] 0x7589f37d08 socks5 tunnel: TCP connection accepted from 198.18.0.1:35510 to 160.79.104.10:443
+[2026-01-18 04:44:46] [D] 0x7589f37d08 router: TCP routing decision for 198.18.0.1:35510 -> 160.79.104.10:443
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp construct: pcb->local_ip=160.79.104.10, pcb->local_port=443
+[2026-01-18 04:44:46] [D] addr_from_lwip: IP 160.79.104.10:47873 (no hostname mapping)
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 construct
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 client construct
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 client tcp construct
+[2026-01-18 04:44:46] [I] 0xb40000763002cc80 socks5 client tcp -> [160.79.104.10]:443
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp construct for 198.18.0.1:35510
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp new
+[2026-01-18 04:44:46] [I] 0xb40000763002cc80 [domain-first] started 198.18.0.1:35510 -> 160.79.104.10:443
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp set task 0xb400007600014d60
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp: received 1036 bytes from client
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp: received 565 bytes from client
+[2026-01-18 04:44:46] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Routing 198.18.0.1:35510 -> 160.79.104.10:443
+[2026-01-18 04:44:46] [D] 0x7589f37d08 filter: ClientHello detected (version=0x0301, len=1592)
+[2026-01-18 04:44:46] [D] 0x7589f37d08 filter: Parsing extensions (len=1415)
+[2026-01-18 04:44:46] [D] 0x7589f37d08 filter: Found SNI extension
+[2026-01-18 04:44:46] [I] 0x7589f37d08 filter: Detected TLS hostname: api.anthropic.com
+[2026-01-18 04:44:46] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Detected hostname: api.anthropic.com (target: 160.79.104.10:443)
+[2026-01-18 04:44:46] [D] ACL Stage2: Domain 'api.anthropic.com' matched exact rule 'api.anthropic.com' -> action=1
+[2026-01-18 04:44:46] [W] 0xb40000763002cc80 [DOMAIN-FIRST] ACL BLOCK -> Reject
+[2026-01-18 04:44:46] [W] 0xb40000763002cc80 socks5 session tcp: error occurred (err=-13), terminating
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session terminate
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp destruct
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp destruct: freeing queued data
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 client tcp destruct
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 client destruct
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 destruct
+[2026-01-18 04:44:46] [D] 0x7589f37d08 socks5 tunnel: TCP connection accepted from 198.18.0.1:35526 to 160.79.104.10:443
+[2026-01-18 04:44:46] [D] 0x7589f37d08 router: TCP routing decision for 198.18.0.1:35526 -> 160.79.104.10:443
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp construct: pcb->local_ip=160.79.104.10, pcb->local_port=443
+[2026-01-18 04:44:46] [D] addr_from_lwip: IP 160.79.104.10:47873 (no hostname mapping)
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 construct
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 client construct
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 client tcp construct
+[2026-01-18 04:44:46] [I] 0xb40000763002cc80 socks5 client tcp -> [160.79.104.10]:443
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp construct for 198.18.0.1:35526
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp new
+[2026-01-18 04:44:46] [I] 0xb40000763002cc80 [domain-first] started 198.18.0.1:35526 -> 160.79.104.10:443
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp set task 0xb400007600014d60
+[2026-01-18 04:44:46] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Routing 198.18.0.1:35526 -> 160.79.104.10:443
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 [DOMAIN-FIRST] Waiting for protocol data on port 443...
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp: received 1036 bytes from client
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp: received 565 bytes from client
+[2026-01-18 04:44:46] [D] 0x7589f37d08 filter: ClientHello detected (version=0x0301, len=1592)
+[2026-01-18 04:44:46] [D] 0x7589f37d08 filter: Parsing extensions (len=1415)
+[2026-01-18 04:44:46] [D] 0x7589f37d08 filter: Found SNI extension
+[2026-01-18 04:44:46] [I] 0x7589f37d08 filter: Detected TLS hostname: api.anthropic.com
+[2026-01-18 04:44:46] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Detected hostname: api.anthropic.com (target: 160.79.104.10:443)
+[2026-01-18 04:44:46] [D] ACL Stage2: Domain 'api.anthropic.com' matched exact rule 'api.anthropic.com' -> action=1
+[2026-01-18 04:44:46] [W] 0xb40000763002cc80 [DOMAIN-FIRST] ACL BLOCK -> Reject
+[2026-01-18 04:44:46] [W] 0xb40000763002cc80 socks5 session tcp: error occurred (err=-13), terminating
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session terminate
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp destruct
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp destruct: freeing queued data
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 client tcp destruct
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 client destruct
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 destruct
+[2026-01-18 04:44:46] [D] socks5 tunnel: Statistics requested
+[2026-01-18 04:44:46] [D] 0x7589f37d08 socks5 tunnel: TCP connection accepted from 198.18.0.1:35542 to 160.79.104.10:443
+[2026-01-18 04:44:46] [D] 0x7589f37d08 router: TCP routing decision for 198.18.0.1:35542 -> 160.79.104.10:443
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp construct: pcb->local_ip=160.79.104.10, pcb->local_port=443
+[2026-01-18 04:44:46] [D] addr_from_lwip: IP 160.79.104.10:47873 (no hostname mapping)
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 construct
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 client construct
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 client tcp construct
+[2026-01-18 04:44:46] [I] 0xb40000763002cc80 socks5 client tcp -> [160.79.104.10]:443
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp construct for 198.18.0.1:35542
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp new
+[2026-01-18 04:44:46] [I] 0xb40000763002cc80 [domain-first] started 198.18.0.1:35542 -> 160.79.104.10:443
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp set task 0xb400007600014d60
+[2026-01-18 04:44:46] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Routing 198.18.0.1:35542 -> 160.79.104.10:443
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 [DOMAIN-FIRST] Waiting for protocol data on port 443...
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp: received 1036 bytes from client
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp: received 565 bytes from client
+[2026-01-18 04:44:46] [D] 0x7589f37d08 filter: ClientHello detected (version=0x0301, len=1592)
+[2026-01-18 04:44:46] [D] 0x7589f37d08 filter: Parsing extensions (len=1415)
+[2026-01-18 04:44:46] [D] 0x7589f37d08 filter: Found SNI extension
+[2026-01-18 04:44:46] [I] 0x7589f37d08 filter: Detected TLS hostname: api.anthropic.com
+[2026-01-18 04:44:46] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Detected hostname: api.anthropic.com (target: 160.79.104.10:443)
+[2026-01-18 04:44:46] [D] ACL Stage2: Domain 'api.anthropic.com' matched exact rule 'api.anthropic.com' -> action=1
+[2026-01-18 04:44:46] [W] 0xb40000763002cc80 [DOMAIN-FIRST] ACL BLOCK -> Reject
+[2026-01-18 04:44:46] [W] 0xb40000763002cc80 socks5 session tcp: error occurred (err=-13), terminating
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session terminate
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp destruct
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp destruct: freeing queued data
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 client tcp destruct
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 client destruct
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 destruct
+[2026-01-18 04:44:46] [D] 0x7589f37d08 socks5 tunnel: TCP connection accepted from 198.18.0.1:35556 to 160.79.104.10:443
+[2026-01-18 04:44:46] [D] 0x7589f37d08 router: TCP routing decision for 198.18.0.1:35556 -> 160.79.104.10:443
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp construct: pcb->local_ip=160.79.104.10, pcb->local_port=443
+[2026-01-18 04:44:46] [D] addr_from_lwip: IP 160.79.104.10:47873 (no hostname mapping)
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 construct
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 client construct
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 client tcp construct
+[2026-01-18 04:44:46] [I] 0xb40000763002cc80 socks5 client tcp -> [160.79.104.10]:443
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp construct for 198.18.0.1:35556
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp new
+[2026-01-18 04:44:46] [I] 0xb40000763002cc80 [domain-first] started 198.18.0.1:35556 -> 160.79.104.10:443
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp set task 0xb400007600014d60
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp: received 1036 bytes from client
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp: received 565 bytes from client
+[2026-01-18 04:44:46] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Routing 198.18.0.1:35556 -> 160.79.104.10:443
+[2026-01-18 04:44:46] [D] 0x7589f37d08 filter: ClientHello detected (version=0x0301, len=1592)
+[2026-01-18 04:44:46] [D] 0x7589f37d08 filter: Parsing extensions (len=1415)
+[2026-01-18 04:44:46] [D] 0x7589f37d08 filter: Found SNI extension
+[2026-01-18 04:44:46] [I] 0x7589f37d08 filter: Detected TLS hostname: api.anthropic.com
+[2026-01-18 04:44:46] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Detected hostname: api.anthropic.com (target: 160.79.104.10:443)
+[2026-01-18 04:44:46] [D] ACL Stage2: Domain 'api.anthropic.com' matched exact rule 'api.anthropic.com' -> action=1
+[2026-01-18 04:44:46] [W] 0xb40000763002cc80 [DOMAIN-FIRST] ACL BLOCK -> Reject
+[2026-01-18 04:44:46] [W] 0xb40000763002cc80 socks5 session tcp: error occurred (err=-13), terminating
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session terminate
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp destruct
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp destruct: freeing queued data
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 client tcp destruct
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 client destruct
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 destruct
+[2026-01-18 04:44:46] [D] 0x7589f37d08 socks5 tunnel: TCP connection accepted from 198.18.0.1:35558 to 160.79.104.10:443
+[2026-01-18 04:44:46] [D] 0x7589f37d08 router: TCP routing decision for 198.18.0.1:35558 -> 160.79.104.10:443
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp construct: pcb->local_ip=160.79.104.10, pcb->local_port=443
+[2026-01-18 04:44:46] [D] addr_from_lwip: IP 160.79.104.10:47873 (no hostname mapping)
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 construct
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 client construct
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 client tcp construct
+[2026-01-18 04:44:46] [I] 0xb40000763002cc80 socks5 client tcp -> [160.79.104.10]:443
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp construct for 198.18.0.1:35558
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp new
+[2026-01-18 04:44:46] [I] 0xb40000763002cc80 [domain-first] started 198.18.0.1:35558 -> 160.79.104.10:443
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp set task 0xb400007600014d60
+[2026-01-18 04:44:46] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Routing 198.18.0.1:35558 -> 160.79.104.10:443
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 [DOMAIN-FIRST] Waiting for protocol data on port 443...
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp: received 1036 bytes from client
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp: received 565 bytes from client
+[2026-01-18 04:44:46] [D] 0x7589f37d08 filter: ClientHello detected (version=0x0301, len=1592)
+[2026-01-18 04:44:46] [D] 0x7589f37d08 filter: Parsing extensions (len=1415)
+[2026-01-18 04:44:46] [D] 0x7589f37d08 filter: Found SNI extension
+[2026-01-18 04:44:46] [I] 0x7589f37d08 filter: Detected TLS hostname: api.anthropic.com
+[2026-01-18 04:44:46] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Detected hostname: api.anthropic.com (target: 160.79.104.10:443)
+[2026-01-18 04:44:46] [D] ACL Stage2: Domain 'api.anthropic.com' matched exact rule 'api.anthropic.com' -> action=1
+[2026-01-18 04:44:46] [W] 0xb40000763002cc80 [DOMAIN-FIRST] ACL BLOCK -> Reject
+[2026-01-18 04:44:46] [W] 0xb40000763002cc80 socks5 session tcp: error occurred (err=-13), terminating
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session terminate
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp destruct
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp destruct: freeing queued data
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 client tcp destruct
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 client destruct
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 destruct
+[2026-01-18 04:44:46] [D] 0x7589f37d08 socks5 tunnel: TCP connection accepted from 198.18.0.1:35572 to 160.79.104.10:443
+[2026-01-18 04:44:46] [D] 0x7589f37d08 router: TCP routing decision for 198.18.0.1:35572 -> 160.79.104.10:443
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp construct: pcb->local_ip=160.79.104.10, pcb->local_port=443
+[2026-01-18 04:44:46] [D] addr_from_lwip: IP 160.79.104.10:47873 (no hostname mapping)
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 construct
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 client construct
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 client tcp construct
+[2026-01-18 04:44:46] [I] 0xb40000763002cc80 socks5 client tcp -> [160.79.104.10]:443
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp construct for 198.18.0.1:35572
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp new
+[2026-01-18 04:44:46] [I] 0xb40000763002cc80 [domain-first] started 198.18.0.1:35572 -> 160.79.104.10:443
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp set task 0xb400007600014d60
+[2026-01-18 04:44:46] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Routing 198.18.0.1:35572 -> 160.79.104.10:443
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 [DOMAIN-FIRST] Waiting for protocol data on port 443...
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp: received 1036 bytes from client
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp: received 565 bytes from client
+[2026-01-18 04:44:46] [D] 0x7589f37d08 filter: ClientHello detected (version=0x0301, len=1592)
+[2026-01-18 04:44:46] [D] 0x7589f37d08 filter: Parsing extensions (len=1415)
+[2026-01-18 04:44:46] [D] 0x7589f37d08 filter: Found SNI extension
+[2026-01-18 04:44:46] [I] 0x7589f37d08 filter: Detected TLS hostname: api.anthropic.com
+[2026-01-18 04:44:46] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Detected hostname: api.anthropic.com (target: 160.79.104.10:443)
+[2026-01-18 04:44:46] [D] ACL Stage2: Domain 'api.anthropic.com' matched exact rule 'api.anthropic.com' -> action=1
+[2026-01-18 04:44:46] [W] 0xb40000763002cc80 [DOMAIN-FIRST] ACL BLOCK -> Reject
+[2026-01-18 04:44:46] [W] 0xb40000763002cc80 socks5 session tcp: error occurred (err=-13), terminating
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session terminate
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp destruct
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp destruct: freeing queued data
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 client tcp destruct
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 client destruct
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 destruct
+[2026-01-18 04:44:46] [D] 0x7589f37d08 socks5 tunnel: TCP connection accepted from 198.18.0.1:35582 to 160.79.104.10:443
+[2026-01-18 04:44:46] [D] 0x7589f37d08 router: TCP routing decision for 198.18.0.1:35582 -> 160.79.104.10:443
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp construct: pcb->local_ip=160.79.104.10, pcb->local_port=443
+[2026-01-18 04:44:46] [D] addr_from_lwip: IP 160.79.104.10:47873 (no hostname mapping)
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 construct
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 client construct
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 client tcp construct
+[2026-01-18 04:44:46] [I] 0xb40000763002cc80 socks5 client tcp -> [160.79.104.10]:443
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp construct for 198.18.0.1:35582
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp new
+[2026-01-18 04:44:46] [I] 0xb40000763002cc80 [domain-first] started 198.18.0.1:35582 -> 160.79.104.10:443
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp set task 0xb400007600014d60
+[2026-01-18 04:44:46] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Routing 198.18.0.1:35582 -> 160.79.104.10:443
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 [DOMAIN-FIRST] Waiting for protocol data on port 443...
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp: received 1036 bytes from client
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp: received 565 bytes from client
+[2026-01-18 04:44:46] [D] 0x7589f37d08 filter: ClientHello detected (version=0x0301, len=1592)
+[2026-01-18 04:44:46] [D] 0x7589f37d08 filter: Parsing extensions (len=1415)
+[2026-01-18 04:44:46] [D] 0x7589f37d08 filter: Found SNI extension
+[2026-01-18 04:44:46] [I] 0x7589f37d08 filter: Detected TLS hostname: api.anthropic.com
+[2026-01-18 04:44:46] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Detected hostname: api.anthropic.com (target: 160.79.104.10:443)
+[2026-01-18 04:44:46] [D] ACL Stage2: Domain 'api.anthropic.com' matched exact rule 'api.anthropic.com' -> action=1
+[2026-01-18 04:44:46] [W] 0xb40000763002cc80 [DOMAIN-FIRST] ACL BLOCK -> Reject
+[2026-01-18 04:44:46] [W] 0xb40000763002cc80 socks5 session tcp: error occurred (err=-13), terminating
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session terminate
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp destruct
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp destruct: freeing queued data
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 client tcp destruct
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 client destruct
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 destruct
+[2026-01-18 04:44:46] [D] 0x7589f37d08 socks5 tunnel: TCP connection accepted from 198.18.0.1:35588 to 160.79.104.10:443
+[2026-01-18 04:44:46] [D] 0x7589f37d08 router: TCP routing decision for 198.18.0.1:35588 -> 160.79.104.10:443
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp construct: pcb->local_ip=160.79.104.10, pcb->local_port=443
+[2026-01-18 04:44:46] [D] addr_from_lwip: IP 160.79.104.10:47873 (no hostname mapping)
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 construct
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 client construct
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 client tcp construct
+[2026-01-18 04:44:46] [I] 0xb40000763002cc80 socks5 client tcp -> [160.79.104.10]:443
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp construct for 198.18.0.1:35588
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp new
+[2026-01-18 04:44:46] [I] 0xb40000763002cc80 [domain-first] started 198.18.0.1:35588 -> 160.79.104.10:443
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp set task 0xb400007600014d60
+[2026-01-18 04:44:46] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Routing 198.18.0.1:35588 -> 160.79.104.10:443
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 [DOMAIN-FIRST] Waiting for protocol data on port 443...
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp: received 1036 bytes from client
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp: received 565 bytes from client
+[2026-01-18 04:44:46] [D] 0x7589f37d08 filter: ClientHello detected (version=0x0301, len=1592)
+[2026-01-18 04:44:46] [D] 0x7589f37d08 filter: Parsing extensions (len=1415)
+[2026-01-18 04:44:46] [D] 0x7589f37d08 filter: Found SNI extension
+[2026-01-18 04:44:46] [I] 0x7589f37d08 filter: Detected TLS hostname: api.anthropic.com
+[2026-01-18 04:44:46] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Detected hostname: api.anthropic.com (target: 160.79.104.10:443)
+[2026-01-18 04:44:46] [D] ACL Stage2: Domain 'api.anthropic.com' matched exact rule 'api.anthropic.com' -> action=1
+[2026-01-18 04:44:46] [W] 0xb40000763002cc80 [DOMAIN-FIRST] ACL BLOCK -> Reject
+[2026-01-18 04:44:46] [W] 0xb40000763002cc80 socks5 session tcp: error occurred (err=-13), terminating
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session terminate
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp destruct
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 session tcp destruct: freeing queued data
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 client tcp destruct
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 client destruct
+[2026-01-18 04:44:46] [D] 0xb40000763002cc80 socks5 destruct
+[2026-01-18 04:44:47] [D] 0x7589f37d08 socks5 tunnel: TCP connection accepted from 198.18.0.1:37728 to 160.79.104.10:443
+[2026-01-18 04:44:47] [D] 0x7589f37d08 router: TCP routing decision for 198.18.0.1:37728 -> 160.79.104.10:443
+[2026-01-18 04:44:47] [D] 0xb40000763002cc80 socks5 session tcp construct: pcb->local_ip=160.79.104.10, pcb->local_port=443
+[2026-01-18 04:44:47] [D] addr_from_lwip: IP 160.79.104.10:47873 (no hostname mapping)
+[2026-01-18 04:44:47] [D] 0xb40000763002cc80 socks5 construct
+[2026-01-18 04:44:47] [D] 0xb40000763002cc80 socks5 client construct
+[2026-01-18 04:44:47] [D] 0xb40000763002cc80 socks5 client tcp construct
+[2026-01-18 04:44:47] [I] 0xb40000763002cc80 socks5 client tcp -> [160.79.104.10]:443
+[2026-01-18 04:44:47] [D] 0xb40000763002cc80 socks5 session tcp construct for 198.18.0.1:37728
+[2026-01-18 04:44:47] [D] 0xb40000763002cc80 socks5 session tcp new
+[2026-01-18 04:44:47] [I] 0xb40000763002cc80 [domain-first] started 198.18.0.1:37728 -> 160.79.104.10:443
+[2026-01-18 04:44:47] [D] 0xb40000763002cc80 socks5 session tcp set task 0xb400007600014d60
+[2026-01-18 04:44:47] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Routing 198.18.0.1:37728 -> 160.79.104.10:443
+[2026-01-18 04:44:47] [D] 0xb40000763002cc80 [DOMAIN-FIRST] Waiting for protocol data on port 443...
+[2026-01-18 04:44:47] [D] 0xb40000763002cc80 socks5 session tcp: received 1036 bytes from client
+[2026-01-18 04:44:47] [D] 0xb40000763002cc80 socks5 session tcp: received 565 bytes from client
+[2026-01-18 04:44:47] [D] 0x7589f37d08 filter: ClientHello detected (version=0x0301, len=1592)
+[2026-01-18 04:44:47] [D] 0x7589f37d08 filter: Parsing extensions (len=1415)
+[2026-01-18 04:44:47] [D] 0x7589f37d08 filter: Found SNI extension
+[2026-01-18 04:44:47] [I] 0x7589f37d08 filter: Detected TLS hostname: api.anthropic.com
+[2026-01-18 04:44:47] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Detected hostname: api.anthropic.com (target: 160.79.104.10:443)
+[2026-01-18 04:44:47] [D] ACL Stage2: Domain 'api.anthropic.com' matched exact rule 'api.anthropic.com' -> action=1
+[2026-01-18 04:44:47] [W] 0xb40000763002cc80 [DOMAIN-FIRST] ACL BLOCK -> Reject
+[2026-01-18 04:44:47] [W] 0xb40000763002cc80 socks5 session tcp: error occurred (err=-13), terminating
+[2026-01-18 04:44:47] [D] 0xb40000763002cc80 socks5 session terminate
+[2026-01-18 04:44:47] [D] 0xb40000763002cc80 socks5 session tcp destruct
+[2026-01-18 04:44:47] [D] 0xb40000763002cc80 socks5 session tcp destruct: freeing queued data
+[2026-01-18 04:44:47] [D] 0xb40000763002cc80 socks5 client tcp destruct
+[2026-01-18 04:44:47] [D] 0xb40000763002cc80 socks5 client destruct
+[2026-01-18 04:44:47] [D] 0xb40000763002cc80 socks5 destruct
+[2026-01-18 04:44:47] [D] 0x7589f37d08 socks5 tunnel: TCP connection accepted from 198.18.0.1:37730 to 160.79.104.10:443
+[2026-01-18 04:44:47] [D] 0x7589f37d08 router: TCP routing decision for 198.18.0.1:37730 -> 160.79.104.10:443
+[2026-01-18 04:44:47] [D] 0xb40000763002cc80 socks5 session tcp construct: pcb->local_ip=160.79.104.10, pcb->local_port=443
+[2026-01-18 04:44:47] [D] addr_from_lwip: IP 160.79.104.10:47873 (no hostname mapping)
+[2026-01-18 04:44:47] [D] 0xb40000763002cc80 socks5 construct
+[2026-01-18 04:44:47] [D] 0xb40000763002cc80 socks5 client construct
+[2026-01-18 04:44:47] [D] 0xb40000763002cc80 socks5 client tcp construct
+[2026-01-18 04:44:47] [I] 0xb40000763002cc80 socks5 client tcp -> [160.79.104.10]:443
+[2026-01-18 04:44:47] [D] 0xb40000763002cc80 socks5 session tcp construct for 198.18.0.1:37730
+[2026-01-18 04:44:47] [D] 0xb40000763002cc80 socks5 session tcp new
+[2026-01-18 04:44:47] [I] 0xb40000763002cc80 [domain-first] started 198.18.0.1:37730 -> 160.79.104.10:443
+[2026-01-18 04:44:47] [D] 0xb40000763002cc80 socks5 session tcp set task 0xb400007600014d60
+[2026-01-18 04:44:47] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Routing 198.18.0.1:37730 -> 160.79.104.10:443
+[2026-01-18 04:44:47] [D] 0xb40000763002cc80 [DOMAIN-FIRST] Waiting for protocol data on port 443...
+[2026-01-18 04:44:47] [D] 0xb40000763002cc80 socks5 session tcp: received 1036 bytes from client
+[2026-01-18 04:44:47] [D] 0xb40000763002cc80 socks5 session tcp: received 565 bytes from client
+[2026-01-18 04:44:47] [D] 0x7589f37d08 filter: ClientHello detected (version=0x0301, len=1592)
+[2026-01-18 04:44:47] [D] 0x7589f37d08 filter: Parsing extensions (len=1415)
+[2026-01-18 04:44:47] [D] 0x7589f37d08 filter: Found SNI extension
+[2026-01-18 04:44:47] [I] 0x7589f37d08 filter: Detected TLS hostname: api.anthropic.com
+[2026-01-18 04:44:47] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Detected hostname: api.anthropic.com (target: 160.79.104.10:443)
+[2026-01-18 04:44:47] [D] ACL Stage2: Domain 'api.anthropic.com' matched exact rule 'api.anthropic.com' -> action=1
+[2026-01-18 04:44:47] [W] 0xb40000763002cc80 [DOMAIN-FIRST] ACL BLOCK -> Reject
+[2026-01-18 04:44:47] [W] 0xb40000763002cc80 socks5 session tcp: error occurred (err=-13), terminating
+[2026-01-18 04:44:47] [D] 0xb40000763002cc80 socks5 session terminate
+[2026-01-18 04:44:47] [D] 0xb40000763002cc80 socks5 session tcp destruct
+[2026-01-18 04:44:47] [D] 0xb40000763002cc80 socks5 session tcp destruct: freeing queued data
+[2026-01-18 04:44:47] [D] 0xb40000763002cc80 socks5 client tcp destruct
+[2026-01-18 04:44:47] [D] 0xb40000763002cc80 socks5 client destruct
+[2026-01-18 04:44:47] [D] 0xb40000763002cc80 socks5 destruct
+[2026-01-18 04:44:48] [D] socks5 tunnel: Statistics requested
+[2026-01-18 04:44:50] [D] socks5 tunnel: Statistics requested
+[2026-01-18 04:44:52] [D] socks5 tunnel: Statistics requested
+[2026-01-18 04:44:54] [D] socks5 tunnel: Statistics requested
+[2026-01-18 04:44:56] [D] socks5 tunnel: Statistics requested
+[2026-01-18 04:44:58] [D] socks5 tunnel: Statistics requested
+[2026-01-18 04:44:58] [D] 0x7589f37d08 socks5 tunnel: TCP connection accepted from 198.18.0.1:47416 to 160.79.104.10:443
+[2026-01-18 04:44:58] [D] 0x7589f37d08 router: TCP routing decision for 198.18.0.1:47416 -> 160.79.104.10:443
+[2026-01-18 04:44:58] [D] 0xb40000763002cc80 socks5 session tcp construct: pcb->local_ip=160.79.104.10, pcb->local_port=443
+[2026-01-18 04:44:58] [D] addr_from_lwip: IP 160.79.104.10:47873 (no hostname mapping)
+[2026-01-18 04:44:58] [D] 0xb40000763002cc80 socks5 construct
+[2026-01-18 04:44:58] [D] 0xb40000763002cc80 socks5 client construct
+[2026-01-18 04:44:58] [D] 0xb40000763002cc80 socks5 client tcp construct
+[2026-01-18 04:44:58] [I] 0xb40000763002cc80 socks5 client tcp -> [160.79.104.10]:443
+[2026-01-18 04:44:58] [D] 0xb40000763002cc80 socks5 session tcp construct for 198.18.0.1:47416
+[2026-01-18 04:44:58] [D] 0xb40000763002cc80 socks5 session tcp new
+[2026-01-18 04:44:58] [I] 0xb40000763002cc80 [domain-first] started 198.18.0.1:47416 -> 160.79.104.10:443
+[2026-01-18 04:44:58] [D] 0xb40000763002cc80 socks5 session tcp set task 0xb400007600014d60
+[2026-01-18 04:44:58] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Routing 198.18.0.1:47416 -> 160.79.104.10:443
+[2026-01-18 04:44:58] [D] 0xb40000763002cc80 [DOMAIN-FIRST] Waiting for protocol data on port 443...
+[2026-01-18 04:44:58] [D] 0xb40000763002cc80 socks5 session tcp: received 1036 bytes from client
+[2026-01-18 04:44:58] [D] 0xb40000763002cc80 socks5 session tcp: received 565 bytes from client
+[2026-01-18 04:44:58] [D] 0x7589f37d08 filter: ClientHello detected (version=0x0301, len=1592)
+[2026-01-18 04:44:58] [D] 0x7589f37d08 filter: Parsing extensions (len=1415)
+[2026-01-18 04:44:58] [D] 0x7589f37d08 filter: Found SNI extension
+[2026-01-18 04:44:58] [I] 0x7589f37d08 filter: Detected TLS hostname: api.anthropic.com
+[2026-01-18 04:44:58] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Detected hostname: api.anthropic.com (target: 160.79.104.10:443)
+[2026-01-18 04:44:58] [D] ACL Stage2: Domain 'api.anthropic.com' matched exact rule 'api.anthropic.com' -> action=1
+[2026-01-18 04:44:58] [W] 0xb40000763002cc80 [DOMAIN-FIRST] ACL BLOCK -> Reject
+[2026-01-18 04:44:58] [W] 0xb40000763002cc80 socks5 session tcp: error occurred (err=-13), terminating
+[2026-01-18 04:44:58] [D] 0xb40000763002cc80 socks5 session terminate
+[2026-01-18 04:44:58] [D] 0xb40000763002cc80 socks5 session tcp destruct
+[2026-01-18 04:44:58] [D] 0xb40000763002cc80 socks5 session tcp destruct: freeing queued data
+[2026-01-18 04:44:58] [D] 0xb40000763002cc80 socks5 client tcp destruct
+[2026-01-18 04:44:58] [D] 0xb40000763002cc80 socks5 client destruct
+[2026-01-18 04:44:58] [D] 0xb40000763002cc80 socks5 destruct
+[2026-01-18 04:44:58] [D] 0x7589f37d08 socks5 tunnel: TCP connection accepted from 198.18.0.1:47418 to 160.79.104.10:443
+[2026-01-18 04:44:58] [D] 0x7589f37d08 router: TCP routing decision for 198.18.0.1:47418 -> 160.79.104.10:443
+[2026-01-18 04:44:58] [D] 0xb40000763002cc80 socks5 session tcp construct: pcb->local_ip=160.79.104.10, pcb->local_port=443
+[2026-01-18 04:44:58] [D] addr_from_lwip: IP 160.79.104.10:47873 (no hostname mapping)
+[2026-01-18 04:44:58] [D] 0xb40000763002cc80 socks5 construct
+[2026-01-18 04:44:58] [D] 0xb40000763002cc80 socks5 client construct
+[2026-01-18 04:44:58] [D] 0xb40000763002cc80 socks5 client tcp construct
+[2026-01-18 04:44:58] [I] 0xb40000763002cc80 socks5 client tcp -> [160.79.104.10]:443
+[2026-01-18 04:44:58] [D] 0xb40000763002cc80 socks5 session tcp construct for 198.18.0.1:47418
+[2026-01-18 04:44:58] [D] 0xb40000763002cc80 socks5 session tcp new
+[2026-01-18 04:44:58] [I] 0xb40000763002cc80 [domain-first] started 198.18.0.1:47418 -> 160.79.104.10:443
+[2026-01-18 04:44:58] [D] 0xb40000763002cc80 socks5 session tcp set task 0xb400007600014d60
+[2026-01-18 04:44:58] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Routing 198.18.0.1:47418 -> 160.79.104.10:443
+[2026-01-18 04:44:58] [D] 0xb40000763002cc80 [DOMAIN-FIRST] Waiting for protocol data on port 443...
+[2026-01-18 04:44:58] [D] 0xb40000763002cc80 socks5 session tcp: received 1036 bytes from client
+[2026-01-18 04:44:58] [D] 0xb40000763002cc80 socks5 session tcp: received 565 bytes from client
+[2026-01-18 04:44:58] [D] 0x7589f37d08 filter: ClientHello detected (version=0x0301, len=1592)
+[2026-01-18 04:44:58] [D] 0x7589f37d08 filter: Parsing extensions (len=1415)
+[2026-01-18 04:44:58] [D] 0x7589f37d08 filter: Found SNI extension
+[2026-01-18 04:44:58] [I] 0x7589f37d08 filter: Detected TLS hostname: api.anthropic.com
+[2026-01-18 04:44:58] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Detected hostname: api.anthropic.com (target: 160.79.104.10:443)
+[2026-01-18 04:44:58] [D] ACL Stage2: Domain 'api.anthropic.com' matched exact rule 'api.anthropic.com' -> action=1
+[2026-01-18 04:44:58] [W] 0xb40000763002cc80 [DOMAIN-FIRST] ACL BLOCK -> Reject
+[2026-01-18 04:44:58] [W] 0xb40000763002cc80 socks5 session tcp: error occurred (err=-13), terminating
+[2026-01-18 04:44:58] [D] 0xb40000763002cc80 socks5 session terminate
+[2026-01-18 04:44:58] [D] 0xb40000763002cc80 socks5 session tcp destruct
+[2026-01-18 04:44:58] [D] 0xb40000763002cc80 socks5 session tcp destruct: freeing queued data
+[2026-01-18 04:44:58] [D] 0xb40000763002cc80 socks5 client tcp destruct
+[2026-01-18 04:44:58] [D] 0xb40000763002cc80 socks5 client destruct
+[2026-01-18 04:44:58] [D] 0xb40000763002cc80 socks5 destruct
+[2026-01-18 04:44:59] [D] 0x7589f37d08 socks5 tunnel: TCP connection accepted from 198.18.0.1:47422 to 160.79.104.10:443
+[2026-01-18 04:44:59] [D] 0x7589f37d08 router: TCP routing decision for 198.18.0.1:47422 -> 160.79.104.10:443
+[2026-01-18 04:44:59] [D] 0xb40000763002cc80 socks5 session tcp construct: pcb->local_ip=160.79.104.10, pcb->local_port=443
+[2026-01-18 04:44:59] [D] addr_from_lwip: IP 160.79.104.10:47873 (no hostname mapping)
+[2026-01-18 04:44:59] [D] 0xb40000763002cc80 socks5 construct
+[2026-01-18 04:44:59] [D] 0xb40000763002cc80 socks5 client construct
+[2026-01-18 04:44:59] [D] 0xb40000763002cc80 socks5 client tcp construct
+[2026-01-18 04:44:59] [I] 0xb40000763002cc80 socks5 client tcp -> [160.79.104.10]:443
+[2026-01-18 04:44:59] [D] 0xb40000763002cc80 socks5 session tcp construct for 198.18.0.1:47422
+[2026-01-18 04:44:59] [D] 0xb40000763002cc80 socks5 session tcp new
+[2026-01-18 04:44:59] [I] 0xb40000763002cc80 [domain-first] started 198.18.0.1:47422 -> 160.79.104.10:443
+[2026-01-18 04:44:59] [D] 0xb40000763002cc80 socks5 session tcp set task 0xb400007600014d60
+[2026-01-18 04:44:59] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Routing 198.18.0.1:47422 -> 160.79.104.10:443
+[2026-01-18 04:44:59] [D] 0xb40000763002cc80 [DOMAIN-FIRST] Waiting for protocol data on port 443...
+[2026-01-18 04:44:59] [D] 0xb40000763002cc80 socks5 session tcp: received 1036 bytes from client
+[2026-01-18 04:44:59] [D] 0xb40000763002cc80 socks5 session tcp: received 565 bytes from client
+[2026-01-18 04:44:59] [D] 0x7589f37d08 filter: ClientHello detected (version=0x0301, len=1592)
+[2026-01-18 04:44:59] [D] 0x7589f37d08 filter: Parsing extensions (len=1415)
+[2026-01-18 04:44:59] [D] 0x7589f37d08 filter: Found SNI extension
+[2026-01-18 04:44:59] [I] 0x7589f37d08 filter: Detected TLS hostname: api.anthropic.com
+[2026-01-18 04:44:59] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Detected hostname: api.anthropic.com (target: 160.79.104.10:443)
+[2026-01-18 04:44:59] [D] ACL Stage2: Domain 'api.anthropic.com' matched exact rule 'api.anthropic.com' -> action=1
+[2026-01-18 04:44:59] [W] 0xb40000763002cc80 [DOMAIN-FIRST] ACL BLOCK -> Reject
+[2026-01-18 04:44:59] [W] 0xb40000763002cc80 socks5 session tcp: error occurred (err=-13), terminating
+[2026-01-18 04:44:59] [D] 0xb40000763002cc80 socks5 session terminate
+[2026-01-18 04:44:59] [D] 0xb40000763002cc80 socks5 session tcp destruct
+[2026-01-18 04:44:59] [D] 0xb40000763002cc80 socks5 session tcp destruct: freeing queued data
+[2026-01-18 04:44:59] [D] 0xb40000763002cc80 socks5 client tcp destruct
+[2026-01-18 04:44:59] [D] 0xb40000763002cc80 socks5 client destruct
+[2026-01-18 04:44:59] [D] 0xb40000763002cc80 socks5 destruct
+[2026-01-18 04:44:59] [D] 0x7589f37d08 socks5 tunnel: TCP connection accepted from 198.18.0.1:47424 to 160.79.104.10:443
+[2026-01-18 04:44:59] [D] 0x7589f37d08 router: TCP routing decision for 198.18.0.1:47424 -> 160.79.104.10:443
+[2026-01-18 04:44:59] [D] 0xb40000763002cc80 socks5 session tcp construct: pcb->local_ip=160.79.104.10, pcb->local_port=443
+[2026-01-18 04:44:59] [D] addr_from_lwip: IP 160.79.104.10:47873 (no hostname mapping)
+[2026-01-18 04:44:59] [D] 0xb40000763002cc80 socks5 construct
+[2026-01-18 04:44:59] [D] 0xb40000763002cc80 socks5 client construct
+[2026-01-18 04:44:59] [D] 0xb40000763002cc80 socks5 client tcp construct
+[2026-01-18 04:44:59] [I] 0xb40000763002cc80 socks5 client tcp -> [160.79.104.10]:443
+[2026-01-18 04:44:59] [D] 0xb40000763002cc80 socks5 session tcp construct for 198.18.0.1:47424
+[2026-01-18 04:44:59] [D] 0xb40000763002cc80 socks5 session tcp new
+[2026-01-18 04:44:59] [I] 0xb40000763002cc80 [domain-first] started 198.18.0.1:47424 -> 160.79.104.10:443
+[2026-01-18 04:44:59] [D] 0xb40000763002cc80 socks5 session tcp set task 0xb400007600014d60
+[2026-01-18 04:44:59] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Routing 198.18.0.1:47424 -> 160.79.104.10:443
+[2026-01-18 04:44:59] [D] 0xb40000763002cc80 [DOMAIN-FIRST] Waiting for protocol data on port 443...
+[2026-01-18 04:44:59] [D] 0xb40000763002cc80 socks5 session tcp: received 1036 bytes from client
+[2026-01-18 04:44:59] [D] 0xb40000763002cc80 socks5 session tcp: received 565 bytes from client
+[2026-01-18 04:44:59] [D] 0x7589f37d08 filter: ClientHello detected (version=0x0301, len=1592)
+[2026-01-18 04:44:59] [D] 0x7589f37d08 filter: Parsing extensions (len=1415)
+[2026-01-18 04:44:59] [D] 0x7589f37d08 filter: Found SNI extension
+[2026-01-18 04:44:59] [I] 0x7589f37d08 filter: Detected TLS hostname: api.anthropic.com
+[2026-01-18 04:44:59] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Detected hostname: api.anthropic.com (target: 160.79.104.10:443)
+[2026-01-18 04:44:59] [D] ACL Stage2: Domain 'api.anthropic.com' matched exact rule 'api.anthropic.com' -> action=1
+[2026-01-18 04:44:59] [W] 0xb40000763002cc80 [DOMAIN-FIRST] ACL BLOCK -> Reject
+[2026-01-18 04:44:59] [W] 0xb40000763002cc80 socks5 session tcp: error occurred (err=-13), terminating
+[2026-01-18 04:44:59] [D] 0xb40000763002cc80 socks5 session terminate
+[2026-01-18 04:44:59] [D] 0xb40000763002cc80 socks5 session tcp destruct
+[2026-01-18 04:44:59] [D] 0xb40000763002cc80 socks5 session tcp destruct: freeing queued data
+[2026-01-18 04:44:59] [D] 0xb40000763002cc80 socks5 client tcp destruct
+[2026-01-18 04:44:59] [D] 0xb40000763002cc80 socks5 client destruct
+[2026-01-18 04:44:59] [D] 0xb40000763002cc80 socks5 destruct
+[2026-01-18 04:45:00] [D] socks5 tunnel: Statistics requested
+[2026-01-18 04:45:02] [D] socks5 tunnel: Statistics requested
+[2026-01-18 04:45:04] [D] socks5 tunnel: Statistics requested
+[2026-01-18 04:45:06] [D] socks5 tunnel: Statistics requested
+[2026-01-18 04:45:08] [D] socks5 tunnel: Statistics requested
+[2026-01-18 04:45:10] [D] socks5 tunnel: Statistics requested
+[2026-01-18 04:45:12] [D] socks5 tunnel: Statistics requested
+[2026-01-18 04:45:14] [D] socks5 tunnel: Statistics requested
+[2026-01-18 04:45:16] [D] socks5 tunnel: Statistics requested
+[2026-01-18 04:45:17] [D] 0x7589e37c1c socks5 tunnel: UDP packet received from 198.18.0.1:6751 to 223.5.5.5:53 (size=43 bytes)
+[2026-01-18 04:45:17] [D] 0x7589e37c1c router: UDP routing decision for 198.18.0.1:6751 -> 223.5.5.5:53 (packet_size=43)
+[2026-01-18 04:45:17] [D] dns-cache: Detected UDP header in packet, skipping 8 bytes
+[2026-01-18 04:45:17] [D] dns-cache: extract_dns_domain: result=0, domain='api.anthropic.com' (len=17)
+[2026-01-18 04:45:17] [D] dns-cache: Checking cache for domain: api.anthropic.com (domain_len=17)
+[2026-01-18 04:45:17] [D] dns-cache: Cache miss for domain: api.anthropic.com (domain_len=17)
+[2026-01-18 04:45:17] [I] 0x7589e37c1c router: DNS query to domestic 223.5.5.5:53 (cache miss), using DIRECT for pollution detection
+[2026-01-18 04:45:17] [I] 0xb4000076a0064be0 [UDP] Direct connect started 198.18.0.1:6751 -> 223.5.5.5:53 (first_packet=43 bytes)
+[2026-01-18 04:45:17] [D] 0x7589e37c1c socks5 tunnel: UDP packet handled by traffic router (direct connect or DNS forward)
+[2026-01-18 04:45:17] [D] 0xb40000777001a9c0 socks5 construct
+[2026-01-18 04:45:17] [D] 0xb40000777001a9c0 socks5 client construct
+[2026-01-18 04:45:17] [I] 0xb40000777001a9c0 socks5 client udp construct
+[2026-01-18 04:45:17] [D] 0xb40000777001a9c0 socks5 client udp new
+[2026-01-18 04:45:17] [D] 0xb4000076a0064be0 [UDP] send task start 198.18.0.1:6751 -> 223.5.5.5:53
+[2026-01-18 04:45:17] [D] 0xb4000076a0064be0 [UDP] session created at 253 ms
+[2026-01-18 04:45:17] [D] 0xb4000076a0064be0 [UDP] target is IPv4 (mapped to IPv6): 223.5.5.5:53
+[2026-01-18 04:45:17] [I] 0xb4000076a0064be0 [UDP] Direct connect established 198.18.0.1:6751 -> 223.5.5.5:53
+[2026-01-18 04:45:17] [D] 0xb4000076a0064be0 [UDP] sent 35 bytes to server (total=1 packets, 35 bytes)
+[2026-01-18 04:45:17] [D] 0xb40000777001b260 socks5 construct
+[2026-01-18 04:45:17] [D] 0xb40000777001b260 socks5 client construct
+[2026-01-18 04:45:17] [I] 0xb40000777001b260 socks5 client udp construct
+[2026-01-18 04:45:17] [D] 0xb40000777001b260 socks5 client udp new
+[2026-01-18 04:45:17] [D] 0xb4000076a0064be0 [UDP] recv task start 198.18.0.1:6751 <- 223.5.5.5:53
+[2026-01-18 04:45:17] [D] 0xb4000076a0064be0 [UDP] received 51 bytes from server (total=1 packets, 51 bytes)
+[2026-01-18 04:45:17] [W] dns-cache: Detected foreign IP in DNS response: 160.79.104.10 (pollution suspected)
+[2026-01-18 04:45:17] [W] 0xb4000076a0064be0 session: DNS pollution detected from 223.5.5.5:53, querying via SOCKS5 proxy (using configured foreign-dns)
+[2026-01-18 04:45:17] [D] 0xb4000076a0064be0 session: Stripping 8-byte header from SOCKS5 DNS query
+[2026-01-18 04:45:17] [D] dns-cache: Using IPv4 foreign-dns list
+[2026-01-18 04:45:17] [D] dns-cache: Selected DNS server: 1.1.1.1
+[2026-01-18 04:45:17] [D] 0xb4000077700195e0 socks5 construct
+[2026-01-18 04:45:17] [D] 0xb4000077700195e0 socks5 client construct
+[2026-01-18 04:45:17] [I] 0xb4000077700195e0 socks5 client udp construct
+[2026-01-18 04:45:17] [D] 0xb4000077700195e0 socks5 client udp new
+[2026-01-18 04:45:17] [D] 0xb4000077700195e0 socks5 client connect [64.69.34.166]:1080
+[2026-01-18 04:45:17] [D] 0xb4000077700195e0 socks5 client connect server fd 97
+[2026-01-18 04:45:17] [D] 0xb4000077700195e0 socks5 client set auth
+[2026-01-18 04:45:17] [D] 0xb4000077700195e0 socks5 client handshake standard
+[2026-01-18 04:45:17] [D] 0xb4000077700195e0 socks5 client write auth methods
+[2026-01-18 04:45:17] [D] 0xb4000077700195e0 socks5 client read auth method
+[2026-01-18 04:45:17] [D] 0xb4000077700195e0 socks5 client write auth creds
+[2026-01-18 04:45:17] [D] 0xb4000077700195e0 socks5 client read auth creds
+[2026-01-18 04:45:17] [D] 0xb4000077700195e0 socks5 client auth done
+[2026-01-18 04:45:17] [D] 0xb4000077700195e0 socks5 client write request
+[2026-01-18 04:45:17] [D] 0xb4000077700195e0 socks5 client read response
+[2026-01-18 04:45:18] [D] addr_from_lwip: IP 1.1.1.1:13568 (no hostname mapping)
+[2026-01-18 04:45:18] [I] dns-cache: Sending DNS query via SOCKS5 (target=1.1.1.1:53, type=3)
+[2026-01-18 04:45:18] [I] dns-cache: Received SOCKS5 DNS response from 1.1.1.1 (51 bytes)
+[2026-01-18 04:45:18] [D] 0xb4000077700195e0 socks5 client udp destruct
+[2026-01-18 04:45:18] [D] 0xb4000077700195e0 socks5 client destruct
+[2026-01-18 04:45:18] [D] 0xb4000077700195e0 socks5 destruct
+[2026-01-18 04:45:18] [I] 0xb4000076a0064be0 session: Replaced poisoned response with clean response from SOCKS5 (51 bytes)
+[2026-01-18 04:45:18] [D] dns-cache: extract_dns_domain: result=0, domain='api.anthropic.com' (len=17)
+[2026-01-18 04:45:18] [D] 0xb4000076a0064be0 [UDP] sending from spoofed source 223.5.5.5:53
+[2026-01-18 04:45:18] [D] 0xb4000076a0064be0 [UDP] forwarded 51 bytes to client 198.18.0.1:6751
+[2026-01-18 04:45:18] [D] 0x7589f37d08 socks5 tunnel: TCP connection accepted from 198.18.0.1:51336 to 160.79.104.10:443
+[2026-01-18 04:45:18] [D] 0x7589f37d08 router: TCP routing decision for 198.18.0.1:51336 -> 160.79.104.10:443
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp construct: pcb->local_ip=160.79.104.10, pcb->local_port=443
+[2026-01-18 04:45:18] [D] addr_from_lwip: IP 160.79.104.10:47873 (no hostname mapping)
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 construct
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 client construct
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 client tcp construct
+[2026-01-18 04:45:18] [I] 0xb40000763002cc80 socks5 client tcp -> [160.79.104.10]:443
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp construct for 198.18.0.1:51336
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp new
+[2026-01-18 04:45:18] [I] 0xb40000763002cc80 [domain-first] started 198.18.0.1:51336 -> 160.79.104.10:443
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp set task 0xb400007600018aa0
+[2026-01-18 04:45:18] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Routing 198.18.0.1:51336 -> 160.79.104.10:443
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 [DOMAIN-FIRST] Waiting for protocol data on port 443...
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp: received 1036 bytes from client
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp: received 565 bytes from client
+[2026-01-18 04:45:18] [D] 0x7589f37d08 filter: ClientHello detected (version=0x0301, len=1592)
+[2026-01-18 04:45:18] [D] 0x7589f37d08 filter: Parsing extensions (len=1415)
+[2026-01-18 04:45:18] [D] 0x7589f37d08 filter: Found SNI extension
+[2026-01-18 04:45:18] [I] 0x7589f37d08 filter: Detected TLS hostname: api.anthropic.com
+[2026-01-18 04:45:18] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Detected hostname: api.anthropic.com (target: 160.79.104.10:443)
+[2026-01-18 04:45:18] [D] ACL Stage2: Domain 'api.anthropic.com' matched exact rule 'api.anthropic.com' -> action=1
+[2026-01-18 04:45:18] [W] 0xb40000763002cc80 [DOMAIN-FIRST] ACL BLOCK -> Reject
+[2026-01-18 04:45:18] [W] 0xb40000763002cc80 socks5 session tcp: error occurred (err=-13), terminating
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session terminate
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp destruct
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp destruct: freeing queued data
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 client tcp destruct
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 client destruct
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 destruct
+[2026-01-18 04:45:18] [D] socks5 tunnel: Statistics requested
+[2026-01-18 04:45:18] [D] 0x7589f37d08 socks5 tunnel: TCP connection accepted from 198.18.0.1:51348 to 160.79.104.10:443
+[2026-01-18 04:45:18] [D] 0x7589f37d08 router: TCP routing decision for 198.18.0.1:51348 -> 160.79.104.10:443
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp construct: pcb->local_ip=160.79.104.10, pcb->local_port=443
+[2026-01-18 04:45:18] [D] addr_from_lwip: IP 160.79.104.10:47873 (no hostname mapping)
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 construct
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 client construct
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 client tcp construct
+[2026-01-18 04:45:18] [I] 0xb40000763002cc80 socks5 client tcp -> [160.79.104.10]:443
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp construct for 198.18.0.1:51348
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp new
+[2026-01-18 04:45:18] [I] 0xb40000763002cc80 [domain-first] started 198.18.0.1:51348 -> 160.79.104.10:443
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp set task 0xb400007600018aa0
+[2026-01-18 04:45:18] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Routing 198.18.0.1:51348 -> 160.79.104.10:443
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 [DOMAIN-FIRST] Waiting for protocol data on port 443...
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp: received 1036 bytes from client
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp: received 565 bytes from client
+[2026-01-18 04:45:18] [D] 0x7589f37d08 filter: ClientHello detected (version=0x0301, len=1592)
+[2026-01-18 04:45:18] [D] 0x7589f37d08 filter: Parsing extensions (len=1415)
+[2026-01-18 04:45:18] [D] 0x7589f37d08 filter: Found SNI extension
+[2026-01-18 04:45:18] [I] 0x7589f37d08 filter: Detected TLS hostname: api.anthropic.com
+[2026-01-18 04:45:18] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Detected hostname: api.anthropic.com (target: 160.79.104.10:443)
+[2026-01-18 04:45:18] [D] ACL Stage2: Domain 'api.anthropic.com' matched exact rule 'api.anthropic.com' -> action=1
+[2026-01-18 04:45:18] [W] 0xb40000763002cc80 [DOMAIN-FIRST] ACL BLOCK -> Reject
+[2026-01-18 04:45:18] [W] 0xb40000763002cc80 socks5 session tcp: error occurred (err=-13), terminating
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session terminate
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp destruct
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp destruct: freeing queued data
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 client tcp destruct
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 client destruct
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 destruct
+[2026-01-18 04:45:18] [D] 0x7589f37d08 socks5 tunnel: TCP connection accepted from 198.18.0.1:51352 to 160.79.104.10:443
+[2026-01-18 04:45:18] [D] 0x7589f37d08 router: TCP routing decision for 198.18.0.1:51352 -> 160.79.104.10:443
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp construct: pcb->local_ip=160.79.104.10, pcb->local_port=443
+[2026-01-18 04:45:18] [D] addr_from_lwip: IP 160.79.104.10:47873 (no hostname mapping)
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 construct
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 client construct
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 client tcp construct
+[2026-01-18 04:45:18] [I] 0xb40000763002cc80 socks5 client tcp -> [160.79.104.10]:443
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp construct for 198.18.0.1:51352
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp new
+[2026-01-18 04:45:18] [I] 0xb40000763002cc80 [domain-first] started 198.18.0.1:51352 -> 160.79.104.10:443
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp set task 0xb400007600018aa0
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp: received 1036 bytes from client
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp: received 565 bytes from client
+[2026-01-18 04:45:18] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Routing 198.18.0.1:51352 -> 160.79.104.10:443
+[2026-01-18 04:45:18] [D] 0x7589f37d08 filter: ClientHello detected (version=0x0301, len=1592)
+[2026-01-18 04:45:18] [D] 0x7589f37d08 filter: Parsing extensions (len=1415)
+[2026-01-18 04:45:18] [D] 0x7589f37d08 filter: Found SNI extension
+[2026-01-18 04:45:18] [I] 0x7589f37d08 filter: Detected TLS hostname: api.anthropic.com
+[2026-01-18 04:45:18] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Detected hostname: api.anthropic.com (target: 160.79.104.10:443)
+[2026-01-18 04:45:18] [D] ACL Stage2: Domain 'api.anthropic.com' matched exact rule 'api.anthropic.com' -> action=1
+[2026-01-18 04:45:18] [W] 0xb40000763002cc80 [DOMAIN-FIRST] ACL BLOCK -> Reject
+[2026-01-18 04:45:18] [W] 0xb40000763002cc80 socks5 session tcp: error occurred (err=-13), terminating
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session terminate
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp destruct
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp destruct: freeing queued data
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 client tcp destruct
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 client destruct
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 destruct
+[2026-01-18 04:45:18] [D] 0x7589f37d08 socks5 tunnel: TCP connection accepted from 198.18.0.1:51362 to 160.79.104.10:443
+[2026-01-18 04:45:18] [D] 0x7589f37d08 router: TCP routing decision for 198.18.0.1:51362 -> 160.79.104.10:443
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp construct: pcb->local_ip=160.79.104.10, pcb->local_port=443
+[2026-01-18 04:45:18] [D] addr_from_lwip: IP 160.79.104.10:47873 (no hostname mapping)
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 construct
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 client construct
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 client tcp construct
+[2026-01-18 04:45:18] [I] 0xb40000763002cc80 socks5 client tcp -> [160.79.104.10]:443
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp construct for 198.18.0.1:51362
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp new
+[2026-01-18 04:45:18] [I] 0xb40000763002cc80 [domain-first] started 198.18.0.1:51362 -> 160.79.104.10:443
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp set task 0xb400007600018aa0
+[2026-01-18 04:45:18] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Routing 198.18.0.1:51362 -> 160.79.104.10:443
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 [DOMAIN-FIRST] Waiting for protocol data on port 443...
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp: received 1036 bytes from client
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp: received 565 bytes from client
+[2026-01-18 04:45:18] [D] 0x7589f37d08 filter: ClientHello detected (version=0x0301, len=1592)
+[2026-01-18 04:45:18] [D] 0x7589f37d08 filter: Parsing extensions (len=1415)
+[2026-01-18 04:45:18] [D] 0x7589f37d08 filter: Found SNI extension
+[2026-01-18 04:45:18] [I] 0x7589f37d08 filter: Detected TLS hostname: api.anthropic.com
+[2026-01-18 04:45:18] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Detected hostname: api.anthropic.com (target: 160.79.104.10:443)
+[2026-01-18 04:45:18] [D] ACL Stage2: Domain 'api.anthropic.com' matched exact rule 'api.anthropic.com' -> action=1
+[2026-01-18 04:45:18] [W] 0xb40000763002cc80 [DOMAIN-FIRST] ACL BLOCK -> Reject
+[2026-01-18 04:45:18] [W] 0xb40000763002cc80 socks5 session tcp: error occurred (err=-13), terminating
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session terminate
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp destruct
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp destruct: freeing queued data
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 client tcp destruct
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 client destruct
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 destruct
+[2026-01-18 04:45:18] [D] 0x7589f37d08 socks5 tunnel: TCP connection accepted from 198.18.0.1:51368 to 160.79.104.10:443
+[2026-01-18 04:45:18] [D] 0x7589f37d08 router: TCP routing decision for 198.18.0.1:51368 -> 160.79.104.10:443
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp construct: pcb->local_ip=160.79.104.10, pcb->local_port=443
+[2026-01-18 04:45:18] [D] addr_from_lwip: IP 160.79.104.10:47873 (no hostname mapping)
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 construct
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 client construct
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 client tcp construct
+[2026-01-18 04:45:18] [I] 0xb40000763002cc80 socks5 client tcp -> [160.79.104.10]:443
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp construct for 198.18.0.1:51368
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp new
+[2026-01-18 04:45:18] [I] 0xb40000763002cc80 [domain-first] started 198.18.0.1:51368 -> 160.79.104.10:443
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp set task 0xb400007600018aa0
+[2026-01-18 04:45:18] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Routing 198.18.0.1:51368 -> 160.79.104.10:443
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 [DOMAIN-FIRST] Waiting for protocol data on port 443...
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp: received 1036 bytes from client
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp: received 565 bytes from client
+[2026-01-18 04:45:18] [D] 0x7589f37d08 filter: ClientHello detected (version=0x0301, len=1592)
+[2026-01-18 04:45:18] [D] 0x7589f37d08 filter: Parsing extensions (len=1415)
+[2026-01-18 04:45:18] [D] 0x7589f37d08 filter: Found SNI extension
+[2026-01-18 04:45:18] [I] 0x7589f37d08 filter: Detected TLS hostname: api.anthropic.com
+[2026-01-18 04:45:18] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Detected hostname: api.anthropic.com (target: 160.79.104.10:443)
+[2026-01-18 04:45:18] [D] ACL Stage2: Domain 'api.anthropic.com' matched exact rule 'api.anthropic.com' -> action=1
+[2026-01-18 04:45:18] [W] 0xb40000763002cc80 [DOMAIN-FIRST] ACL BLOCK -> Reject
+[2026-01-18 04:45:18] [W] 0xb40000763002cc80 socks5 session tcp: error occurred (err=-13), terminating
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session terminate
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp destruct
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp destruct: freeing queued data
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 client tcp destruct
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 client destruct
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 destruct
+[2026-01-18 04:45:18] [D] 0x7589f37d08 socks5 tunnel: TCP connection accepted from 198.18.0.1:51372 to 160.79.104.10:443
+[2026-01-18 04:45:18] [D] 0x7589f37d08 router: TCP routing decision for 198.18.0.1:51372 -> 160.79.104.10:443
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp construct: pcb->local_ip=160.79.104.10, pcb->local_port=443
+[2026-01-18 04:45:18] [D] addr_from_lwip: IP 160.79.104.10:47873 (no hostname mapping)
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 construct
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 client construct
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 client tcp construct
+[2026-01-18 04:45:18] [I] 0xb40000763002cc80 socks5 client tcp -> [160.79.104.10]:443
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp construct for 198.18.0.1:51372
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp new
+[2026-01-18 04:45:18] [I] 0xb40000763002cc80 [domain-first] started 198.18.0.1:51372 -> 160.79.104.10:443
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp set task 0xb400007600018aa0
+[2026-01-18 04:45:18] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Routing 198.18.0.1:51372 -> 160.79.104.10:443
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 [DOMAIN-FIRST] Waiting for protocol data on port 443...
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp: received 1036 bytes from client
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp: received 565 bytes from client
+[2026-01-18 04:45:18] [D] 0x7589f37d08 filter: ClientHello detected (version=0x0301, len=1592)
+[2026-01-18 04:45:18] [D] 0x7589f37d08 filter: Parsing extensions (len=1415)
+[2026-01-18 04:45:18] [D] 0x7589f37d08 filter: Found SNI extension
+[2026-01-18 04:45:18] [I] 0x7589f37d08 filter: Detected TLS hostname: api.anthropic.com
+[2026-01-18 04:45:18] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Detected hostname: api.anthropic.com (target: 160.79.104.10:443)
+[2026-01-18 04:45:18] [D] ACL Stage2: Domain 'api.anthropic.com' matched exact rule 'api.anthropic.com' -> action=1
+[2026-01-18 04:45:18] [W] 0xb40000763002cc80 [DOMAIN-FIRST] ACL BLOCK -> Reject
+[2026-01-18 04:45:18] [W] 0xb40000763002cc80 socks5 session tcp: error occurred (err=-13), terminating
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session terminate
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp destruct
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp destruct: freeing queued data
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 client tcp destruct
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 client destruct
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 destruct
+[2026-01-18 04:45:18] [D] 0x7589f37d08 socks5 tunnel: TCP connection accepted from 198.18.0.1:51374 to 160.79.104.10:443
+[2026-01-18 04:45:18] [D] 0x7589f37d08 router: TCP routing decision for 198.18.0.1:51374 -> 160.79.104.10:443
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp construct: pcb->local_ip=160.79.104.10, pcb->local_port=443
+[2026-01-18 04:45:18] [D] addr_from_lwip: IP 160.79.104.10:47873 (no hostname mapping)
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 construct
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 client construct
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 client tcp construct
+[2026-01-18 04:45:18] [I] 0xb40000763002cc80 socks5 client tcp -> [160.79.104.10]:443
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp construct for 198.18.0.1:51374
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp new
+[2026-01-18 04:45:18] [I] 0xb40000763002cc80 [domain-first] started 198.18.0.1:51374 -> 160.79.104.10:443
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp set task 0xb400007600018aa0
+[2026-01-18 04:45:18] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Routing 198.18.0.1:51374 -> 160.79.104.10:443
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 [DOMAIN-FIRST] Waiting for protocol data on port 443...
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp: received 1036 bytes from client
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp: received 565 bytes from client
+[2026-01-18 04:45:18] [D] 0x7589f37d08 filter: ClientHello detected (version=0x0301, len=1592)
+[2026-01-18 04:45:18] [D] 0x7589f37d08 filter: Parsing extensions (len=1415)
+[2026-01-18 04:45:18] [D] 0x7589f37d08 filter: Found SNI extension
+[2026-01-18 04:45:18] [I] 0x7589f37d08 filter: Detected TLS hostname: api.anthropic.com
+[2026-01-18 04:45:18] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Detected hostname: api.anthropic.com (target: 160.79.104.10:443)
+[2026-01-18 04:45:18] [D] ACL Stage2: Domain 'api.anthropic.com' matched exact rule 'api.anthropic.com' -> action=1
+[2026-01-18 04:45:18] [W] 0xb40000763002cc80 [DOMAIN-FIRST] ACL BLOCK -> Reject
+[2026-01-18 04:45:18] [W] 0xb40000763002cc80 socks5 session tcp: error occurred (err=-13), terminating
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session terminate
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp destruct
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 session tcp destruct: freeing queued data
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 client tcp destruct
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 client destruct
+[2026-01-18 04:45:18] [D] 0xb40000763002cc80 socks5 destruct
+[2026-01-18 04:45:19] [D] 0x7589f37d08 socks5 tunnel: TCP connection accepted from 198.18.0.1:51376 to 160.79.104.10:443
+[2026-01-18 04:45:19] [D] 0x7589f37d08 router: TCP routing decision for 198.18.0.1:51376 -> 160.79.104.10:443
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 session tcp construct: pcb->local_ip=160.79.104.10, pcb->local_port=443
+[2026-01-18 04:45:19] [D] addr_from_lwip: IP 160.79.104.10:47873 (no hostname mapping)
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 construct
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 client construct
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 client tcp construct
+[2026-01-18 04:45:19] [I] 0xb40000763002cc80 socks5 client tcp -> [160.79.104.10]:443
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 session tcp construct for 198.18.0.1:51376
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 session tcp new
+[2026-01-18 04:45:19] [I] 0xb40000763002cc80 [domain-first] started 198.18.0.1:51376 -> 160.79.104.10:443
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 session tcp set task 0xb400007600018aa0
+[2026-01-18 04:45:19] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Routing 198.18.0.1:51376 -> 160.79.104.10:443
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 [DOMAIN-FIRST] Waiting for protocol data on port 443...
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 session tcp: received 1036 bytes from client
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 session tcp: received 565 bytes from client
+[2026-01-18 04:45:19] [D] 0x7589f37d08 filter: ClientHello detected (version=0x0301, len=1592)
+[2026-01-18 04:45:19] [D] 0x7589f37d08 filter: Parsing extensions (len=1415)
+[2026-01-18 04:45:19] [D] 0x7589f37d08 filter: Found SNI extension
+[2026-01-18 04:45:19] [I] 0x7589f37d08 filter: Detected TLS hostname: api.anthropic.com
+[2026-01-18 04:45:19] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Detected hostname: api.anthropic.com (target: 160.79.104.10:443)
+[2026-01-18 04:45:19] [D] ACL Stage2: Domain 'api.anthropic.com' matched exact rule 'api.anthropic.com' -> action=1
+[2026-01-18 04:45:19] [W] 0xb40000763002cc80 [DOMAIN-FIRST] ACL BLOCK -> Reject
+[2026-01-18 04:45:19] [W] 0xb40000763002cc80 socks5 session tcp: error occurred (err=-13), terminating
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 session terminate
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 session tcp destruct
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 session tcp destruct: freeing queued data
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 client tcp destruct
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 client destruct
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 destruct
+[2026-01-18 04:45:19] [D] 0x7589f37d08 socks5 tunnel: TCP connection accepted from 198.18.0.1:51380 to 160.79.104.10:443
+[2026-01-18 04:45:19] [D] 0x7589f37d08 router: TCP routing decision for 198.18.0.1:51380 -> 160.79.104.10:443
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 session tcp construct: pcb->local_ip=160.79.104.10, pcb->local_port=443
+[2026-01-18 04:45:19] [D] addr_from_lwip: IP 160.79.104.10:47873 (no hostname mapping)
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 construct
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 client construct
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 client tcp construct
+[2026-01-18 04:45:19] [I] 0xb40000763002cc80 socks5 client tcp -> [160.79.104.10]:443
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 session tcp construct for 198.18.0.1:51380
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 session tcp new
+[2026-01-18 04:45:19] [I] 0xb40000763002cc80 [domain-first] started 198.18.0.1:51380 -> 160.79.104.10:443
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 session tcp set task 0xb400007600018aa0
+[2026-01-18 04:45:19] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Routing 198.18.0.1:51380 -> 160.79.104.10:443
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 [DOMAIN-FIRST] Waiting for protocol data on port 443...
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 session tcp: received 1036 bytes from client
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 session tcp: received 565 bytes from client
+[2026-01-18 04:45:19] [D] 0x7589f37d08 filter: ClientHello detected (version=0x0301, len=1592)
+[2026-01-18 04:45:19] [D] 0x7589f37d08 filter: Parsing extensions (len=1415)
+[2026-01-18 04:45:19] [D] 0x7589f37d08 filter: Found SNI extension
+[2026-01-18 04:45:19] [I] 0x7589f37d08 filter: Detected TLS hostname: api.anthropic.com
+[2026-01-18 04:45:19] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Detected hostname: api.anthropic.com (target: 160.79.104.10:443)
+[2026-01-18 04:45:19] [D] ACL Stage2: Domain 'api.anthropic.com' matched exact rule 'api.anthropic.com' -> action=1
+[2026-01-18 04:45:19] [W] 0xb40000763002cc80 [DOMAIN-FIRST] ACL BLOCK -> Reject
+[2026-01-18 04:45:19] [W] 0xb40000763002cc80 socks5 session tcp: error occurred (err=-13), terminating
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 session terminate
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 session tcp destruct
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 session tcp destruct: freeing queued data
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 client tcp destruct
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 client destruct
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 destruct
+[2026-01-18 04:45:19] [D] 0x7589f37d08 socks5 tunnel: TCP connection accepted from 198.18.0.1:51386 to 160.79.104.10:443
+[2026-01-18 04:45:19] [D] 0x7589f37d08 router: TCP routing decision for 198.18.0.1:51386 -> 160.79.104.10:443
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 session tcp construct: pcb->local_ip=160.79.104.10, pcb->local_port=443
+[2026-01-18 04:45:19] [D] addr_from_lwip: IP 160.79.104.10:47873 (no hostname mapping)
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 construct
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 client construct
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 client tcp construct
+[2026-01-18 04:45:19] [I] 0xb40000763002cc80 socks5 client tcp -> [160.79.104.10]:443
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 session tcp construct for 198.18.0.1:51386
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 session tcp new
+[2026-01-18 04:45:19] [I] 0xb40000763002cc80 [domain-first] started 198.18.0.1:51386 -> 160.79.104.10:443
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 session tcp set task 0xb400007600018aa0
+[2026-01-18 04:45:19] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Routing 198.18.0.1:51386 -> 160.79.104.10:443
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 [DOMAIN-FIRST] Waiting for protocol data on port 443...
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 session tcp: received 1036 bytes from client
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 session tcp: received 565 bytes from client
+[2026-01-18 04:45:19] [D] 0x7589f37d08 filter: ClientHello detected (version=0x0301, len=1592)
+[2026-01-18 04:45:19] [D] 0x7589f37d08 filter: Parsing extensions (len=1415)
+[2026-01-18 04:45:19] [D] 0x7589f37d08 filter: Found SNI extension
+[2026-01-18 04:45:19] [I] 0x7589f37d08 filter: Detected TLS hostname: api.anthropic.com
+[2026-01-18 04:45:19] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Detected hostname: api.anthropic.com (target: 160.79.104.10:443)
+[2026-01-18 04:45:19] [D] ACL Stage2: Domain 'api.anthropic.com' matched exact rule 'api.anthropic.com' -> action=1
+[2026-01-18 04:45:19] [W] 0xb40000763002cc80 [DOMAIN-FIRST] ACL BLOCK -> Reject
+[2026-01-18 04:45:19] [W] 0xb40000763002cc80 socks5 session tcp: error occurred (err=-13), terminating
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 session terminate
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 session tcp destruct
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 session tcp destruct: freeing queued data
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 client tcp destruct
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 client destruct
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 destruct
+[2026-01-18 04:45:19] [D] 0x7589f37d08 socks5 tunnel: TCP connection accepted from 198.18.0.1:51394 to 160.79.104.10:443
+[2026-01-18 04:45:19] [D] 0x7589f37d08 router: TCP routing decision for 198.18.0.1:51394 -> 160.79.104.10:443
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 session tcp construct: pcb->local_ip=160.79.104.10, pcb->local_port=443
+[2026-01-18 04:45:19] [D] addr_from_lwip: IP 160.79.104.10:47873 (no hostname mapping)
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 construct
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 client construct
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 client tcp construct
+[2026-01-18 04:45:19] [I] 0xb40000763002cc80 socks5 client tcp -> [160.79.104.10]:443
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 session tcp construct for 198.18.0.1:51394
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 session tcp new
+[2026-01-18 04:45:19] [I] 0xb40000763002cc80 [domain-first] started 198.18.0.1:51394 -> 160.79.104.10:443
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 session tcp set task 0xb400007600018aa0
+[2026-01-18 04:45:19] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Routing 198.18.0.1:51394 -> 160.79.104.10:443
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 [DOMAIN-FIRST] Waiting for protocol data on port 443...
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 session tcp: received 1036 bytes from client
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 session tcp: received 565 bytes from client
+[2026-01-18 04:45:19] [D] 0x7589f37d08 filter: ClientHello detected (version=0x0301, len=1592)
+[2026-01-18 04:45:19] [D] 0x7589f37d08 filter: Parsing extensions (len=1415)
+[2026-01-18 04:45:19] [D] 0x7589f37d08 filter: Found SNI extension
+[2026-01-18 04:45:19] [I] 0x7589f37d08 filter: Detected TLS hostname: api.anthropic.com
+[2026-01-18 04:45:19] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Detected hostname: api.anthropic.com (target: 160.79.104.10:443)
+[2026-01-18 04:45:19] [D] ACL Stage2: Domain 'api.anthropic.com' matched exact rule 'api.anthropic.com' -> action=1
+[2026-01-18 04:45:19] [W] 0xb40000763002cc80 [DOMAIN-FIRST] ACL BLOCK -> Reject
+[2026-01-18 04:45:19] [W] 0xb40000763002cc80 socks5 session tcp: error occurred (err=-13), terminating
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 session terminate
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 session tcp destruct
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 session tcp destruct: freeing queued data
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 client tcp destruct
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 client destruct
+[2026-01-18 04:45:19] [D] 0xb40000763002cc80 socks5 destruct
+[2026-01-18 04:45:20] [D] socks5 tunnel: Statistics requested
+[2026-01-18 04:45:22] [I] 0xb40000777001a9c0 io timeout
+[2026-01-18 04:45:22] [I] 0xb4000076a0064be0 [UDP] send task idle timeout
+[2026-01-18 04:45:22] [D] 0xb4000076a0064be0 [UDP] waiting for recv task to complete
+[2026-01-18 04:45:22] [D] socks5 tunnel: Statistics requested
+[2026-01-18 04:45:24] [D] socks5 tunnel: Statistics requested
+[2026-01-18 04:45:26] [D] socks5 tunnel: Statistics requested
+[2026-01-18 04:45:27] [I] 0xb40000777001b260 io timeout
+[2026-01-18 04:45:27] [I] 0xb4000076a0064be0 [UDP] recv task idle timeout
+[2026-01-18 04:45:27] [D] 0xb4000076a0064be0 [UDP] recv task end (received 1 packets, 51 bytes)
+[2026-01-18 04:45:27] [D] 0xb40000777001a9c0 socks5 client udp destruct
+[2026-01-18 04:45:27] [D] 0xb40000777001a9c0 socks5 client destruct
+[2026-01-18 04:45:27] [D] 0xb40000777001a9c0 socks5 destruct
+[2026-01-18 04:45:27] [I] 0xb4000076a0064be0 [UDP] Direct connect cleanup (sent 1 packets/35 bytes, alive=0x00)
+[2026-01-18 04:45:27] [D] 0xb4000076a0064be0 [UDP] Cleanup started 198.18.0.1:6751 -> 223.5.5.5:53
+[2026-01-18 04:45:27] [I] 0xb4000076a0064be0 [UDP] Direct connect 198.18.0.1:6751 -> 223.5.5.5:53 ended (duration=10000 ms, packets_dropped=0)
+[2026-01-18 04:45:28] [D] socks5 tunnel: Statistics requested
+[2026-01-18 04:45:29] [D] 0x7589f37d08 socks5 tunnel: TCP connection accepted from 198.18.0.1:47020 to 160.79.104.10:443
+[2026-01-18 04:45:29] [D] 0x7589f37d08 router: TCP routing decision for 198.18.0.1:47020 -> 160.79.104.10:443
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 session tcp construct: pcb->local_ip=160.79.104.10, pcb->local_port=443
+[2026-01-18 04:45:29] [D] addr_from_lwip: IP 160.79.104.10:47873 (no hostname mapping)
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 construct
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 client construct
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 client tcp construct
+[2026-01-18 04:45:29] [I] 0xb40000763002cc80 socks5 client tcp -> [160.79.104.10]:443
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 session tcp construct for 198.18.0.1:47020
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 session tcp new
+[2026-01-18 04:45:29] [I] 0xb40000763002cc80 [domain-first] started 198.18.0.1:47020 -> 160.79.104.10:443
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 session tcp set task 0xb400007600014d60
+[2026-01-18 04:45:29] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Routing 198.18.0.1:47020 -> 160.79.104.10:443
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 [DOMAIN-FIRST] Waiting for protocol data on port 443...
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 session tcp: received 1036 bytes from client
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 session tcp: received 565 bytes from client
+[2026-01-18 04:45:29] [D] 0x7589f37d08 filter: ClientHello detected (version=0x0301, len=1592)
+[2026-01-18 04:45:29] [D] 0x7589f37d08 filter: Parsing extensions (len=1415)
+[2026-01-18 04:45:29] [D] 0x7589f37d08 filter: Found SNI extension
+[2026-01-18 04:45:29] [I] 0x7589f37d08 filter: Detected TLS hostname: api.anthropic.com
+[2026-01-18 04:45:29] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Detected hostname: api.anthropic.com (target: 160.79.104.10:443)
+[2026-01-18 04:45:29] [D] ACL Stage2: Domain 'api.anthropic.com' matched exact rule 'api.anthropic.com' -> action=1
+[2026-01-18 04:45:29] [W] 0xb40000763002cc80 [DOMAIN-FIRST] ACL BLOCK -> Reject
+[2026-01-18 04:45:29] [W] 0xb40000763002cc80 socks5 session tcp: error occurred (err=-13), terminating
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 session terminate
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 session tcp destruct
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 session tcp destruct: freeing queued data
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 client tcp destruct
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 client destruct
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 destruct
+[2026-01-18 04:45:29] [D] 0x7589f37d08 socks5 tunnel: TCP connection accepted from 198.18.0.1:47034 to 160.79.104.10:443
+[2026-01-18 04:45:29] [D] 0x7589f37d08 router: TCP routing decision for 198.18.0.1:47034 -> 160.79.104.10:443
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 session tcp construct: pcb->local_ip=160.79.104.10, pcb->local_port=443
+[2026-01-18 04:45:29] [D] addr_from_lwip: IP 160.79.104.10:47873 (no hostname mapping)
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 construct
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 client construct
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 client tcp construct
+[2026-01-18 04:45:29] [I] 0xb40000763002cc80 socks5 client tcp -> [160.79.104.10]:443
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 session tcp construct for 198.18.0.1:47034
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 session tcp new
+[2026-01-18 04:45:29] [I] 0xb40000763002cc80 [domain-first] started 198.18.0.1:47034 -> 160.79.104.10:443
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 session tcp set task 0xb400007600014d60
+[2026-01-18 04:45:29] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Routing 198.18.0.1:47034 -> 160.79.104.10:443
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 [DOMAIN-FIRST] Waiting for protocol data on port 443...
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 session tcp: received 1036 bytes from client
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 session tcp: received 565 bytes from client
+[2026-01-18 04:45:29] [D] 0x7589f37d08 filter: ClientHello detected (version=0x0301, len=1592)
+[2026-01-18 04:45:29] [D] 0x7589f37d08 filter: Parsing extensions (len=1415)
+[2026-01-18 04:45:29] [D] 0x7589f37d08 filter: Found SNI extension
+[2026-01-18 04:45:29] [I] 0x7589f37d08 filter: Detected TLS hostname: api.anthropic.com
+[2026-01-18 04:45:29] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Detected hostname: api.anthropic.com (target: 160.79.104.10:443)
+[2026-01-18 04:45:29] [D] ACL Stage2: Domain 'api.anthropic.com' matched exact rule 'api.anthropic.com' -> action=1
+[2026-01-18 04:45:29] [W] 0xb40000763002cc80 [DOMAIN-FIRST] ACL BLOCK -> Reject
+[2026-01-18 04:45:29] [W] 0xb40000763002cc80 socks5 session tcp: error occurred (err=-13), terminating
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 session terminate
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 session tcp destruct
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 session tcp destruct: freeing queued data
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 client tcp destruct
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 client destruct
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 destruct
+[2026-01-18 04:45:29] [D] 0x7589f37d08 socks5 tunnel: TCP connection accepted from 198.18.0.1:47036 to 160.79.104.10:443
+[2026-01-18 04:45:29] [D] 0x7589f37d08 router: TCP routing decision for 198.18.0.1:47036 -> 160.79.104.10:443
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 session tcp construct: pcb->local_ip=160.79.104.10, pcb->local_port=443
+[2026-01-18 04:45:29] [D] addr_from_lwip: IP 160.79.104.10:47873 (no hostname mapping)
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 construct
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 client construct
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 client tcp construct
+[2026-01-18 04:45:29] [I] 0xb40000763002cc80 socks5 client tcp -> [160.79.104.10]:443
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 session tcp construct for 198.18.0.1:47036
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 session tcp new
+[2026-01-18 04:45:29] [I] 0xb40000763002cc80 [domain-first] started 198.18.0.1:47036 -> 160.79.104.10:443
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 session tcp set task 0xb400007600014d60
+[2026-01-18 04:45:29] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Routing 198.18.0.1:47036 -> 160.79.104.10:443
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 [DOMAIN-FIRST] Waiting for protocol data on port 443...
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 session tcp: received 1036 bytes from client
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 session tcp: received 565 bytes from client
+[2026-01-18 04:45:29] [D] 0x7589f37d08 filter: ClientHello detected (version=0x0301, len=1592)
+[2026-01-18 04:45:29] [D] 0x7589f37d08 filter: Parsing extensions (len=1415)
+[2026-01-18 04:45:29] [D] 0x7589f37d08 filter: Found SNI extension
+[2026-01-18 04:45:29] [I] 0x7589f37d08 filter: Detected TLS hostname: api.anthropic.com
+[2026-01-18 04:45:29] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Detected hostname: api.anthropic.com (target: 160.79.104.10:443)
+[2026-01-18 04:45:29] [D] ACL Stage2: Domain 'api.anthropic.com' matched exact rule 'api.anthropic.com' -> action=1
+[2026-01-18 04:45:29] [W] 0xb40000763002cc80 [DOMAIN-FIRST] ACL BLOCK -> Reject
+[2026-01-18 04:45:29] [W] 0xb40000763002cc80 socks5 session tcp: error occurred (err=-13), terminating
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 session terminate
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 session tcp destruct
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 session tcp destruct: freeing queued data
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 client tcp destruct
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 client destruct
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 destruct
+[2026-01-18 04:45:29] [D] 0x7589f37d08 socks5 tunnel: TCP connection accepted from 198.18.0.1:47050 to 160.79.104.10:443
+[2026-01-18 04:45:29] [D] 0x7589f37d08 router: TCP routing decision for 198.18.0.1:47050 -> 160.79.104.10:443
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 session tcp construct: pcb->local_ip=160.79.104.10, pcb->local_port=443
+[2026-01-18 04:45:29] [D] addr_from_lwip: IP 160.79.104.10:47873 (no hostname mapping)
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 construct
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 client construct
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 client tcp construct
+[2026-01-18 04:45:29] [I] 0xb40000763002cc80 socks5 client tcp -> [160.79.104.10]:443
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 session tcp construct for 198.18.0.1:47050
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 session tcp new
+[2026-01-18 04:45:29] [I] 0xb40000763002cc80 [domain-first] started 198.18.0.1:47050 -> 160.79.104.10:443
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 session tcp set task 0xb400007600014d60
+[2026-01-18 04:45:29] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Routing 198.18.0.1:47050 -> 160.79.104.10:443
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 [DOMAIN-FIRST] Waiting for protocol data on port 443...
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 session tcp: received 1036 bytes from client
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 session tcp: received 565 bytes from client
+[2026-01-18 04:45:29] [D] 0x7589f37d08 filter: ClientHello detected (version=0x0301, len=1592)
+[2026-01-18 04:45:29] [D] 0x7589f37d08 filter: Parsing extensions (len=1415)
+[2026-01-18 04:45:29] [D] 0x7589f37d08 filter: Found SNI extension
+[2026-01-18 04:45:29] [I] 0x7589f37d08 filter: Detected TLS hostname: api.anthropic.com
+[2026-01-18 04:45:29] [I] 0xb40000763002cc80 [DOMAIN-FIRST] Detected hostname: api.anthropic.com (target: 160.79.104.10:443)
+[2026-01-18 04:45:29] [D] ACL Stage2: Domain 'api.anthropic.com' matched exact rule 'api.anthropic.com' -> action=1
+[2026-01-18 04:45:29] [W] 0xb40000763002cc80 [DOMAIN-FIRST] ACL BLOCK -> Reject
+[2026-01-18 04:45:29] [W] 0xb40000763002cc80 socks5 session tcp: error occurred (err=-13), terminating
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 session terminate
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 session tcp destruct
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 session tcp destruct: freeing queued data
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 client tcp destruct
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 client destruct
+[2026-01-18 04:45:29] [D] 0xb40000763002cc80 socks5 destruct
+[2026-01-18 04:45:30] [D] socks5 tunnel: Statistics requested
+[2026-01-18 04:45:31] [D] 0x7589e37c1c socks5 tunnel: UDP packet received from 198.18.0.1:49862 to 223.5.5.5:53 (size=47 bytes)
+[2026-01-18 04:45:31] [D] 0x7589e37c1c router: UDP routing decision for 198.18.0.1:49862 -> 223.5.5.5:53 (packet_size=47)
+[2026-01-18 04:45:31] [D] dns-cache: Detected UDP header in packet, skipping 8 bytes
+[2026-01-18 04:45:31] [D] dns-cache: extract_dns_domain: result=0, domain='statsig.anthropic.com' (len=21)
+[2026-01-18 04:45:31] [D] dns-cache: Checking cache for domain: statsig.anthropic.com (domain_len=21)
+[2026-01-18 04:45:31] [D] dns-cache: Cache miss for domain: statsig.anthropic.com (domain_len=21)
+[2026-01-18 04:45:31] [I] 0x7589e37c1c router: DNS query to domestic 223.5.5.5:53 (cache miss), using DIRECT for pollution detection
+[2026-01-18 04:45:31] [I] 0xb4000076a0064be0 [UDP] Direct connect started 198.18.0.1:49862 -> 223.5.5.5:53 (first_packet=47 bytes)
+[2026-01-18 04:45:31] [D] 0x7589e37c1c socks5 tunnel: UDP packet handled by traffic router (direct connect or DNS forward)
+[2026-01-18 04:45:31] [D] 0xb40000777001b2c0 socks5 construct
+[2026-01-18 04:45:31] [D] 0xb40000777001b2c0 socks5 client construct
+[2026-01-18 04:45:31] [I] 0xb40000777001b2c0 socks5 client udp construct
+[2026-01-18 04:45:31] [D] 0xb40000777001b2c0 socks5 client udp new
+[2026-01-18 04:45:31] [D] 0xb4000076a0064be0 [UDP] send task start 198.18.0.1:49862 -> 223.5.5.5:53
+[2026-01-18 04:45:31] [D] 0xb4000076a0064be0 [UDP] session created at 403 ms
+[2026-01-18 04:45:31] [D] 0xb4000076a0064be0 [UDP] target is IPv4 (mapped to IPv6): 223.5.5.5:53
+[2026-01-18 04:45:31] [I] 0xb4000076a0064be0 [UDP] Direct connect established 198.18.0.1:49862 -> 223.5.5.5:53
+[2026-01-18 04:45:31] [D] 0xb4000076a0064be0 [UDP] sent 39 bytes to server (total=1 packets, 39 bytes)
+[2026-01-18 04:45:31] [D] 0xb40000777001a9c0 socks5 construct
+[2026-01-18 04:45:31] [D] 0xb40000777001a9c0 socks5 client construct
+[2026-01-18 04:45:31] [I] 0xb40000777001a9c0 socks5 client udp construct
+[2026-01-18 04:45:31] [D] 0xb40000777001a9c0 socks5 client udp new
+[2026-01-18 04:45:31] [D] 0xb4000076a0064be0 [UDP] recv task start 198.18.0.1:49862 <- 223.5.5.5:53
+[2026-01-18 04:45:31] [D] 0x7589e37c7c socks5 tunnel: UDP packet received from 198.18.0.1:11684 to 223.5.5.5:53 (size=47 bytes)
+[2026-01-18 04:45:31] [D] 0x7589e37c7c router: UDP routing decision for 198.18.0.1:11684 -> 223.5.5.5:53 (packet_size=47)
+[2026-01-18 04:45:31] [D] dns-cache: Detected UDP header in packet, skipping 8 bytes
+[2026-01-18 04:45:31] [D] dns-cache: extract_dns_domain: result=0, domain='statsig.anthropic.com' (len=21)
+[2026-01-18 04:45:31] [D] dns-cache: Checking cache for domain: statsig.anthropic.com (domain_len=21)
+[2026-01-18 04:45:31] [D] dns-cache: Cache miss for domain: statsig.anthropic.com (domain_len=21)
+[2026-01-18 04:45:31] [I] 0x7589e37c7c router: DNS query to domestic 223.5.5.5:53 (cache miss), using DIRECT for pollution detection
+[2026-01-18 04:45:31] [I] 0xb4000076a0066e00 [UDP] Direct connect started 198.18.0.1:11684 -> 223.5.5.5:53 (first_packet=47 bytes)
+[2026-01-18 04:45:31] [D] 0x7589e37c7c socks5 tunnel: UDP packet handled by traffic router (direct connect or DNS forward)
+[2026-01-18 04:45:31] [D] 0xb40000777001bf80 socks5 construct
+[2026-01-18 04:45:31] [D] 0xb40000777001bf80 socks5 client construct
+[2026-01-18 04:45:31] [I] 0xb40000777001bf80 socks5 client udp construct
+[2026-01-18 04:45:31] [D] 0xb40000777001bf80 socks5 client udp new
+[2026-01-18 04:45:31] [D] 0xb4000076a0066e00 [UDP] send task start 198.18.0.1:11684 -> 223.5.5.5:53
+[2026-01-18 04:45:31] [D] 0xb4000076a0066e00 [UDP] session created at 406 ms
+[2026-01-18 04:45:31] [D] 0xb4000076a0066e00 [UDP] target is IPv4 (mapped to IPv6): 223.5.5.5:53
+[2026-01-18 04:45:31] [I] 0xb4000076a0066e00 [UDP] Direct connect established 198.18.0.1:11684 -> 223.5.5.5:53
+[2026-01-18 04:45:31] [D] 0xb4000076a0066e00 [UDP] sent 39 bytes to server (total=1 packets, 39 bytes)
+[2026-01-18 04:45:31] [D] 0xb40000777001c100 socks5 construct
+[2026-01-18 04:45:31] [D] 0xb40000777001c100 socks5 client construct
+[2026-01-18 04:45:31] [I] 0xb40000777001c100 socks5 client udp construct
+[2026-01-18 04:45:31] [D] 0xb40000777001c100 socks5 client udp new
+[2026-01-18 04:45:31] [D] 0xb4000076a0066e00 [UDP] recv task start 198.18.0.1:11684 <- 223.5.5.5:53
+[2026-01-18 04:45:31] [D] 0xb4000076a0066e00 [UDP] received 55 bytes from server (total=1 packets, 55 bytes)
+[2026-01-18 04:45:31] [W] dns-cache: Detected foreign IP in DNS response: 34.36.57.103 (pollution suspected)
+[2026-01-18 04:45:31] [W] 0xb4000076a0066e00 session: DNS pollution detected from 223.5.5.5:53, querying via SOCKS5 proxy (using configured foreign-dns)
+[2026-01-18 04:45:31] [D] 0xb4000076a0066e00 session: Stripping 8-byte header from SOCKS5 DNS query
+[2026-01-18 04:45:31] [D] dns-cache: Using IPv4 foreign-dns list
+[2026-01-18 04:45:31] [D] dns-cache: Selected DNS server: 8.8.8.8
+[2026-01-18 04:45:31] [D] 0xb400007770019460 socks5 construct
+[2026-01-18 04:45:31] [D] 0xb400007770019460 socks5 client construct
+[2026-01-18 04:45:31] [I] 0xb400007770019460 socks5 client udp construct
+[2026-01-18 04:45:31] [D] 0xb400007770019460 socks5 client udp new
+[2026-01-18 04:45:31] [D] 0xb400007770019460 socks5 client connect [64.69.34.166]:1080
+[2026-01-18 04:45:31] [D] 0xb4000076a0064be0 [UDP] received 115 bytes from server (total=1 packets, 115 bytes)
+[2026-01-18 04:45:31] [I] 0xb4000076a0064be0 session: DNS response is clean from 223.5.5.5:53
+[2026-01-18 04:45:31] [D] dns-cache: extract_dns_domain: result=0, domain='statsig.anthropic.com' (len=21)
+[2026-01-18 04:45:31] [I] dns-latency: Before copy: *client_ip=223.5.5.5 (ptr=0xb4000076a0064c48), *src_ip=223.5.5.5 (ptr=0xb4000076a0064c2c)
+[2026-01-18 04:45:31] [I] dns-latency: Raw memory: client_ip[0-7]=c612000100000000, src_ip[0-7]=df05050500000000
+[2026-01-18 04:45:31] [I] dns-latency: After copy: ctx->client_ip raw=c6120001, ctx->src_ip raw=df050505
+[2026-01-18 04:45:31] [I] dns-latency: Context init: client=198.18.0.1:49862, src=223.5.5.5:53
+[2026-01-18 04:45:31] [I] dns-latency: Started async optimization task for domain: statsig.anthropic.com
+[2026-01-18 04:45:31] [I] 0xb4000076a0064be0 session: DNS latency optimization started for domain: statsig.anthropic.com
+[2026-01-18 04:45:31] [D] 0xb4000076a0064be0 session: DNS response handled by async task, skipping send
+[2026-01-18 04:45:31] [D] dns-latency: Added task 0xb400007600015b60 to tracking list (count=1)
+[2026-01-18 04:45:31] [I] dns-latency: Starting latency optimization for domain: statsig.anthropic.com
+[2026-01-18 04:45:31] [W] dns-latency: No IPs extracted from DNS response for statsig.anthropic.com
+[2026-01-18 04:45:31] [D] dns-latency: Removed task 0xb400007600015b60 from tracking list (count=0)
+[2026-01-18 04:45:31] [I] dns-latency: Optimization task finished for domain: statsig.anthropic.com
+[2026-01-18 04:45:31] [D] 0xb400007770019460 socks5 client connect server fd 99
+[2026-01-18 04:45:31] [D] 0xb400007770019460 socks5 client set auth
+[2026-01-18 04:45:31] [D] 0xb400007770019460 socks5 client handshake standard
+[2026-01-18 04:45:31] [D] 0xb400007770019460 socks5 client write auth methods
+[2026-01-18 04:45:31] [D] 0xb400007770019460 socks5 client read auth method
+[2026-01-18 04:45:32] [D] 0xb400007770019460 socks5 client write auth creds
+[2026-01-18 04:45:32] [D] 0xb400007770019460 socks5 client read auth creds
+[2026-01-18 04:45:32] [D] 0xb400007770019460 socks5 client auth done
+[2026-01-18 04:45:32] [D] 0xb400007770019460 socks5 client write request
+[2026-01-18 04:45:32] [D] 0xb400007770019460 socks5 client read response
+[2026-01-18 04:45:32] [D] socks5 tunnel: Statistics requested
+[2026-01-18 04:45:32] [D] addr_from_lwip: IP 8.8.8.8:13568 (no hostname mapping)
+[2026-01-18 04:45:32] [I] dns-cache: Sending DNS query via SOCKS5 (target=8.8.8.8:53, type=3)
+[2026-01-18 04:45:32] [I] dns-cache: Received SOCKS5 DNS response from 8.8.8.8 (55 bytes)
+[2026-01-18 04:45:32] [D] 0xb400007770019460 socks5 client udp destruct
+[2026-01-18 04:45:32] [D] 0xb400007770019460 socks5 client destruct
+[2026-01-18 04:45:32] [D] 0xb400007770019460 socks5 destruct
+[2026-01-18 04:45:32] [I] 0xb4000076a0066e00 session: Replaced poisoned response with clean response from SOCKS5 (55 bytes)
+[2026-01-18 04:45:32] [D] dns-cache: extract_dns_domain: result=0, domain='statsig.anthropic.com' (len=21)
+[2026-01-18 04:45:32] [D] 0xb4000076a0066e00 [UDP] sending from spoofed source 223.5.5.5:53
+[2026-01-18 04:45:32] [D] 0xb4000076a0066e00 [UDP] forwarded 55 bytes to client 198.18.0.1:11684
+[2026-01-18 04:45:34] [D] 0x7589e37cdc socks5 tunnel: UDP packet received from FC00::1:42776 to 2400:3200::1:53 (size=47 bytes)
+[2026-01-18 04:45:34] [D] 0x7589e37cdc router: UDP routing decision for FC00::1:42776 -> 2400:3200::1:53 (packet_size=47)
+[2026-01-18 04:45:34] [D] dns-cache: Detected UDP header in packet, skipping 8 bytes
+[2026-01-18 04:45:34] [D] dns-cache: extract_dns_domain: result=0, domain='statsig.anthropic.com' (len=21)
+[2026-01-18 04:45:34] [D] dns-cache: Checking cache for domain: statsig.anthropic.com (domain_len=21)
+[2026-01-18 04:45:34] [D] dns-cache: Cache miss for domain: statsig.anthropic.com (domain_len=21)
+[2026-01-18 04:45:34] [I] 0x7589e37cdc router: DNS query to domestic 2400:3200::1:53 (cache miss), using DIRECT for pollution detection
+[2026-01-18 04:45:34] [I] 0xb4000076a00667e0 [UDP] Direct connect started FC00::1:42776 -> 2400:3200::1:53 (first_packet=47 bytes)
+[2026-01-18 04:45:34] [D] 0x7589e37cdc socks5 tunnel: UDP packet handled by traffic router (direct connect or DNS forward)
+[2026-01-18 04:45:34] [D] 0xb400007770019b80 socks5 construct
+[2026-01-18 04:45:34] [D] 0xb400007770019b80 socks5 client construct
+[2026-01-18 04:45:34] [I] 0xb400007770019b80 socks5 client udp construct
+[2026-01-18 04:45:34] [D] 0xb400007770019b80 socks5 client udp new
+[2026-01-18 04:45:34] [D] 0xb4000076a00667e0 [UDP] send task start FC00::1:42776 -> 2400:3200::1:53
+[2026-01-18 04:45:34] [D] 0xb4000076a00667e0 [UDP] session created at 406 ms
+[2026-01-18 04:45:34] [D] 0xb4000076a00667e0 [UDP] target is IPv6: 2400:3200::1:53
+[2026-01-18 04:45:34] [I] 0xb4000076a00667e0 [UDP] Direct connect established FC00::1:42776 -> 2400:3200::1:53
+[2026-01-18 04:45:34] [D] 0xb4000076a00667e0 [UDP] sent 39 bytes to server (total=1 packets, 39 bytes)
+[2026-01-18 04:45:34] [D] 0xb400007770019460 socks5 construct
+[2026-01-18 04:45:34] [D] 0xb400007770019460 socks5 client construct
+[2026-01-18 04:45:34] [I] 0xb400007770019460 socks5 client udp construct
+[2026-01-18 04:45:34] [D] 0xb400007770019460 socks5 client udp new
+[2026-01-18 04:45:34] [D] 0xb4000076a00667e0 [UDP] recv task start FC00::1:42776 <- 2400:3200::1:53
+[2026-01-18 04:45:34] [D] 0xb4000076a00667e0 [UDP] received 115 bytes from server (total=1 packets, 115 bytes)
+[2026-01-18 04:45:34] [I] 0xb4000076a00667e0 session: DNS response is clean from 2400:3200::1:53
+[2026-01-18 04:45:34] [D] dns-cache: extract_dns_domain: result=0, domain='statsig.anthropic.com' (len=21)
+[2026-01-18 04:45:34] [I] dns-latency: Before copy: *client_ip=2400:3200::1 (ptr=0xb4000076a0066848), *src_ip=2400:3200::1 (ptr=0xb4000076a006682c)
+[2026-01-18 04:45:34] [I] dns-latency: Raw memory: client_ip[0-7]=fc00000000000000, src_ip[0-7]=2400320000000000
+[2026-01-18 04:45:34] [I] dns-latency: After copy: ctx->client_ip raw=fc000000, ctx->src_ip raw=24003200
+[2026-01-18 04:45:34] [I] dns-latency: Context init: client=FC00::1:42776, src=2400:3200::1:53
+[2026-01-18 04:45:34] [I] dns-latency: Started async optimization task for domain: statsig.anthropic.com
+[2026-01-18 04:45:34] [I] 0xb4000076a00667e0 session: DNS latency optimization started for domain: statsig.anthropic.com
+[2026-01-18 04:45:34] [D] 0xb4000076a00667e0 session: DNS response handled by async task, skipping send
+[2026-01-18 04:45:34] [D] dns-latency: Added task 0xb400007600019360 to tracking list (count=1)
+[2026-01-18 04:45:34] [I] dns-latency: Starting latency optimization for domain: statsig.anthropic.com
+[2026-01-18 04:45:34] [W] dns-latency: No IPs extracted from DNS response for statsig.anthropic.com
+[2026-01-18 04:45:34] [D] dns-latency: Removed task 0xb400007600019360 from tracking list (count=0)
+[2026-01-18 04:45:34] [I] dns-latency: Optimization task finished for domain: statsig.anthropic.com
+[2026-01-18 04:45:34] [D] socks5 tunnel: Statistics requested
+
+========== End of Logs ==========
