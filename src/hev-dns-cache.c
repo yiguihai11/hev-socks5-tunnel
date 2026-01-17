@@ -645,7 +645,8 @@ hev_dns_cache_fini (void)
     }
 
     if (cache_cleaner_started) {
-        LOG_W ("dns-cache: Cleaner task did not exit after waiting, forcing cleanup");
+        LOG_W (
+            "dns-cache: Cleaner task did not exit after waiting, forcing cleanup");
     }
 
     /* 清理哈希表：只清空指针，不释放条目
