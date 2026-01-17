@@ -1069,29 +1069,46 @@ hev_dns_latency_test_concurrent (const ip_addr_t *ips, int ip_count,
     }
 
     /* ⭐ 等待：有赢家 OR 全部完成 OR 超时 */
-    hev_task_mutex_lock (&ctx.mutex);
-    while (ctx.winner_index < 0 && ctx.completed_count < ctx.ip_count) {
+    /* 使用轮询而非cond_wait，避免子任务阻塞时导致主任务无限等待 */
+    int total_wait_ms = 0;
+    int max_wait_ms = ctx.timeout_ms + 2000; /* 额外2秒缓冲时间 */
+
+    while (ctx.winner_index < 0 && ctx.completed_count < ctx.ip_count
+           && total_wait_ms < max_wait_ms) {
+        hev_task_mutex_lock (&ctx.mutex);
+
         /* 检查超时 */
         int64_t elapsed_ms = get_time_ms () - ctx.start_time_ms;
         if (elapsed_ms >= ctx.timeout_ms) {
             LOG_W ("dns-latency: Race timeout after %lldms",
                    (long long)elapsed_ms);
             ctx.should_stop = 1;
+            hev_task_mutex_unlock (&ctx.mutex);
             break;
         }
 
-        /* 等待信号（有赢家或任务完成） */
-        hev_task_cond_wait (&ctx.cond, &ctx.mutex);
-    }
-    ctx.should_stop = 1; /* 通知所有任务停止 */
-    hev_task_mutex_unlock (&ctx.mutex);
+        hev_task_mutex_unlock (&ctx.mutex);
 
-    /* 等待所有任务完全结束 */
-    hev_task_mutex_lock (&ctx.mutex);
-    while (ctx.completed_count < ctx.ip_count) {
-        hev_task_cond_wait (&ctx.cond, &ctx.mutex);
+        /* 使用sleep轮询而非cond_wait，避免子任务卡死导致主任务阻塞 */
+        hev_task_sleep (50); /* 50ms轮询间隔 */
+        total_wait_ms += 50;
     }
-    hev_task_mutex_unlock (&ctx.mutex);
+
+    ctx.should_stop = 1; /* 通知所有任务停止 */
+
+    /* 等待所有任务完全结束（带超时保护） */
+    total_wait_ms = 0;
+    while (ctx.completed_count < ctx.ip_count && total_wait_ms < max_wait_ms) {
+        if (ctx.completed_count >= ctx.ip_count)
+            break;
+        hev_task_sleep (50); /* 50ms轮询间隔 */
+        total_wait_ms += 50;
+    }
+
+    if (ctx.completed_count < ctx.ip_count) {
+        LOG_W ("dns-latency: %d tasks still not completed after %dms",
+               ctx.ip_count - ctx.completed_count, total_wait_ms);
+    }
 
     /* 检查结果 */
     int64_t total_elapsed_ms = get_time_ms () - ctx.start_time_ms;
