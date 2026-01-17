@@ -32,6 +32,7 @@
 #include "hev-config.h"
 #include "hev-dns-cache.h"
 #include "hev-dns-latency.h"
+#include "hev-socks5-tunnel.h"
 
 /* Ping command availability (-1=unknown, 0=not available, 1=available) */
 static int ping_ipv4_available = -1;
@@ -890,6 +891,13 @@ single_ip_test_task (void *data)
     hev_task_mutex_unlock (&ctx->mutex);
 
     if (!has_winner && !is_timeout) {
+        /* 检查tunnel是否还在运行 */
+        if (!hev_socks5_tunnel_is_running ()) {
+            LOG_D ("dns-latency: [%d] Tunnel shutting down, skipping TCP443",
+                   ip_index);
+            goto done;
+        }
+
         int64_t remaining_ms =
             ctx->timeout_ms - (get_time_ms () - ctx->start_time_ms);
         if (remaining_ms > 0) {
@@ -929,6 +937,13 @@ single_ip_test_task (void *data)
     hev_task_mutex_unlock (&ctx->mutex);
 
     if (!has_winner && !is_timeout) {
+        /* 检查tunnel是否还在运行 */
+        if (!hev_socks5_tunnel_is_running ()) {
+            LOG_D ("dns-latency: [%d] Tunnel shutting down, skipping TCP80",
+                   ip_index);
+            goto done;
+        }
+
         int64_t remaining_ms =
             ctx->timeout_ms - (get_time_ms () - ctx->start_time_ms);
         if (remaining_ms > 0) {
@@ -967,6 +982,13 @@ single_ip_test_task (void *data)
     hev_task_mutex_unlock (&ctx->mutex);
 
     if (!has_winner && !is_timeout) {
+        /* 检查tunnel是否还在运行 */
+        if (!hev_socks5_tunnel_is_running ()) {
+            LOG_D ("dns-latency: [%d] Tunnel shutting down, skipping ICMP",
+                   ip_index);
+            goto done;
+        }
+
         int64_t remaining_ms =
             ctx->timeout_ms - (get_time_ms () - ctx->start_time_ms);
         if (remaining_ms > 0) {
@@ -1075,6 +1097,13 @@ hev_dns_latency_test_concurrent (const ip_addr_t *ips, int ip_count,
 
     while (ctx.winner_index < 0 && ctx.completed_count < ctx.ip_count &&
            total_wait_ms < max_wait_ms) {
+        /* 检查tunnel是否还在运行，如果正在关闭则提前退出 */
+        if (!hev_socks5_tunnel_is_running ()) {
+            LOG_W ("dns-latency: Tunnel shutting down, stopping latency test");
+            ctx.should_stop = 1;
+            break;
+        }
+
         hev_task_mutex_lock (&ctx.mutex);
 
         /* 检查超时 */
