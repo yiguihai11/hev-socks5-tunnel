@@ -1,5 +1,0 @@
-build/core/ipv4/dhcp.o: src/core/ipv4/dhcp.c src/include/lwip/opt.h \
- src/ports/include/lwipopts.h src/ports/include/lwipopts.h \
- src/include/lwip/debug.h src/include/lwip/arch.h \
- src/ports/include/arch/cc.h \
- src/ports/include/arch/../../unix/include/cc.h

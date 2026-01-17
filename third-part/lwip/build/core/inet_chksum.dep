@@ -1,9 +1,0 @@
-build/core/inet_chksum.o: src/core/inet_chksum.c src/include/lwip/opt.h \
- src/ports/include/lwipopts.h src/ports/include/lwipopts.h \
- src/include/lwip/debug.h src/include/lwip/arch.h \
- src/ports/include/arch/cc.h \
- src/ports/include/arch/../../unix/include/cc.h \
- src/include/lwip/inet_chksum.h src/include/lwip/pbuf.h \
- src/include/lwip/err.h src/include/lwip/ip_addr.h src/include/lwip/def.h \
- src/include/lwip/ip4_addr.h src/include/lwip/ip6_addr.h \
- src/include/lwip/def.h src/include/lwip/ip6_zone.h

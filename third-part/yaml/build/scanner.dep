@@ -1,1 +1,0 @@
-build/scanner.o: src/scanner.c src/yaml_private.h src/yaml.h

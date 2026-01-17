@@ -1,1 +1,0 @@
-build/ports/win32/netif/sio.o: src/ports/win32/netif/sio.c

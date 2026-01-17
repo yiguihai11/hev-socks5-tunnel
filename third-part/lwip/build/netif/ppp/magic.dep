@@ -1,6 +1,0 @@
-build/netif/ppp/magic.o: src/netif/ppp/magic.c \
- src/include/netif/ppp/ppp_opts.h src/include/lwip/opt.h \
- src/ports/include/lwipopts.h src/ports/include/lwipopts.h \
- src/include/lwip/debug.h src/include/lwip/arch.h \
- src/ports/include/arch/cc.h \
- src/ports/include/arch/../../unix/include/cc.h

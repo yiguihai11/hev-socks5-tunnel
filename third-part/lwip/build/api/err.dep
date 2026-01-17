@@ -1,6 +1,0 @@
-build/api/err.o: src/api/err.c src/include/lwip/err.h \
- src/include/lwip/opt.h src/ports/include/lwipopts.h \
- src/ports/include/lwipopts.h src/include/lwip/debug.h \
- src/include/lwip/arch.h src/ports/include/arch/cc.h \
- src/ports/include/arch/../../unix/include/cc.h src/include/lwip/def.h \
- src/include/lwip/sys.h src/include/lwip/errno.h

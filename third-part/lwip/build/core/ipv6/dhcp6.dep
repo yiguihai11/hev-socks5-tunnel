@@ -1,5 +1,0 @@
-build/core/ipv6/dhcp6.o: src/core/ipv6/dhcp6.c src/include/lwip/opt.h \
- src/ports/include/lwipopts.h src/ports/include/lwipopts.h \
- src/include/lwip/debug.h src/include/lwip/arch.h \
- src/ports/include/arch/cc.h \
- src/ports/include/arch/../../unix/include/cc.h

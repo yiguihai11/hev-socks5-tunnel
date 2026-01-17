@@ -1,1 +1,0 @@
-build/ports/lib/mem.o: src/ports/lib/mem.c

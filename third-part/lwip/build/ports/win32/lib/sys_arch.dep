@@ -1,1 +1,0 @@
-build/ports/win32/lib/sys_arch.o: src/ports/win32/lib/sys_arch.c
