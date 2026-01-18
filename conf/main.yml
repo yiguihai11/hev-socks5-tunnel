@@ -4,7 +4,7 @@ tunnel:
   # Interface name
   name: tun0
   # Interface MTU
-  mtu: 8500
+  mtu: 1500
   # Multi-queue
   multi-queue: false
   # IPv4 address
@@ -53,7 +53,7 @@ socks5:
     #           • 直接UDP转发，性能稍好但可能受NAT影响
     #           • 同样使用本块中定义的地址、端口和认证信息
     #           • 需要SOCKS5服务器在指定地址和端口上监听UDP
-    udp-relay: 'tcp'
+    udp-relay: 'udp'
 
     # 认证信息 (UDP连接专用，独立配置)
     username: 'yiguihai'
@@ -103,7 +103,7 @@ dns-latency-optimize:
 
   # 总测速超时时间（毫秒）
   # 如果所有 IP 测速都超时，将返回原始 DNS 响应
-  timeout-ms: 3000
+  timeout-ms: 250
 
 chnroutes:
   # Enables split routing based on a list of Chinese IP ranges.
@@ -135,7 +135,7 @@ smart-proxy:
   # Feature is enabled if both timeout-ms and blocked-ip-expiry-minutes are set and non-zero.
 
   # Timeout in milliseconds for direct connection attempts.
-  timeout-ms: 1300
+  timeout-ms: 1400
   # Expiry time in minutes for temporarily blocked IPs.
   blocked-ip-expiry-minutes: 360
 
@@ -164,9 +164,9 @@ mapdns:
   # Mapped DNS port
   port: 53
   # Mapped IP network base (IPv4)
-  network: 100.64.0.0
+  network: 240.0.0.0
   # Mapped IP network mask (IPv4)
-  netmask: 255.192.0.0
+  netmask: 240.0.0.0
   # Mapped IP network prefix (IPv6, optional, default: fd00::)
   network6: 'fd00::'
   # IPv6 prefix length (optional, default: 96)
@@ -179,7 +179,7 @@ mapdns:
 
 misc:
   # task stack size (bytes)
-  task-stack-size: 86016
+  task-stack-size: 81920
   # tcp buffer size (bytes)
   tcp-buffer-size: 65536
   # udp socket recv buffer (SO_RCVBUF) size (bytes)
@@ -193,7 +193,7 @@ misc:
   # TCP read-write timeout (ms)
   tcp-read-write-timeout: 300000
   # UDP read-write timeout (ms)
-  udp-read-write-timeout: 60000
+  udp-read-write-timeout: 5000
   # stdout, stderr or file-path
   log-file: stdout
   # debug, info, warn or error
