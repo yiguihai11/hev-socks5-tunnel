@@ -9,6 +9,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <signal.h>
 
 #if defined(__APPLE__)
@@ -67,10 +68,22 @@ signal_handler (int signo, siginfo_t *si, void *unused)
 
     switch (signo) {
     case SIGBUS:
-        self->bus_sa.sa_sigaction (signo, si, unused);
+        if (self->bus_sa.sa_flags & SA_SIGINFO) {
+            if (self->bus_sa.sa_sigaction)
+                self->bus_sa.sa_sigaction (signo, si, unused);
+        } else if (self->bus_sa.sa_handler != SIG_DFL &&
+                   self->bus_sa.sa_handler != SIG_IGN) {
+            self->bus_sa.sa_handler (signo);
+        }
         break;
     case SIGSEGV:
-        self->segv_sa.sa_sigaction (signo, si, unused);
+        if (self->segv_sa.sa_flags & SA_SIGINFO) {
+            if (self->segv_sa.sa_sigaction)
+                self->segv_sa.sa_sigaction (signo, si, unused);
+        } else if (self->segv_sa.sa_handler != SIG_DFL &&
+                   self->segv_sa.sa_handler != SIG_IGN) {
+            self->segv_sa.sa_handler (signo);
+        }
         break;
     default:
         return;
@@ -114,8 +127,27 @@ exit:
 void
 hev_task_stack_detector_destroy (HevTaskStackDetector *self)
 {
-    sigaction (SIGBUS, &self->bus_sa, NULL);
-    sigaction (SIGSEGV, &self->segv_sa, NULL);
+    struct sigaction sa;
+
+    /* Restore original signal handlers or set to SIG_DFL */
+    if (self->bus_sa.sa_sigaction || self->bus_sa.sa_handler) {
+        sigaction (SIGBUS, &self->bus_sa, NULL);
+    } else {
+        memset (&sa, 0, sizeof (sa));
+        sa.sa_handler = SIG_DFL;
+        sigemptyset (&sa.sa_mask);
+        sigaction (SIGBUS, &sa, NULL);
+    }
+
+    if (self->segv_sa.sa_sigaction || self->segv_sa.sa_handler) {
+        sigaction (SIGSEGV, &self->segv_sa, NULL);
+    } else {
+        memset (&sa, 0, sizeof (sa));
+        sa.sa_handler = SIG_DFL;
+        sigemptyset (&sa.sa_mask);
+        sigaction (SIGSEGV, &sa, NULL);
+    }
+
     setaltstack (&self->oss, NULL);
     free (self);
 }

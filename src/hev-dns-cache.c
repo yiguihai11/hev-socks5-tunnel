@@ -649,18 +649,28 @@ hev_dns_cache_fini (void)
             "dns-cache: Cleaner task did not exit after waiting, forcing cleanup");
     }
 
-    /* 清理哈希表：只清空指针，不释放条目
-     * 条目是从对象池分配的，对象池销毁时会统一处理所有条目
-     * 手动释放会导致 double free 错误 */
+    /* 清理哈希表：释放所有条目 */
     for (int shard = 0; shard < DNS_CACHE_SHARD_COUNT; shard++) {
         /* 清理属于这个分片的哈希桶 */
         for (int i = shard; i < DNS_CACHE_HASH_SIZE;
              i += DNS_CACHE_SHARD_COUNT) {
+            HevDNSCacheEntry *entry = dns_cache_table[i];
+            while (entry) {
+                HevDNSCacheEntry *next = entry->next;
+                /* 释放条目内部的 response_data */
+                if (entry->response_data) {
+                    hev_free (entry->response_data);
+                    entry->response_data = NULL;
+                }
+                /* 直接释放条目，不归还到对象池 */
+                hev_free (entry);
+                entry = next;
+            }
             dns_cache_table[i] = NULL;
         }
     }
 
-    /* 销毁对象池（会释放所有池中的条目） */
+    /* 销毁对象池（释放池中剩余的空闲条目） */
     if (pool_to_destroy) {
         hev_object_pool_destroy (pool_to_destroy);
     }

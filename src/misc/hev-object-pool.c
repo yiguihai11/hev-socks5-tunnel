@@ -57,7 +57,13 @@ hev_object_pool_destroy (HevObjectPool *pool)
 
     /* 释放所有空闲对象 */
     for (i = 0; i < pool->free_count; i++) {
-        hev_free (pool->free_list[i]);
+        /* 检查指针是否有效 */
+        void *obj = pool->free_list[i];
+        if (obj) {
+            LOG_D ("Object pool: freeing object %p (i=%zu/%zu)", obj, i,
+                   pool->free_count);
+            hev_free (obj);
+        }
     }
 
     pthread_mutex_unlock (&pool->lock);

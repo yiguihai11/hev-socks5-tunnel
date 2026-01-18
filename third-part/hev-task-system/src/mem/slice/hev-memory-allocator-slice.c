@@ -183,6 +183,13 @@ _hev_memory_allocator_free (HevMemoryAllocator *allocator, void *ptr)
         return;
     }
 
+    if (slice->index >= MAX_CACHED_SLICE_INDEX) {
+        fprintf (stderr, "[ERROR] hev_free(%p): invalid slice->index=%d (max=%d), possible memory corruption!\n",
+                 ptr, slice->index, MAX_CACHED_SLICE_INDEX - 1);
+        fprintf (stderr, "[ERROR] This pointer was not allocated by hev_malloc() or has been corrupted!\n");
+        return;
+    }
+
     if (self->cached_count >= MAX_CACHED_SLICE_COUNT) {
         HevMemoryLRUNode *node = self->lru_tail;
         HevMemorySlice **owner = &self->cached_mslices[node - self->lru_nodes];
