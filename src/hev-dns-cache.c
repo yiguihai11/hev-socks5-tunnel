@@ -637,10 +637,12 @@ hev_dns_cache_fini (void)
     HevObjectPool *pool_to_destroy = dns_entry_pool;
     dns_entry_pool = NULL;
 
-    /* 等待清理任务完全退出（简单忙等待）*/
+    /* 等待清理任务完全退出 */
+    /* 使用 hev_task_yield 让出 CPU，给清理任务机会退出 */
     volatile int wait_count = 0;
-    while (cache_cleaner_started && wait_count < 100000) {
-        __asm__ __volatile__ ("");
+    while (cache_cleaner_started && wait_count < 1000) {
+        hev_task_yield (HEV_TASK_YIELD);
+        hev_task_sleep (10); /* 短暂睡眠，让其他任务运行 */
         wait_count++;
     }
 
