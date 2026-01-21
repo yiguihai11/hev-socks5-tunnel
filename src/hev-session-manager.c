@@ -730,7 +730,8 @@ run_direct_connect_task (void *data)
 
     /* 检查 PCB 是否有效：如果连接已关闭，直接返回 */
     if (!pcb) {
-        LOG_D ("%p [DIRECT] Task skipped: PCB is NULL (connection closed)", self);
+        LOG_D ("%p [DIRECT] Task skipped: PCB is NULL (connection closed)",
+               self);
         return;
     }
 
