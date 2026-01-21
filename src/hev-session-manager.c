@@ -125,6 +125,13 @@ idle_timer_check (HevIdleTimer *timer)
 static void
 get_session_addresses (struct tcp_pcb *pcb, char *src_ip, char *dst_ip)
 {
+    /* 安全检查：确保 pcb 不为 NULL */
+    if (!pcb) {
+        snprintf (src_ip, INET6_ADDRSTRLEN, "?");
+        snprintf (dst_ip, INET6_ADDRSTRLEN, "?");
+        return;
+    }
+
     ipaddr_ntoa_r (&pcb->remote_ip, src_ip, INET6_ADDRSTRLEN);
     ipaddr_ntoa_r (&pcb->local_ip, dst_ip, INET6_ADDRSTRLEN);
 }
@@ -720,6 +727,13 @@ run_direct_connect_task (void *data)
     HevSocks5SessionIface *iface =
         klass->iface (HEV_OBJECT (s), HEV_SOCKS5_SESSION_TYPE);
     struct tcp_pcb *pcb = self->pcb;
+
+    /* 检查 PCB 是否有效：如果连接已关闭，直接返回 */
+    if (!pcb) {
+        LOG_D ("%p [DIRECT] Task skipped: PCB is NULL (connection closed)", self);
+        return;
+    }
+
     HevTask *task = iface->get_task (s);
     HevTask *task_b = NULL;
     HevListNode *node = iface->get_node (s);
