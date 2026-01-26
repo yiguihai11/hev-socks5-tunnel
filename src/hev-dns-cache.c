@@ -730,8 +730,7 @@ hev_dns_cache_lookup (const char *domain, uint16_t qtype,
     HevDNSCacheEntry **current = &dns_cache_table[hash];
     while (*current) {
         HevDNSCacheEntry *entry = *current;
-        if (strcasecmp (entry->domain, domain) == 0
-            && entry->qtype == qtype) {
+        if (strcasecmp (entry->domain, domain) == 0 && entry->qtype == qtype) {
             /* 检查是否过期 */
             if (now > entry->expire_time) {
                 LOG_D (
@@ -787,8 +786,8 @@ hev_dns_cache_lookup (const char *domain, uint16_t qtype,
 
 int
 hev_dns_cache_insert (const char *domain, uint16_t qtype,
-                      const uint8_t *response_data,
-                      size_t response_len, uint32_t ttl, int is_poisoned)
+                      const uint8_t *response_data, size_t response_len,
+                      uint32_t ttl, int is_poisoned)
 {
     /* 延迟启动清理任务（确保任务系统已初始化） */
     start_cache_cleaner_if_needed ();
@@ -858,8 +857,8 @@ hev_dns_cache_insert (const char *domain, uint16_t qtype,
     /* 检查是否已存在，如存在则替换 */
     HevDNSCacheEntry **current = &dns_cache_table[hash];
     while (*current) {
-        if (strcasecmp ((*current)->domain, domain) == 0
-            && (*current)->qtype == qtype) {
+        if (strcasecmp ((*current)->domain, domain) == 0 &&
+            (*current)->qtype == qtype) {
             /* 替换旧条目 */
             HevDNSCacheEntry *old = *current;
             new_entry->next = old->next;
@@ -913,8 +912,8 @@ hev_dns_cache_insert (const char *domain, uint16_t qtype,
 
     LOG_I (
         "dns-cache: Inserted cache for domain: %s (qtype=%u, ttl=%u, poisoned=%d, total=%zu, memory=%zu/%zuMB)",
-        domain, qtype, ttl, is_poisoned, total_cache_entries, total_cache_memory,
-        DNS_CACHE_MAX_MEMORY / (1024 * 1024));
+        domain, qtype, ttl, is_poisoned, total_cache_entries,
+        total_cache_memory, DNS_CACHE_MAX_MEMORY / (1024 * 1024));
 
     hev_task_mutex_unlock (&dns_cache_shards[shard]);
     return 0;

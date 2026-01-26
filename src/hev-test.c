@@ -1464,17 +1464,15 @@ run_dns_cache_memory_lru_tests (void)
     uint8_t *response;
     size_t response_len;
     printf ("[DEBUG] Looking up test5.example.com...\n");
-    int found =
-        hev_dns_cache_lookup ("test5.example.com", DNS_TYPE_A, &response,
-                              &response_len);
+    int found = hev_dns_cache_lookup ("test5.example.com", DNS_TYPE_A,
+                                      &response, &response_len);
     TEST_ASSERT (found == 1);
     printf ("    Cache hit for test5.example.com: OK\n");
 
     // Access entry 0 (should move to tail)
     printf ("[DEBUG] Looking up test0.example.com...\n");
-    found =
-        hev_dns_cache_lookup ("test0.example.com", DNS_TYPE_A, &response,
-                              &response_len);
+    found = hev_dns_cache_lookup ("test0.example.com", DNS_TYPE_A, &response,
+                                  &response_len);
     TEST_ASSERT (found == 1);
     printf ("    Cache hit for test0.example.com: OK\n");
 

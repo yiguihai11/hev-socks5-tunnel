@@ -1195,8 +1195,8 @@ dns_latency_optimize_task (void *data)
                ipaddr_ntoa (&ips[0]));
         /* Still cache the response for consistency */
         uint32_t ttl = extract_dns_ttl (ctx->response_data, ctx->response_len);
-        uint16_t qtype = extract_dns_qtype (ctx->response_data,
-                                            ctx->response_len);
+        uint16_t qtype =
+            extract_dns_qtype (ctx->response_data, ctx->response_len);
         hev_dns_cache_insert (ctx->domain, qtype, ctx->response_data,
                               ctx->response_len, ttl, 0);
         goto send_response;

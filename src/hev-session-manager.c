@@ -1829,10 +1829,11 @@ direct_udp_recv_task (void *data)
                             char domain[256];
                             if (extract_dns_domain (buffer, received, domain,
                                                     sizeof (domain)) > 0) {
-                                uint16_t qtype = extract_dns_qtype (buffer,
-                                                                    received);
+                                uint16_t qtype =
+                                    extract_dns_qtype (buffer, received);
                                 hev_dns_cache_insert (domain, qtype, buffer,
-                                                      received, time (NULL) + 300, 0);
+                                                      received,
+                                                      time (NULL) + 300, 0);
                                 LOG_I (
                                     "%p session: Cached clean DNS response for domain '%s' (from SOCKS5)",
                                     session, domain);

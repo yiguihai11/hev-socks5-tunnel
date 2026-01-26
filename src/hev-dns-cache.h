@@ -125,8 +125,8 @@ int hev_dns_cache_lookup (const char *domain, uint16_t qtype,
  * Returns: 0 成功, -1 失败
  */
 int hev_dns_cache_insert (const char *domain, uint16_t qtype,
-                          const uint8_t *response_data,
-                          size_t response_len, uint32_t ttl, int is_poisoned);
+                          const uint8_t *response_data, size_t response_len,
+                          uint32_t ttl, int is_poisoned);
 
 /**
  * hev_dns_poison_detect_and_handle:
