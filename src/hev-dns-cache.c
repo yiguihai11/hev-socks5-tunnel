@@ -585,10 +585,12 @@ hev_dns_cache_clean_expired (void)
                         hev_free (entry->response_data);
                     if (entry->is_poisoned)
                         poisoned_cache_entries--;
-                    if (dns_entry_pool)
+                    /* 检查对象池是否有效：如果已被清理，直接释放条目 */
+                    if (dns_entry_pool) {
                         hev_object_pool_put (dns_entry_pool, entry);
-                    else
+                    } else {
                         hev_free (entry);
+                    }
 
                     total_cache_entries--;
                     total_cleaned++;
