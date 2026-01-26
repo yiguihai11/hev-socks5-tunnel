@@ -43,6 +43,7 @@ extern "C" {
 typedef struct _HevDNSCacheEntry
 {
     char domain[256]; /* 域名 */
+    uint16_t qtype; /* DNS 查询类型 (A=1, AAAA=28) */
     uint8_t *response_data; /* DNS 响应数据 */
     size_t response_len; /* 响应数据长度 */
     time_t expire_time; /* 过期时间 */
@@ -99,6 +100,7 @@ size_t hev_dns_cache_clean_expired (void);
 /**
  * hev_dns_cache_lookup:
  * @domain: 域名
+ * @qtype: DNS 查询类型 (A=1, AAAA=28)
  * @response_out: 输出缓存的响应数据
  * @response_len_out: 输出响应数据长度
  *
@@ -106,12 +108,13 @@ size_t hev_dns_cache_clean_expired (void);
  *
  * Returns: 1 找到, 0 未找到
  */
-int hev_dns_cache_lookup (const char *domain, uint8_t **response_out,
-                          size_t *response_len_out);
+int hev_dns_cache_lookup (const char *domain, uint16_t qtype,
+                          uint8_t **response_out, size_t *response_len_out);
 
 /**
  * hev_dns_cache_insert:
  * @domain: 域名
+ * @qtype: DNS 查询类型 (A=1, AAAA=28)
  * @response_data: DNS 响应数据
  * @response_len: 响应数据长度
  * @ttl: TTL（秒）
@@ -121,7 +124,8 @@ int hev_dns_cache_lookup (const char *domain, uint8_t **response_out,
  *
  * Returns: 0 成功, -1 失败
  */
-int hev_dns_cache_insert (const char *domain, const uint8_t *response_data,
+int hev_dns_cache_insert (const char *domain, uint16_t qtype,
+                          const uint8_t *response_data,
                           size_t response_len, uint32_t ttl, int is_poisoned);
 
 /**
@@ -217,6 +221,17 @@ int hev_dns_detect_pollution (const uint8_t *data, size_t len);
  */
 int extract_dns_domain (const uint8_t *data, size_t len, char *domain_out,
                         size_t domain_max);
+
+/**
+ * extract_dns_qtype:
+ * @data: DNS 查询/响应数据
+ * @len: 数据长度
+ *
+ * 从 DNS 数据包中提取查询类型（QTYPE）
+ *
+ * Returns: QTYPE (A=1, AAAA=28), 0 失败
+ */
+uint16_t extract_dns_qtype (const uint8_t *data, size_t len);
 
 #ifdef __cplusplus
 }

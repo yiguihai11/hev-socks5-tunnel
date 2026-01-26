@@ -1195,7 +1195,9 @@ dns_latency_optimize_task (void *data)
                ipaddr_ntoa (&ips[0]));
         /* Still cache the response for consistency */
         uint32_t ttl = extract_dns_ttl (ctx->response_data, ctx->response_len);
-        hev_dns_cache_insert (ctx->domain, ctx->response_data,
+        uint16_t qtype = extract_dns_qtype (ctx->response_data,
+                                            ctx->response_len);
+        hev_dns_cache_insert (ctx->domain, qtype, ctx->response_data,
                               ctx->response_len, ttl, 0);
         goto send_response;
     }
@@ -1302,8 +1304,9 @@ dns_latency_optimize_task (void *data)
                                          &ips[best_idx]) == 0) {
         /* Cache the optimized response */
         uint32_t ttl = extract_dns_ttl (modified_response, modified_len);
-        hev_dns_cache_insert (ctx->domain, modified_response, modified_len, ttl,
-                              0);
+        uint16_t qtype = extract_dns_qtype (modified_response, modified_len);
+        hev_dns_cache_insert (ctx->domain, qtype, modified_response,
+                              modified_len, ttl, 0);
 
         /* Send optimized response */
         struct pbuf *p = pbuf_alloc (PBUF_TRANSPORT, modified_len, PBUF_RAM);

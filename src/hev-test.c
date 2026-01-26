@@ -1441,8 +1441,8 @@ run_dns_cache_memory_lru_tests (void)
         char domain[64];
         snprintf (domain, sizeof (domain), "test%d.example.com", i);
         printf ("[DEBUG] Inserting %s...\n", domain);
-        hev_dns_cache_insert (domain, fake_response, sizeof (fake_response),
-                              3600, 0);
+        hev_dns_cache_insert (domain, DNS_TYPE_A, fake_response,
+                              sizeof (fake_response), 3600, 0);
         printf ("[DEBUG] Inserted %s OK\n", domain);
     }
     printf ("[DEBUG] Insert loop complete\n");
@@ -1465,14 +1465,16 @@ run_dns_cache_memory_lru_tests (void)
     size_t response_len;
     printf ("[DEBUG] Looking up test5.example.com...\n");
     int found =
-        hev_dns_cache_lookup ("test5.example.com", &response, &response_len);
+        hev_dns_cache_lookup ("test5.example.com", DNS_TYPE_A, &response,
+                              &response_len);
     TEST_ASSERT (found == 1);
     printf ("    Cache hit for test5.example.com: OK\n");
 
     // Access entry 0 (should move to tail)
     printf ("[DEBUG] Looking up test0.example.com...\n");
     found =
-        hev_dns_cache_lookup ("test0.example.com", &response, &response_len);
+        hev_dns_cache_lookup ("test0.example.com", DNS_TYPE_A, &response,
+                              &response_len);
     TEST_ASSERT (found == 1);
     printf ("    Cache hit for test0.example.com: OK\n");
 
@@ -1499,8 +1501,8 @@ run_dns_cache_memory_lru_tests (void)
         char domain[64];
         snprintf (domain, sizeof (domain), "test%d.example.com", i);
         printf ("[DEBUG] Inserting %s...\n", domain);
-        hev_dns_cache_insert (domain, fake_response, sizeof (fake_response),
-                              3600, 0);
+        hev_dns_cache_insert (domain, DNS_TYPE_A, fake_response,
+                              sizeof (fake_response), 3600, 0);
         printf ("[DEBUG] Inserted %s OK\n", domain);
     }
     printf ("[DEBUG] Second insert loop complete\n");

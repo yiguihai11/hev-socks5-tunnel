@@ -95,16 +95,47 @@ read_uint32 (const uint8_t *p)
     return (p[0] << 24) | (p[1] << 16) | (p[2] << 8) | p[3];
 }
 
-/* 简单哈希函数（DJB2） */
+/* 辅助函数：从 DNS 查询中提取查询类型（QTYPE） */
+uint16_t
+extract_dns_qtype (const uint8_t *data, size_t len)
+{
+    if (len < sizeof (DNSHeader) + 4)
+        return DNS_TYPE_A; /* 默认 A 记录 */
+
+    size_t pos = sizeof (DNSHeader);
+
+    /* 跳过域名 */
+    while (pos < len) {
+        uint8_t label_len = data[pos];
+        if (label_len == 0)
+            break;
+        pos += label_len + 1;
+    }
+
+    if (pos + 4 > len)
+        return DNS_TYPE_A;
+
+    /* QTYPE 在域名之后 */
+    return (data[pos + 1] << 8) | data[pos + 2];
+}
+
+/* 简单哈希函数（DJB2，包含域名和查询类型） */
 static uint32_t
-dns_hash (const char *str)
+dns_hash (const char *str, uint16_t qtype)
 {
     uint32_t hash = 5381;
     int c;
+
+    /* 哈希域名 */
     while ((c = *str++)) {
         c = tolower (c);
         hash = ((hash << 5) + hash) + c;
     }
+
+    /* 包含查询类型 */
+    hash = ((hash << 5) + hash) + (qtype & 0xFF);
+    hash = ((hash << 5) + hash) + ((qtype >> 8) & 0xFF);
+
     return hash % DNS_CACHE_HASH_SIZE;
 }
 
@@ -187,7 +218,7 @@ lru_evict_oldest (void)
     lru_remove (entry);
 
     /* 从哈希表移除 */
-    uint32_t hash = dns_hash (entry->domain);
+    uint32_t hash = dns_hash (entry->domain, entry->qtype);
     int shard = dns_cache_get_shard (hash);
 
     hev_task_mutex_lock (&dns_cache_shards[shard]);
@@ -687,10 +718,10 @@ hev_dns_cache_fini (void)
 }
 
 int
-hev_dns_cache_lookup (const char *domain, uint8_t **response_out,
-                      size_t *response_len_out)
+hev_dns_cache_lookup (const char *domain, uint16_t qtype,
+                      uint8_t **response_out, size_t *response_len_out)
 {
-    uint32_t hash = dns_hash (domain);
+    uint32_t hash = dns_hash (domain, qtype);
     int shard = dns_cache_get_shard (hash);
     time_t now = time (NULL);
 
@@ -699,11 +730,13 @@ hev_dns_cache_lookup (const char *domain, uint8_t **response_out,
     HevDNSCacheEntry **current = &dns_cache_table[hash];
     while (*current) {
         HevDNSCacheEntry *entry = *current;
-        if (strcasecmp (entry->domain, domain) == 0) {
+        if (strcasecmp (entry->domain, domain) == 0
+            && entry->qtype == qtype) {
             /* 检查是否过期 */
             if (now > entry->expire_time) {
-                LOG_D ("dns-cache: Cache expired for domain: %s, removing",
-                       domain);
+                LOG_D (
+                    "dns-cache: Cache expired for domain: %s (qtype=%u), removing",
+                    domain, qtype);
                 /* 惰性删除：从链表中移除过期条目 */
                 *current = entry->next;
 
@@ -738,8 +771,9 @@ hev_dns_cache_lookup (const char *domain, uint8_t **response_out,
             lru_move_to_tail (entry);
             hev_task_mutex_unlock (&lru_list_mutex);
 
-            LOG_I ("dns-cache: Cache hit for domain: %s (hits=%u, poisoned=%d)",
-                   domain, entry->hits, entry->is_poisoned);
+            LOG_I (
+                "dns-cache: Cache hit for domain: %s (qtype=%u, hits=%u, poisoned=%d)",
+                domain, qtype, entry->hits, entry->is_poisoned);
 
             hev_task_mutex_unlock (&dns_cache_shards[shard]);
             return 1;
@@ -752,13 +786,14 @@ hev_dns_cache_lookup (const char *domain, uint8_t **response_out,
 }
 
 int
-hev_dns_cache_insert (const char *domain, const uint8_t *response_data,
+hev_dns_cache_insert (const char *domain, uint16_t qtype,
+                      const uint8_t *response_data,
                       size_t response_len, uint32_t ttl, int is_poisoned)
 {
     /* 延迟启动清理任务（确保任务系统已初始化） */
     start_cache_cleaner_if_needed ();
 
-    uint32_t hash = dns_hash (domain);
+    uint32_t hash = dns_hash (domain, qtype);
     int shard = dns_cache_get_shard (hash);
     time_t now = time (NULL);
 
@@ -778,6 +813,7 @@ hev_dns_cache_insert (const char *domain, const uint8_t *response_data,
     }
 
     strncpy (new_entry->domain, domain, sizeof (new_entry->domain) - 1);
+    new_entry->qtype = qtype;
     new_entry->response_data = hev_malloc (response_len);
     if (!new_entry->response_data) {
         if (dns_entry_pool)
@@ -822,7 +858,8 @@ hev_dns_cache_insert (const char *domain, const uint8_t *response_data,
     /* 检查是否已存在，如存在则替换 */
     HevDNSCacheEntry **current = &dns_cache_table[hash];
     while (*current) {
-        if (strcasecmp ((*current)->domain, domain) == 0) {
+        if (strcasecmp ((*current)->domain, domain) == 0
+            && (*current)->qtype == qtype) {
             /* 替换旧条目 */
             HevDNSCacheEntry *old = *current;
             new_entry->next = old->next;
@@ -851,8 +888,8 @@ hev_dns_cache_insert (const char *domain, const uint8_t *response_data,
                 poisoned_cache_entries++;
 
             LOG_I (
-                "dns-cache: Updated cache for domain: %s (ttl=%u, poisoned=%d, memory=%zu)",
-                domain, ttl, is_poisoned, total_cache_memory);
+                "dns-cache: Updated cache for domain: %s (qtype=%u, ttl=%u, poisoned=%d, memory=%zu)",
+                domain, qtype, ttl, is_poisoned, total_cache_memory);
 
             hev_task_mutex_unlock (&dns_cache_shards[shard]);
             return 0;
@@ -875,8 +912,8 @@ hev_dns_cache_insert (const char *domain, const uint8_t *response_data,
     hev_task_mutex_unlock (&lru_list_mutex);
 
     LOG_I (
-        "dns-cache: Inserted cache for domain: %s (ttl=%u, poisoned=%d, total=%zu, memory=%zu/%zuMB)",
-        domain, ttl, is_poisoned, total_cache_entries, total_cache_memory,
+        "dns-cache: Inserted cache for domain: %s (qtype=%u, ttl=%u, poisoned=%d, total=%zu, memory=%zu/%zuMB)",
+        domain, qtype, ttl, is_poisoned, total_cache_entries, total_cache_memory,
         DNS_CACHE_MAX_MEMORY / (1024 * 1024));
 
     hev_task_mutex_unlock (&dns_cache_shards[shard]);
@@ -949,7 +986,8 @@ dns_response_monitor_task (void *data)
                     /* 成功获取干净的响应，缓存它 */
                     uint32_t ttl =
                         extract_dns_ttl (socks5_response, socks5_response_len);
-                    hev_dns_cache_insert (ctx->domain, socks5_response,
+                    uint16_t qtype = extract_dns_qtype (query_data, query_len);
+                    hev_dns_cache_insert (ctx->domain, qtype, socks5_response,
                                           socks5_response_len, ttl, 0);
                     LOG_I (
                         "dns-cache: Cached clean response from SOCKS5 for domain: %s",
@@ -968,7 +1006,9 @@ dns_response_monitor_task (void *data)
 
             /* 提取 TTL 并缓存 */
             uint32_t ttl = extract_dns_ttl (buffer, recv_len);
-            hev_dns_cache_insert (ctx->domain, buffer, recv_len, ttl, 0);
+            uint16_t qtype = extract_dns_qtype (ctx->original_query->payload,
+                                                ctx->original_query->len);
+            hev_dns_cache_insert (ctx->domain, qtype, buffer, recv_len, ttl, 0);
         }
     } else {
         LOG_W ("dns-cache: No DNS response received for domain: %s (timeout)",
@@ -1005,15 +1045,32 @@ hev_dns_poison_detect_and_handle (struct udp_pcb *pcb, struct pbuf *p,
 
     LOG_D ("dns-cache: DNS query detected for domain: %s", domain);
 
+    /* ⭐ 提取 DNS 查询类型 */
+    uint16_t qtype = extract_dns_qtype (p->payload, p->len);
+    LOG_D ("dns-cache: DNS query type: %u (A=1, AAAA=28)", qtype);
+
     /* 检查缓存 */
     uint8_t *cached_response = NULL;
     size_t cached_len = 0;
-    if (hev_dns_cache_lookup (domain, &cached_response, &cached_len)) {
-        /* 缓存命中，直接响应 */
+    if (hev_dns_cache_lookup (domain, qtype, &cached_response, &cached_len)) {
+        /* 缓存命中，需要重写 DNS Transaction ID */
         struct pbuf *response =
             pbuf_alloc (PBUF_TRANSPORT, cached_len, PBUF_RAM);
         if (response) {
             memcpy (response->payload, cached_response, cached_len);
+
+            /* ⭐ 从原始请求中提取 DNS Transaction ID（前2字节） */
+            uint8_t *req_data = (uint8_t *)p->payload;
+            uint16_t req_id = (req_data[0] << 8) | req_data[1];
+
+            /* ⭐ 重写缓存响应中的 DNS ID（大端序，前2字节） */
+            uint8_t *resp_data = (uint8_t *)response->payload;
+            resp_data[0] = (req_id >> 8) & 0xFF;
+            resp_data[1] = req_id & 0xFF;
+
+            LOG_D ("dns-cache: Rewrote DNS ID in cached response: 0x%04x",
+                   req_id);
+
             udp_sendto (pcb, response, &pcb->remote_ip, pcb->remote_port);
             pbuf_free (response);
             LOG_I ("dns-cache: Responded from cache for domain: %s", domain);
@@ -1096,15 +1153,28 @@ hev_dns_cache_check_only (struct udp_pcb *pcb, struct pbuf *p,
     LOG_D ("dns-cache: Checking cache for domain: %s (domain_len=%zu)", domain,
            strlen (domain));
 
+    /* ⭐ 提取 DNS 查询类型 */
+    uint16_t qtype = extract_dns_qtype (p->payload, p->len);
+    LOG_D ("dns-cache: DNS query type: %u (A=1, AAAA=28)", qtype);
+
     /* 检查缓存 */
     uint8_t *cached_response = NULL;
     size_t cached_len = 0;
-    if (hev_dns_cache_lookup (domain, &cached_response, &cached_len)) {
-        /* 缓存命中，直接响应 */
+    if (hev_dns_cache_lookup (domain, qtype, &cached_response, &cached_len)) {
+        /* 缓存命中，需要重写 DNS Transaction ID */
         struct pbuf *response =
             pbuf_alloc (PBUF_TRANSPORT, cached_len, PBUF_RAM);
         if (response) {
             memcpy (response->payload, cached_response, cached_len);
+
+            /* ⭐ 从原始请求中提取 DNS Transaction ID（前2字节） */
+            uint8_t *req_data = (uint8_t *)p->payload;
+            uint16_t req_id = (req_data[0] << 8) | req_data[1];
+
+            /* ⭐ 重写缓存响应中的 DNS ID（大端序，前2字节） */
+            uint8_t *resp_data = (uint8_t *)response->payload;
+            resp_data[0] = (req_id >> 8) & 0xFF;
+            resp_data[1] = req_id & 0xFF;
 
             char local_str[INET6_ADDRSTRLEN], dst_str[INET6_ADDRSTRLEN],
                 src_str[INET6_ADDRSTRLEN];
@@ -1112,9 +1182,9 @@ hev_dns_cache_check_only (struct udp_pcb *pcb, struct pbuf *p,
             ipaddr_ntoa_r (&pcb->remote_ip, dst_str, sizeof (dst_str));
             ipaddr_ntoa_r (addr, src_str, sizeof (src_str));
             LOG_I (
-                "dns-cache: PCB local=%s:%d remote=%s:%d, query dst=%s:%d, sending cached response (len=%zu)",
+                "dns-cache: PCB local=%s:%d remote=%s:%d, query dst=%s:%d, sending cached response (len=%zu, dns_id=0x%04x)",
                 local_str, pcb->local_port, dst_str, pcb->remote_port, src_str,
-                port, cached_len);
+                port, cached_len, req_id);
 
             /* 使用 udp_sendfrom 指定源地址为原始查询的目标DNS服务器 */
             err_t err = udp_sendfrom (pcb, response, addr, port);
