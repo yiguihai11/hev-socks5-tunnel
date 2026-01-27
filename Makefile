@@ -78,11 +78,10 @@ endif
 
 .PHONY: exec static shared clean install uninstall tp-static tp-shared tp-clean dev
 
-dev:
-	$(MAKE) exec ENABLE_DEBUG=1
-
 exec : $(EXEC_TARGET)
 
+dev:
+	$(MAKE) exec ENABLE_DEBUG=1
 static : $(STATIC_TARGET)
 
 shared : $(SHARED_TARGET)
