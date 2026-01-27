@@ -48,4 +48,7 @@ endif
 LOCAL_STATIC_LIBRARIES := yaml lwip hev-task-system
 LOCAL_LDFLAGS += -Wl,-z,max-page-size=16384
 LOCAL_LDFLAGS += -Wl,-z,common-page-size=16384
+ifeq ($(APP_OPTIM),release)
+LOCAL_STRIP_MODULE := true
+endif
 include $(BUILD_SHARED_LIBRARY)
