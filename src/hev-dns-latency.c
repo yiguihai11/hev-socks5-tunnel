@@ -39,8 +39,8 @@ static int ping_ipv4_available = -1;
 static int ping_ipv6_available = -1;
 
 /* Module state */
-static int dns_latency_initialized = 0;
-static int dns_latency_shutdown = 0;
+static volatile int dns_latency_initialized = 0;
+static volatile int dns_latency_shutdown = 0;
 
 /* 测试阶段 */
 typedef enum
@@ -117,7 +117,7 @@ add_task (HevTask *task)
     task_lock ();
     for (i = 0; i < MAX_TASKS; i++) {
         if (!dns_latency_tasks[i].active) {
-            dns_latency_tasks[i].task = task;
+            dns_latency_tasks[i].task = hev_task_ref (task);
             dns_latency_tasks[i].active = 1;
             dns_latency_task_count++;
             task_unlock ();
@@ -139,10 +139,12 @@ remove_task (HevTask *task)
     task_lock ();
     for (i = 0; i < MAX_TASKS; i++) {
         if (dns_latency_tasks[i].active && dns_latency_tasks[i].task == task) {
+            HevTask *t = dns_latency_tasks[i].task;
             dns_latency_tasks[i].active = 0;
             dns_latency_tasks[i].task = NULL;
             dns_latency_task_count--;
             task_unlock ();
+            hev_task_unref (t);
             LOG_D ("dns-latency: Removed task %p from tracking list (count=%d)",
                    task, dns_latency_task_count);
             return;
@@ -358,7 +360,7 @@ hev_dns_latency_fini (void)
         task_lock ();
         for (i = 0; i < MAX_TASKS; i++) {
             if (dns_latency_tasks[i].active && dns_latency_tasks[i].task) {
-                HevTask *task = dns_latency_tasks[i].task;
+                HevTask *task = hev_task_ref (dns_latency_tasks[i].task);
                 task_unlock ();
 
                 LOG_D ("dns-latency: Joining task %p...", task);
@@ -367,16 +369,24 @@ hev_dns_latency_fini (void)
                 wait_count++;
 
                 task_lock ();
-                /* Task should have removed itself from list, but verify */
-                if (dns_latency_tasks[i].active) {
+                /* Task should have removed itself from list via remove_task,
+                 * but if it didn't (e.g. error before cleanup), we do it here.
+                 */
+                if (dns_latency_tasks[i].active &&
+                    dns_latency_tasks[i].task == task) {
+                    HevTask *t = dns_latency_tasks[i].task;
                     dns_latency_tasks[i].active = 0;
                     dns_latency_tasks[i].task = NULL;
                     dns_latency_task_count--;
+                    task_unlock ();
+                    hev_task_unref (t);
+                    task_lock ();
                 }
                 task_unlock ();
 
                 hev_task_yield (
                     HEV_TASK_YIELD); /* Give other tasks chance to exit */
+                task_lock ();
                 break; /* Start over since list changed */
             }
         }
@@ -1071,7 +1081,8 @@ hev_dns_latency_test_concurrent (const ip_addr_t *ips, int ip_count,
         param->ctx = ctx;
         param->ip_index = i;
 
-        tasks[created_count++] = task;
+        /* ⭐ 增加引用计数，因为 tasks 数组要持有它直到 Join 完成 */
+        tasks[created_count++] = hev_task_ref (task);
         hev_task_run (task, single_ip_test_task, param);
         LOG_D ("dns-latency: Created task for IP %d", i);
     }
@@ -1105,9 +1116,10 @@ hev_dns_latency_test_concurrent (const ip_addr_t *ips, int ip_count,
 
     ctx->should_stop = 1;
 
-    /* ⭐ 显式 Join 所有任务，确保没有任何任务再访问 ctx */
+    /* ⭐ 显式 Join 所有任务，并释放引用 */
     for (int i = 0; i < created_count; i++) {
         hev_task_join (tasks[i]);
+        hev_task_unref (tasks[i]);
     }
 
     /* 检查结果 */

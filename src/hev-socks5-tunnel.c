@@ -427,13 +427,21 @@ event_task_entry (void *data)
     LOG_D ("socks5 tunnel: joining lwip_io task");
     hev_task_join (task_lwip_io);
     LOG_D ("socks5 tunnel: lwip_io task joined");
+    hev_task_unref (task_lwip_io);
+    task_lwip_io = NULL;
 
     LOG_D ("socks5 tunnel: joining lwip_timer task");
     hev_task_join (task_lwip_timer);
     LOG_D ("socks5 tunnel: lwip_timer task joined");
+    hev_task_unref (task_lwip_timer);
+    task_lwip_timer = NULL;
 
     hev_task_del_fd (task_event, event_fds[0]);
     LOG_D ("socks5 tunnel: event task cleanup complete");
+
+    HevTask *self = task_event;
+    task_event = NULL;
+    hev_task_unref (self);
 }
 
 /* Calculate Internet checksum (RFC 1071) */
@@ -1036,6 +1044,11 @@ int
 hev_socks5_tunnel_run (void)
 {
     LOG_I ("socks5 tunnel: Starting tunnel operation");
+
+    if (!task_event || !task_lwip_io || !task_lwip_timer) {
+        LOG_E ("socks5 tunnel: Failed to start, tasks not initialized");
+        return -1;
+    }
 
     task_event = hev_task_ref (task_event);
     hev_task_run (task_event, event_task_entry, NULL);
