@@ -790,12 +790,14 @@ run_direct_connect_task (void *data)
            pcb->remote_port, dst_ip, pcb->local_port);
 
     /* Allocate ring buffer */
-    tcp_buffer_size = hev_config_get_misc_tcp_buffer_size ();
-    self->buffer = hev_ring_buffer_alloca (tcp_buffer_size);
     if (!self->buffer) {
-        LOG_E ("%p [DIRECT] Failed to allocate ring buffer", self);
-        cleanup_socket (s, task, fd);
-        goto exit_cleanup;
+        tcp_buffer_size = hev_config_get_misc_tcp_buffer_size ();
+        self->buffer = hev_ring_buffer_new (tcp_buffer_size);
+        if (!self->buffer) {
+            LOG_E ("%p [DIRECT] Failed to allocate ring buffer", self);
+            cleanup_socket (s, task, fd);
+            goto exit_cleanup;
+        }
     }
 
     HEV_SOCKS5 (s)->fd = fd;
@@ -859,13 +861,7 @@ run_direct_connect_task (void *data)
     LOG_D ("%p [DIRECT] Waiting for backward splice task", self);
 
     /* Wait for backward task */
-    if (hev_socks5_tunnel_is_running ()) {
-        /* Only join if tunnel is still running. During shutdown, the
-         * background task has already exited due to tunnel status check. */
-        hev_task_join (task_b);
-    } else {
-        LOG_D ("%p [DIRECT] Tunnel stopped, skipping task join", self);
-    }
+    hev_task_join (task_b);
     hev_task_unref (task_b);
 
 cleanup_splice:
@@ -1481,11 +1477,13 @@ continue_with_direct_connection (HevSocks5SessionTCP *self, HevSocks5Session *s,
     init_session_idle_timer (&idle_timer);
 
     /* Allocate ring buffer */
-    tcp_buffer_size = hev_config_get_misc_tcp_buffer_size ();
-    self->buffer = hev_ring_buffer_alloca (tcp_buffer_size);
     if (!self->buffer) {
-        LOG_E ("%p [DIRECT] Failed to allocate ring buffer", self);
-        return -1;
+        tcp_buffer_size = hev_config_get_misc_tcp_buffer_size ();
+        self->buffer = hev_ring_buffer_new (tcp_buffer_size);
+        if (!self->buffer) {
+            LOG_E ("%p [DIRECT] Failed to allocate ring buffer", self);
+            return -1;
+        }
     }
 
     HEV_SOCKS5 (s)->fd = fd;
@@ -1538,9 +1536,7 @@ continue_with_direct_connection (HevSocks5SessionTCP *self, HevSocks5Session *s,
     }
 
     /* Wait for backward task */
-    if (hev_socks5_tunnel_is_running ()) {
-        hev_task_join (task_b);
-    }
+    hev_task_join (task_b);
     hev_task_unref (task_b);
 
     end_time = get_current_time_ms ();

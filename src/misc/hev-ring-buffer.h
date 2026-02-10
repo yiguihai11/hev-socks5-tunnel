@@ -44,6 +44,9 @@ struct _HevRingBuffer
         __self;                                       \
     })
 
+HevRingBuffer *hev_ring_buffer_new (size_t size);
+void hev_ring_buffer_destroy (HevRingBuffer *self);
+
 size_t hev_ring_buffer_get_max_size (HevRingBuffer *self);
 size_t hev_ring_buffer_get_use_size (HevRingBuffer *self);
 

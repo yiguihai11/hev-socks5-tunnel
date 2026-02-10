@@ -266,12 +266,14 @@ hev_socks5_session_tcp_splice (HevSocks5Session *base)
         return 0;
     }
 
-    tcp_buffer_size = hev_config_get_misc_tcp_buffer_size ();
-    self->buffer = hev_ring_buffer_alloca (tcp_buffer_size);
     if (!self->buffer) {
-        LOG_E ("%p socks5 session tcp splice: failed to allocate ring buffer",
-               self);
-        return 0;
+        tcp_buffer_size = hev_config_get_misc_tcp_buffer_size ();
+        self->buffer = hev_ring_buffer_new (tcp_buffer_size);
+        if (!self->buffer) {
+            LOG_E ("%p socks5 session tcp splice: failed to allocate ring buffer",
+                   self);
+            return 0;
+        }
     }
 
     LOG_D ("%p socks5 session tcp splice: starting data transfer loop", self);
@@ -424,6 +426,11 @@ hev_socks5_session_tcp_destruct (HevObject *base)
     if (self->queue) {
         LOG_D ("%p socks5 session tcp destruct: freeing queued data", self);
         pbuf_free (self->queue);
+    }
+
+    if (self->buffer) {
+        LOG_D ("%p socks5 session tcp destruct: destroying ring buffer", self);
+        hev_ring_buffer_destroy (self->buffer);
     }
     hev_task_mutex_unlock (self->mutex);
 
