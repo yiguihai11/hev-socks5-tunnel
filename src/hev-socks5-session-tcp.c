@@ -270,8 +270,9 @@ hev_socks5_session_tcp_splice (HevSocks5Session *base)
         tcp_buffer_size = hev_config_get_misc_tcp_buffer_size ();
         self->buffer = hev_ring_buffer_new (tcp_buffer_size);
         if (!self->buffer) {
-            LOG_E ("%p socks5 session tcp splice: failed to allocate ring buffer",
-                   self);
+            LOG_E (
+                "%p socks5 session tcp splice: failed to allocate ring buffer",
+                self);
             return 0;
         }
     }
