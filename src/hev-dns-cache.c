@@ -552,6 +552,10 @@ hev_dns_cache_clean_expired (void)
 
     /* 遍历所有分片 */
     for (int shard = 0; shard < DNS_CACHE_SHARD_COUNT; shard++) {
+        /* 如果系统正在关闭，立即停止清理以加快退出 */
+        if (!cache_cleaner_running || !hev_socks5_tunnel_is_running ())
+            break;
+
         hev_task_mutex_lock (&dns_cache_shards[shard]);
 
         /* 清理属于这个分片的哈希桶 */
@@ -579,7 +583,7 @@ hev_dns_cache_clean_expired (void)
                     if (entry->is_poisoned)
                         poisoned_cache_entries--;
 
-                    /* 检查对象池是否有效：使用局部快照防止竞态 */
+                    /* 检查对象池是否有效：必须在分片锁内访问 */
                     HevObjectPool *pool = dns_entry_pool;
                     if (pool) {
                         hev_object_pool_put (pool, entry);
@@ -656,65 +660,61 @@ hev_dns_cache_init (void)
 void
 hev_dns_cache_fini (void)
 {
-    /* 停止清理任务 */
+    /* 停止清理任务标志 */
     cache_cleaner_running = 0;
 
-    /* 获取所有锁以确保没有其他任务正在运行 */
+    /* ⭐ 获取所有锁以确保独占访问
+     * 顺序：LRU 锁 -> 分片锁 (防止死锁) */
     hev_task_mutex_lock (&lru_list_mutex);
     for (int i = 0; i < DNS_CACHE_SHARD_COUNT; i++)
         hev_task_mutex_lock (&dns_cache_shards[i]);
 
-    /* 先将对象池设置为 NULL，防止清理任务继续使用 */
+    /* 1. 先将对象池指针设置为 NULL
+     * 在锁保护下设置，确保其他任务要么看到旧值（在锁释放前完成），
+     * 要么看到 NULL（在锁释放后通过检查发现不能使用池）。 */
     HevObjectPool *pool_to_destroy = dns_entry_pool;
     dns_entry_pool = NULL;
+
+    /* 2. 彻底清理哈希表和 LRU 链表
+     * 必须在锁保护下进行，防止其他任务访问已释放的内存。 */
+    for (int i = 0; i < DNS_CACHE_HASH_SIZE; i++) {
+        HevDNSCacheEntry *entry = dns_cache_table[i];
+        while (entry) {
+            HevDNSCacheEntry *next = entry->next;
+            if (entry->response_data)
+                hev_free (entry->response_data);
+            /* 这里直接 free，不回收到对象池，因为对象池即将销毁 */
+            hev_free (entry);
+            entry = next;
+        }
+        dns_cache_table[i] = NULL;
+    }
+
+    lru_list_head = lru_list_tail = NULL;
+    total_cache_entries = 0;
+    total_cache_memory = 0;
+    poisoned_cache_entries = 0;
 
     /* 释放所有锁 */
     for (int i = 0; i < DNS_CACHE_SHARD_COUNT; i++)
         hev_task_mutex_unlock (&dns_cache_shards[i]);
     hev_task_mutex_unlock (&lru_list_mutex);
 
-    /* 等待清理任务完全退出 */
-    /* 使用 hev_task_yield 让出 CPU，给清理任务机会退出 */
+    /* 3. 等待清理任务退出
+     * 因为任务可能会在 yield 或 sleep 中。 */
     volatile int wait_count = 0;
-    while (cache_cleaner_started && wait_count < 1000) {
+    while (cache_cleaner_started && wait_count < 100) {
         hev_task_yield (HEV_TASK_YIELD);
-        hev_task_sleep (10); /* 短暂睡眠，让其他任务运行 */
+        hev_task_sleep (10);
         wait_count++;
     }
 
-    if (cache_cleaner_started) {
-        LOG_W (
-            "dns-cache: Cleaner task did not exit after waiting, forcing cleanup");
-    }
-
-    /* 清理哈希表：释放所有条目 */
-    for (int shard = 0; shard < DNS_CACHE_SHARD_COUNT; shard++) {
-        /* 清理属于这个分片的哈希桶 */
-        for (int i = shard; i < DNS_CACHE_HASH_SIZE;
-             i += DNS_CACHE_SHARD_COUNT) {
-            HevDNSCacheEntry *entry = dns_cache_table[i];
-            while (entry) {
-                HevDNSCacheEntry *next = entry->next;
-                /* 释放条目内部的 response_data */
-                if (entry->response_data) {
-                    hev_free (entry->response_data);
-                    entry->response_data = NULL;
-                }
-                /* 直接释放条目，不归还到对象池 */
-                hev_free (entry);
-                entry = next;
-            }
-            dns_cache_table[i] = NULL;
-        }
-    }
-
-    /* 销毁对象池（释放池中剩余的空闲条目） */
+    /* 4. 销毁对象池资源
+     * 此时可以安全销毁，因为没有任何任务会通过 dns_entry_pool 访问它，
+     * 且所有正在进行的操作都已经退出。 */
     if (pool_to_destroy) {
         hev_object_pool_destroy (pool_to_destroy);
     }
-
-    /* 重置 LRU 链表 */
-    lru_list_head = lru_list_tail = NULL;
 
     /* 重置初始化标志 */
     dns_cache_initialized = 0;
@@ -753,10 +753,13 @@ hev_dns_cache_lookup (const char *domain, uint16_t qtype,
                     hev_free (entry->response_data);
                 if (entry->is_poisoned)
                     poisoned_cache_entries--;
-                if (dns_entry_pool)
-                    hev_object_pool_put (dns_entry_pool, entry);
+
+                HevObjectPool *pool = dns_entry_pool;
+                if (pool)
+                    hev_object_pool_put (pool, entry);
                 else
                     hev_free (entry);
+
                 total_cache_entries--;
                 hev_task_mutex_unlock (&dns_cache_shards[shard]);
                 return 0;
@@ -865,17 +868,21 @@ hev_dns_cache_insert (const char *domain, uint16_t qtype,
         if (lru_list_head == oldest) {
             lru_evict_entry (oldest);
             hev_task_mutex_unlock (&lru_list_mutex);
-            hev_task_mutex_unlock (&dns_cache_shards[oldest_shard]);
 
-            /* 释放被淘汰的条目 */
-            if (oldest->response_data)
+            /* 释放被淘汰的条目资源 */
+            if (oldest->response_data) {
                 hev_free (oldest->response_data);
+                oldest->response_data = NULL;
+            }
 
+            /* 在分片锁保护下将对象归还池中，确保与 fini 同步 */
             HevObjectPool *pool = dns_entry_pool;
             if (pool)
                 hev_object_pool_put (pool, oldest);
             else
                 hev_free (oldest);
+
+            hev_task_mutex_unlock (&dns_cache_shards[oldest_shard]);
         } else {
             hev_task_mutex_unlock (&lru_list_mutex);
             hev_task_mutex_unlock (&dns_cache_shards[oldest_shard]);
