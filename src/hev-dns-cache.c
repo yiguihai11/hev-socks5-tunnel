@@ -206,11 +206,11 @@ lru_add_to_tail (HevDNSCacheEntry *entry)
     lru_list_tail = entry;
 }
 
-/* 淘汰最老的条目（LRU 链表头部） */
+/* 淘汰最老的条目（LRU 链表头部）
+ * 调用者必须持有对应的分片锁和 lru_list_mutex */
 static HevDNSCacheEntry *
-lru_evict_oldest (void)
+lru_evict_entry (HevDNSCacheEntry *entry)
 {
-    HevDNSCacheEntry *entry = lru_list_head;
     if (!entry)
         return NULL;
 
@@ -219,10 +219,6 @@ lru_evict_oldest (void)
 
     /* 从哈希表移除 */
     uint32_t hash = dns_hash (entry->domain, entry->qtype);
-    int shard = dns_cache_get_shard (hash);
-
-    hev_task_mutex_lock (&dns_cache_shards[shard]);
-
     HevDNSCacheEntry **pp = &dns_cache_table[hash];
     while (*pp) {
         if (*pp == entry) {
@@ -231,8 +227,6 @@ lru_evict_oldest (void)
         }
         pp = &(*pp)->next;
     }
-
-    hev_task_mutex_unlock (&dns_cache_shards[shard]);
 
     /* 更新统计 */
     total_cache_memory -= entry->entry_size;
@@ -556,8 +550,6 @@ hev_dns_cache_clean_expired (void)
     size_t total_cleaned = 0;
     time_t now = time (NULL);
 
-    hev_task_mutex_lock (&lru_list_mutex);
-
     /* 遍历所有分片 */
     for (int shard = 0; shard < DNS_CACHE_SHARD_COUNT; shard++) {
         hev_task_mutex_lock (&dns_cache_shards[shard]);
@@ -576,18 +568,21 @@ hev_dns_cache_clean_expired (void)
                     *current = entry->next;
 
                     /* ⭐ 从 LRU 链表移除 */
+                    hev_task_mutex_lock (&lru_list_mutex);
                     lru_remove (entry);
-
                     /* 更新内存统计 */
                     total_cache_memory -= entry->entry_size;
+                    hev_task_mutex_unlock (&lru_list_mutex);
 
                     if (entry->response_data)
                         hev_free (entry->response_data);
                     if (entry->is_poisoned)
                         poisoned_cache_entries--;
-                    /* 检查对象池是否有效：如果已被清理，直接释放条目 */
-                    if (dns_entry_pool) {
-                        hev_object_pool_put (dns_entry_pool, entry);
+
+                    /* 检查对象池是否有效：使用局部快照防止竞态 */
+                    HevObjectPool *pool = dns_entry_pool;
+                    if (pool) {
+                        hev_object_pool_put (pool, entry);
                     } else {
                         hev_free (entry);
                     }
@@ -602,8 +597,6 @@ hev_dns_cache_clean_expired (void)
 
         hev_task_mutex_unlock (&dns_cache_shards[shard]);
     }
-
-    hev_task_mutex_unlock (&lru_list_mutex);
 
     if (total_cleaned > 0) {
         LOG_D ("dns-cache: Cleaned %zu expired entries (total=%zu, memory=%zu)",
@@ -666,9 +659,19 @@ hev_dns_cache_fini (void)
     /* 停止清理任务 */
     cache_cleaner_running = 0;
 
+    /* 获取所有锁以确保没有其他任务正在运行 */
+    hev_task_mutex_lock (&lru_list_mutex);
+    for (int i = 0; i < DNS_CACHE_SHARD_COUNT; i++)
+        hev_task_mutex_lock (&dns_cache_shards[i]);
+
     /* 先将对象池设置为 NULL，防止清理任务继续使用 */
     HevObjectPool *pool_to_destroy = dns_entry_pool;
     dns_entry_pool = NULL;
+
+    /* 释放所有锁 */
+    for (int i = 0; i < DNS_CACHE_SHARD_COUNT; i++)
+        hev_task_mutex_unlock (&dns_cache_shards[i]);
+    hev_task_mutex_unlock (&lru_list_mutex);
 
     /* 等待清理任务完全退出 */
     /* 使用 hev_task_yield 让出 CPU，给清理任务机会退出 */
@@ -709,8 +712,6 @@ hev_dns_cache_fini (void)
     if (pool_to_destroy) {
         hev_object_pool_destroy (pool_to_destroy);
     }
-
-    /* 注意：hev_task_mutex 没有 destroy 函数，所以不销毁 mutex */
 
     /* 重置 LRU 链表 */
     lru_list_head = lru_list_tail = NULL;
@@ -835,24 +836,50 @@ hev_dns_cache_insert (const char *domain, uint16_t qtype,
     /* 计算条目总大小 */
     new_entry->entry_size = sizeof (HevDNSCacheEntry) + response_len;
 
-    /* ⭐ 检查内存限制，淘汰 LRU 条目直到有足够空间 */
-    hev_task_mutex_lock (&lru_list_mutex);
-    while (total_cache_memory + new_entry->entry_size > DNS_CACHE_MAX_MEMORY) {
-        HevDNSCacheEntry *evicted = lru_evict_oldest ();
-        if (!evicted) {
-            LOG_E (
-                "dns-cache: No entries to evict, but still over memory limit!");
+    /* ⭐ 检查内存限制，淘汰 LRU 条目直到有足够空间
+     * 遵循 Shard -> LRU 加锁顺序以避免死锁 */
+    for (;;) {
+        HevDNSCacheEntry *oldest = NULL;
+        uint32_t oldest_hash;
+        int oldest_shard;
+
+        hev_task_mutex_lock (&lru_list_mutex);
+        if (total_cache_memory + new_entry->entry_size <= DNS_CACHE_MAX_MEMORY) {
+            hev_task_mutex_unlock (&lru_list_mutex);
             break;
         }
-        /* 释放被淘汰的条目 */
-        if (evicted->response_data)
-            hev_free (evicted->response_data);
-        if (dns_entry_pool)
-            hev_object_pool_put (dns_entry_pool, evicted);
-        else
-            hev_free (evicted);
+        oldest = lru_list_head;
+        if (!oldest) {
+            hev_task_mutex_unlock (&lru_list_mutex);
+            break;
+        }
+        oldest_hash = dns_hash (oldest->domain, oldest->qtype);
+        oldest_shard = dns_cache_get_shard (oldest_hash);
+        hev_task_mutex_unlock (&lru_list_mutex);
+
+        /* 尝试淘汰 oldest */
+        hev_task_mutex_lock (&dns_cache_shards[oldest_shard]);
+        hev_task_mutex_lock (&lru_list_mutex);
+        /* 再次检查 oldest 是否仍是头部且有效 */
+        if (lru_list_head == oldest) {
+            lru_evict_entry (oldest);
+            hev_task_mutex_unlock (&lru_list_mutex);
+            hev_task_mutex_unlock (&dns_cache_shards[oldest_shard]);
+
+            /* 释放被淘汰的条目 */
+            if (oldest->response_data)
+                hev_free (oldest->response_data);
+            
+            HevObjectPool *pool = dns_entry_pool;
+            if (pool)
+                hev_object_pool_put (pool, oldest);
+            else
+                hev_free (oldest);
+        } else {
+            hev_task_mutex_unlock (&lru_list_mutex);
+            hev_task_mutex_unlock (&dns_cache_shards[oldest_shard]);
+        }
     }
-    hev_task_mutex_unlock (&lru_list_mutex);
 
     hev_task_mutex_lock (&dns_cache_shards[shard]);
 
@@ -867,11 +894,11 @@ hev_dns_cache_insert (const char *domain, uint16_t qtype,
             *current = new_entry;
 
             /* 更新内存统计 */
+            hev_task_mutex_lock (&lru_list_mutex);
             total_cache_memory -= old->entry_size;
             total_cache_memory += new_entry->entry_size;
 
             /* 更新 LRU */
-            hev_task_mutex_lock (&lru_list_mutex);
             lru_remove (old);
             lru_add_to_tail (new_entry);
             hev_task_mutex_unlock (&lru_list_mutex);
@@ -880,8 +907,10 @@ hev_dns_cache_insert (const char *domain, uint16_t qtype,
                 hev_free (old->response_data);
             if (old->is_poisoned)
                 poisoned_cache_entries--;
-            if (dns_entry_pool)
-                hev_object_pool_put (dns_entry_pool, old);
+            
+            HevObjectPool *pool = dns_entry_pool;
+            if (pool)
+                hev_object_pool_put (pool, old);
             else
                 hev_free (old);
 
@@ -902,15 +931,15 @@ hev_dns_cache_insert (const char *domain, uint16_t qtype,
     new_entry->next = dns_cache_table[hash];
     dns_cache_table[hash] = new_entry;
     total_cache_entries++;
+
+    /* 更新 LRU */
+    hev_task_mutex_lock (&lru_list_mutex);
     total_cache_memory += new_entry->entry_size;
+    lru_add_to_tail (new_entry);
+    hev_task_mutex_unlock (&lru_list_mutex);
 
     if (is_poisoned)
         poisoned_cache_entries++;
-
-    /* 添加到 LRU 链表尾部 */
-    hev_task_mutex_lock (&lru_list_mutex);
-    lru_add_to_tail (new_entry);
-    hev_task_mutex_unlock (&lru_list_mutex);
 
     LOG_I (
         "dns-cache: Inserted cache for domain: %s (qtype=%u, ttl=%u, poisoned=%d, total=%zu, memory=%zu/%zuMB)",

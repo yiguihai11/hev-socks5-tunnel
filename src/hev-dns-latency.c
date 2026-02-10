@@ -1021,26 +1021,32 @@ hev_dns_latency_test_concurrent (const ip_addr_t *ips, int ip_count,
     if (!ips || !results_out || ip_count <= 0 || ip_count > 32)
         return -1;
 
-    ConcurrentTestContext ctx;
-    memset (&ctx, 0, sizeof (ctx));
+    ConcurrentTestContext *ctx = hev_malloc0 (sizeof (ConcurrentTestContext));
+    if (!ctx)
+        return -1;
 
-    ctx.ips = (ip_addr_t *)ips;
-    ctx.results = results_out;
-    ctx.ip_count = ip_count;
-    ctx.completed_count = 0;
-    ctx.should_stop = 0;
-    ctx.winner_index = -1;
-    ctx.winner_method = DNS_LATENCY_METHOD_NONE;
-    ctx.start_time_ms = get_time_ms ();
-    ctx.timeout_ms = timeout_ms;
+    HevTask *tasks[32];
+    int created_count = 0;
+
+    ctx->ips = (ip_addr_t *)ips;
+    ctx->results = results_out;
+    ctx->ip_count = ip_count;
+    ctx->completed_count = 0;
+    ctx->should_stop = 0;
+    ctx->winner_index = -1;
+    ctx->winner_method = DNS_LATENCY_METHOD_NONE;
+    ctx->start_time_ms = get_time_ms ();
+    ctx->timeout_ms = timeout_ms;
 
     /* 初始化同步原语 */
-    if (hev_task_mutex_init (&ctx.mutex) != 0) {
+    if (hev_task_mutex_init (&ctx->mutex) != 0) {
         LOG_E ("dns-latency: Failed to init mutex");
+        hev_free (ctx);
         return -1;
     }
-    if (hev_task_cond_init (&ctx.cond) != 0) {
+    if (hev_task_cond_init (&ctx->cond) != 0) {
         LOG_E ("dns-latency: Failed to init cond");
+        hev_free (ctx);
         return -1;
     }
 
@@ -1062,72 +1068,63 @@ hev_dns_latency_test_concurrent (const ip_addr_t *ips, int ip_count,
             continue;
         }
 
-        param->ctx = &ctx;
+        param->ctx = ctx;
         param->ip_index = i;
 
+        tasks[created_count++] = task;
         hev_task_run (task, single_ip_test_task, param);
         LOG_D ("dns-latency: Created task for IP %d", i);
     }
 
     /* ⭐ 等待：有赢家 OR 全部完成 OR 超时 */
-    /* 使用轮询而非cond_wait，避免子任务阻塞时导致主任务无限等待 */
     int total_wait_ms = 0;
-    int max_wait_ms = ctx.timeout_ms + 2000; /* 额外2秒缓冲时间 */
+    int max_wait_ms = ctx->timeout_ms + 2000;
 
-    while (ctx.winner_index < 0 && ctx.completed_count < ctx.ip_count &&
+    while (ctx->winner_index < 0 && ctx->completed_count < created_count &&
            total_wait_ms < max_wait_ms) {
-        /* 检查tunnel是否还在运行，如果正在关闭则提前退出 */
         if (!hev_socks5_tunnel_is_running ()) {
             LOG_W ("dns-latency: Tunnel shutting down, stopping latency test");
-            ctx.should_stop = 1;
+            ctx->should_stop = 1;
             break;
         }
 
-        hev_task_mutex_lock (&ctx.mutex);
-
-        /* 检查超时 */
-        int64_t elapsed_ms = get_time_ms () - ctx.start_time_ms;
-        if (elapsed_ms >= ctx.timeout_ms) {
+        hev_task_mutex_lock (&ctx->mutex);
+        int64_t elapsed_ms = get_time_ms () - ctx->start_time_ms;
+        if (elapsed_ms >= ctx->timeout_ms) {
             LOG_W ("dns-latency: Race timeout after %lldms",
                    (long long)elapsed_ms);
-            ctx.should_stop = 1;
-            hev_task_mutex_unlock (&ctx.mutex);
+            ctx->should_stop = 1;
+            hev_task_mutex_unlock (&ctx->mutex);
             break;
         }
+        hev_task_mutex_unlock (&ctx->mutex);
 
-        hev_task_mutex_unlock (&ctx.mutex);
-
-        /* 使用sleep轮询而非cond_wait，避免子任务卡死导致主任务阻塞 */
-        hev_task_sleep (50); /* 50ms轮询间隔 */
+        hev_task_sleep (50);
         total_wait_ms += 50;
     }
 
-    ctx.should_stop = 1; /* 通知所有任务停止 */
+    ctx->should_stop = 1;
 
-    /* 等待所有任务完全结束（带超时保护） */
-    total_wait_ms = 0;
-    while (ctx.completed_count < ctx.ip_count && total_wait_ms < max_wait_ms) {
-        if (ctx.completed_count >= ctx.ip_count)
-            break;
-        hev_task_sleep (50); /* 50ms轮询间隔 */
-        total_wait_ms += 50;
-    }
-
-    if (ctx.completed_count < ctx.ip_count) {
-        LOG_W ("dns-latency: %d tasks still not completed after %dms",
-               ctx.ip_count - ctx.completed_count, total_wait_ms);
+    /* ⭐ 显式 Join 所有任务，确保没有任何任务再访问 ctx */
+    for (int i = 0; i < created_count; i++) {
+        hev_task_join (tasks[i]);
     }
 
     /* 检查结果 */
-    int64_t total_elapsed_ms = get_time_ms () - ctx.start_time_ms;
-    if (ctx.winner_index >= 0) {
+    int winner_index = ctx->winner_index;
+    int winner_method = ctx->winner_method;
+    int64_t total_elapsed_ms = get_time_ms () - ctx->start_time_ms;
+
+    hev_free (ctx);
+
+    if (winner_index >= 0) {
         const char *method_name =
-            (ctx.winner_method == DNS_LATENCY_METHOD_TCP443) ? "TCP443" :
-            (ctx.winner_method == DNS_LATENCY_METHOD_TCP80)  ? "TCP80" :
+            (winner_method == DNS_LATENCY_METHOD_TCP443) ? "TCP443" :
+            (winner_method == DNS_LATENCY_METHOD_TCP80)  ? "TCP80" :
                                                                "ICMP";
-        const ip_addr_t *winner_ip = &ctx.ips[ctx.winner_index];
+        const ip_addr_t *winner_ip = &ips[winner_index];
         LOG_I ("dns-latency: Race winner: %s (IP %d, %s), total time=%lldms",
-               ipaddr_ntoa (winner_ip), ctx.winner_index, method_name,
+               ipaddr_ntoa (winner_ip), winner_index, method_name,
                (long long)total_elapsed_ms);
         return 0;
     }
