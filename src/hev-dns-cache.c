@@ -844,7 +844,8 @@ hev_dns_cache_insert (const char *domain, uint16_t qtype,
         int oldest_shard;
 
         hev_task_mutex_lock (&lru_list_mutex);
-        if (total_cache_memory + new_entry->entry_size <= DNS_CACHE_MAX_MEMORY) {
+        if (total_cache_memory + new_entry->entry_size <=
+            DNS_CACHE_MAX_MEMORY) {
             hev_task_mutex_unlock (&lru_list_mutex);
             break;
         }
@@ -869,7 +870,7 @@ hev_dns_cache_insert (const char *domain, uint16_t qtype,
             /* 释放被淘汰的条目 */
             if (oldest->response_data)
                 hev_free (oldest->response_data);
-            
+
             HevObjectPool *pool = dns_entry_pool;
             if (pool)
                 hev_object_pool_put (pool, oldest);
@@ -907,7 +908,7 @@ hev_dns_cache_insert (const char *domain, uint16_t qtype,
                 hev_free (old->response_data);
             if (old->is_poisoned)
                 poisoned_cache_entries--;
-            
+
             HevObjectPool *pool = dns_entry_pool;
             if (pool)
                 hev_object_pool_put (pool, old);

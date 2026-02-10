@@ -1121,7 +1121,7 @@ hev_dns_latency_test_concurrent (const ip_addr_t *ips, int ip_count,
         const char *method_name =
             (winner_method == DNS_LATENCY_METHOD_TCP443) ? "TCP443" :
             (winner_method == DNS_LATENCY_METHOD_TCP80)  ? "TCP80" :
-                                                               "ICMP";
+                                                           "ICMP";
         const ip_addr_t *winner_ip = &ips[winner_index];
         LOG_I ("dns-latency: Race winner: %s (IP %d, %s), total time=%lldms",
                ipaddr_ntoa (winner_ip), winner_index, method_name,
