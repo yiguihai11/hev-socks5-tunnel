@@ -181,7 +181,11 @@ tcp_sent_handler (void *arg, struct tcp_pcb *pcb, u16_t len)
     HevSocks5SessionTCP *self = arg;
 
     LOG_D ("%p socks5 session tcp: sent %u bytes acknowledged", self, len);
-    hev_ring_buffer_read_release (self->buffer, len);
+
+    if (self->buffer) {
+        hev_ring_buffer_read_release (self->buffer, len);
+    }
+
     hev_task_wakeup (self->data.task);
 
     return ERR_OK;
@@ -432,6 +436,7 @@ hev_socks5_session_tcp_destruct (HevObject *base)
     if (self->buffer) {
         LOG_D ("%p socks5 session tcp destruct: destroying ring buffer", self);
         hev_ring_buffer_destroy (self->buffer);
+        self->buffer = NULL;
     }
     hev_task_mutex_unlock (self->mutex);
 

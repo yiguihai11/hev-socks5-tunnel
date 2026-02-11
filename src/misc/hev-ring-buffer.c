@@ -78,6 +78,9 @@ hev_ring_buffer_read_finish (HevRingBuffer *self, size_t size)
 void
 hev_ring_buffer_read_release (HevRingBuffer *self, size_t size)
 {
+    if (!self)
+        return;
+
     self->use_size -= size;
     if (!self->use_size) {
         self->rp = 0;
