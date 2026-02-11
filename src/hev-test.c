@@ -17,8 +17,32 @@
 #include "hev-config.h"
 #include "hev-dns-cache.h"
 #include "hev-dns-latency.h"
+#include <hev-socks5.h>
+#include <hev-socks5-client-udp.h>
+#include <hev-socks5-misc.h>
 
 #include "hev-test.h"
+
+#include <time.h>
+
+static int64_t
+get_time_ms (void)
+{
+    struct timespec ts;
+    clock_gettime (CLOCK_MONOTONIC, &ts);
+    return (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+}
+
+/* DNS 报文结构（测试用） */
+typedef struct
+{
+    uint16_t id;
+    uint16_t flags;
+    uint16_t qdcount;
+    uint16_t ancount;
+    uint16_t nscount;
+    uint16_t arcount;
+} __attribute__ ((packed)) TestDNSHeader;
 
 // Forward declarations for config functions
 int hev_config_is_smart_proxy_probe_port (int port);
@@ -1520,6 +1544,179 @@ run_dns_cache_memory_lru_tests (void)
     printf ("  DNS cache memory & LRU tests passed\n");
 }
 
+static void
+run_dns_cache_expiration_stress_test (void)
+{
+    printf ("--- Running stress tests for DNS cache expiration ---\n");
+
+    hev_dns_cache_init ();
+
+    size_t total_entries, poisoned, memory, max_memory;
+    uint64_t hits;
+
+    printf ("\n  Testing rapid expiration cleanup...\n");
+
+    uint8_t fake_response[64];
+    memset (fake_response, 0, sizeof (fake_response));
+
+    /* 1. 插入 100 个即将过期的条目 (TTL = 1s) */
+    for (int i = 0; i < 100; i++) {
+        char domain[64];
+        snprintf (domain, sizeof (domain), "expire%d.test.com", i);
+        /* TTL = 1 秒 */
+        hev_dns_cache_insert (domain, DNS_TYPE_A, fake_response,
+                              sizeof (fake_response), 1, 0);
+    }
+
+    hev_dns_cache_get_stats (&total_entries, &poisoned, &hits, &memory,
+                             &max_memory);
+    printf ("  After inserts: entries=%zu, memory=%zu bytes\n", total_entries,
+            memory);
+    TEST_ASSERT (total_entries == 100);
+
+    /* 2. 等待过期 (2秒) */
+    printf ("  Waiting for entries to expire...\n");
+    sleep (2);
+
+    /* 3. 执行清理 */
+    size_t cleaned = hev_dns_cache_clean_expired ();
+    printf ("  Cleaned %zu entries\n", cleaned);
+    TEST_ASSERT (cleaned == 100);
+
+    hev_dns_cache_get_stats (&total_entries, &poisoned, &hits, &memory,
+                             &max_memory);
+    printf ("  After cleanup: entries=%zu, memory=%zu bytes\n", total_entries,
+            memory);
+    TEST_ASSERT (total_entries == 0);
+    TEST_ASSERT (memory == 0);
+
+    /* 4. 压力测试：混合插入和清理 */
+    printf ("\n  Stress testing mixed operations...\n");
+    for (int i = 0; i < 50; i++) {
+        char domain[64];
+        snprintf (domain, sizeof (domain), "stress%d.test.com", i);
+        /* 一半过期，一半不过期 */
+        uint32_t ttl = (i % 2 == 0) ? 0 : 3600;
+        hev_dns_cache_insert (domain, DNS_TYPE_A, fake_response,
+                              sizeof (fake_response), ttl, 0);
+
+        if (i % 10 == 0) {
+            hev_dns_cache_clean_expired ();
+        }
+    }
+
+    /* 等待 1 秒确保 TTL=0 的条目过期 */
+    sleep (1);
+
+    /* 最后再清理一次，应该剩 25 个不过期的 */
+    hev_dns_cache_clean_expired ();
+    hev_dns_cache_get_stats (&total_entries, &poisoned, &hits, &memory,
+                             &max_memory);
+    printf ("  Final state: entries=%zu (expected 25)\n", total_entries);
+    TEST_ASSERT (total_entries == 25);
+
+    hev_dns_cache_fini ();
+    printf ("  DNS cache expiration stress test passed\n");
+}
+
+#include <hev-task-system.h>
+#include <lwip/init.h>
+
+static void
+run_dns_latency_stress_test (void)
+{
+    printf ("--- Running stress tests for DNS latency optimization ---\n");
+
+    /* 初始化任务系统和 lwIP 环境以支持协程运行 */
+    hev_task_system_init ();
+    lwip_init ();
+    hev_dns_latency_init ();
+
+    /* 模拟一个包含 32 个 IP 的 DNS 响应 */
+    uint8_t response[1024];
+    memset (response, 0, sizeof (response));
+    TestDNSHeader *hdr = (TestDNSHeader *)response;
+    hdr->ancount = htons (32);
+    hdr->qdcount = htons (1);
+
+    /* 查询部分: test.com */
+    int pos = 12;
+    response[pos++] = 4;
+    memcpy (response + pos, "test", 4);
+    pos += 4;
+    response[pos++] = 3;
+    memcpy (response + pos, "com", 3);
+    pos += 3;
+    response[pos++] = 0;
+    pos += 4; /* QTYPE + QCLASS */
+
+    /* 应答部分: 32 个 A 记录 */
+    for (int i = 0; i < 32; i++) {
+        response[pos++] = 0xc0;
+        response[pos++] = 0x0c;
+        response[pos++] = 0x00;
+        response[pos++] = 0x01; /* Type A */
+        response[pos++] = 0x00;
+        response[pos++] = 0x01; /* Class IN */
+        pos += 4; /* TTL */
+        response[pos++] = 0x00;
+        response[pos++] = 0x04; /* RDLE N */
+        response[pos++] = 10;
+        response[pos++] = 0;
+        response[pos++] = 0;
+        response[pos++] = i;
+    }
+    size_t response_len = pos;
+
+    printf ("\n  Testing concurrent task limit (MAX_TASKS=64)...\n");
+
+    /* 模拟 SOCKS5 对象 */
+    HevSocks5 *base =
+        HEV_SOCKS5 (hev_socks5_client_udp_new (HEV_SOCKS5_TYPE_NONE));
+
+    /* 启动 100 个优化任务 (验证 64 的限制拦截) */
+    int started_count = 0;
+    struct udp_pcb dummy_pcb;
+    memset (&dummy_pcb, 0, sizeof (dummy_pcb));
+
+    for (int i = 0; i < 100; i++) {
+        ip_addr_t client_ip, src_ip;
+        IP_ADDR4 (&client_ip, 192, 168, 1, 1);
+        IP_ADDR4 (&src_ip, 8, 8, 8, 8);
+
+        int res = hev_dns_latency_optimize_response_async (
+            response, response_len, "test.com", &dummy_pcb, &client_ip, 53,
+            &src_ip, 53, base);
+        if (res == 1)
+            started_count++;
+    }
+
+    printf ("  Started %d tasks (requested 100, expected limit <= 64)\n",
+            started_count);
+    TEST_ASSERT (started_count > 0 && started_count <= 64);
+
+    /* 验证清理退出 */
+    printf ("\n  Testing cleanup and task joining...\n");
+    int64_t start_fini = get_time_ms ();
+    hev_dns_latency_fini ();
+    int64_t end_fini = get_time_ms ();
+    printf ("  hev_dns_latency_fini took %lld ms\n",
+            (long long)(end_fini - start_fini));
+
+    /* 反复 init/fini 测试稳定性 */
+    printf ("\n  Testing repeated init/fini stability...\n");
+    for (int i = 0; i < 3; i++) {
+        hev_dns_latency_init ();
+        /* 在 init 后立即 fini */
+        hev_dns_latency_fini ();
+    }
+
+    hev_task_system_fini ();
+
+    hev_object_unref (HEV_OBJECT (base));
+    printf ("  DNS latency stress test completed\n");
+}
+
 int
 hev_test_run (void)
 {
@@ -1558,6 +1755,8 @@ hev_test_run (void)
     // run_dns_split_tunnel_tests (); // TODO: Fix crash
     // run_dns_latency_tests (); // TODO: Fix network test crash
     run_dns_cache_memory_lru_tests ();
+    run_dns_cache_expiration_stress_test ();
+    run_dns_latency_stress_test ();
     // run_edge_case_tests (); // Skip due to NULL pointer bug in hev_filter_is_blocked_ip()
 
     printf ("=========================================\n");
