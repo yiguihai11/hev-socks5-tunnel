@@ -1605,7 +1605,8 @@ run_ring_buffer_tests (void)
     res = hev_ring_buffer_writing (rb, iov);
     TEST_ASSERT (res == 2); /* 应该返回两个 iov 片段 */
     TEST_ASSERT (iov[0].iov_len == 224); /* 1024 - 800 (到末尾的距离) */
-    TEST_ASSERT (iov[1].iov_len == 0); /* 注意：use_size = 800, 总可用 = 1024 - 800 = 224 */
+    TEST_ASSERT (iov[1].iov_len ==
+                 0); /* 注意：use_size = 800, 总可用 = 1024 - 800 = 224 */
 
     /* 重新测试：释放一部分，留一部分 */
     hev_ring_buffer_read_release (rb, 400);
