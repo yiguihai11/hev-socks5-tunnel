@@ -584,9 +584,8 @@ hev_dns_cache_clean_expired (void)
                         poisoned_cache_entries--;
 
                     /* 检查对象池是否有效：必须在分片锁内访问 */
-                    HevObjectPool *pool = dns_entry_pool;
-                    if (pool) {
-                        hev_object_pool_put (pool, entry);
+                    if (dns_entry_pool) {
+                        hev_object_pool_put (dns_entry_pool, entry);
                     } else {
                         hev_free (entry);
                     }
@@ -703,10 +702,25 @@ hev_dns_cache_fini (void)
     /* 3. 等待清理任务退出
      * 因为任务可能会在 yield 或 sleep 中。 */
     volatile int wait_count = 0;
-    while (cache_cleaner_started && wait_count < 100) {
+    const int max_wait_count = 300; /* 最多等待 3 秒 (300 * 10ms) */
+    while (cache_cleaner_started && wait_count < max_wait_count) {
         hev_task_yield (HEV_TASK_YIELD);
         hev_task_sleep (10);
         wait_count++;
+
+        /* 每次循环后检查隧道是否仍在运行，如果隧道已停止，清理任务应该很快退出 */
+        if (!hev_socks5_tunnel_is_running ()) {
+            LOG_D ("dns-cache: Tunnel stopped, cleaner task should exit soon");
+        }
+    }
+
+    if (cache_cleaner_started) {
+        LOG_W ("dns-cache: Cleaner task did not exit after %dms, forcing cleanup",
+               max_wait_count * 10);
+        /* 强制标记为已停止，防止后续访问 */
+        cache_cleaner_started = 0;
+    } else {
+        LOG_D ("dns-cache: Cleaner task exited after %dms", wait_count * 10);
     }
 
     /* 4. 销毁对象池资源
@@ -754,9 +768,8 @@ hev_dns_cache_lookup (const char *domain, uint16_t qtype,
                 if (entry->is_poisoned)
                     poisoned_cache_entries--;
 
-                HevObjectPool *pool = dns_entry_pool;
-                if (pool)
-                    hev_object_pool_put (pool, entry);
+                if (dns_entry_pool)
+                    hev_object_pool_put (dns_entry_pool, entry);
                 else
                     hev_free (entry);
 
@@ -876,9 +889,8 @@ hev_dns_cache_insert (const char *domain, uint16_t qtype,
             }
 
             /* 在分片锁保护下将对象归还池中，确保与 fini 同步 */
-            HevObjectPool *pool = dns_entry_pool;
-            if (pool)
-                hev_object_pool_put (pool, oldest);
+            if (dns_entry_pool)
+                hev_object_pool_put (dns_entry_pool, oldest);
             else
                 hev_free (oldest);
 
@@ -916,9 +928,8 @@ hev_dns_cache_insert (const char *domain, uint16_t qtype,
             if (old->is_poisoned)
                 poisoned_cache_entries--;
 
-            HevObjectPool *pool = dns_entry_pool;
-            if (pool)
-                hev_object_pool_put (pool, old);
+            if (dns_entry_pool)
+                hev_object_pool_put (dns_entry_pool, old);
             else
                 hev_free (old);
 
