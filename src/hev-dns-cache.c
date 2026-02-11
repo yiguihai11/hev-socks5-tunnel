@@ -715,8 +715,9 @@ hev_dns_cache_fini (void)
     }
 
     if (cache_cleaner_started) {
-        LOG_W ("dns-cache: Cleaner task did not exit after %dms, forcing cleanup",
-               max_wait_count * 10);
+        LOG_W (
+            "dns-cache: Cleaner task did not exit after %dms, forcing cleanup",
+            max_wait_count * 10);
         /* 强制标记为已停止，防止后续访问 */
         cache_cleaner_started = 0;
     } else {
