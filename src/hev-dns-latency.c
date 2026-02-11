@@ -354,9 +354,20 @@ hev_dns_latency_fini (void)
         "dns-latency: Shutdown signaled, waiting for %d active tasks to complete",
         dns_latency_task_count);
 
-    /* Wait for all tasks to complete (Skip deep joining in test mode to avoid crashes) */
+    /* Wait for all tasks to complete */
     if (g_is_test_mode) {
-        dns_latency_task_count = 0;
+        /* 在测试模式下，手动清理任务列表而不进行 Join（因为没有调度器） */
+        task_lock ();
+        for (i = 0; i < MAX_TASKS; i++) {
+            if (dns_latency_tasks[i].active && dns_latency_tasks[i].task) {
+                HevTask *t = dns_latency_tasks[i].task;
+                dns_latency_tasks[i].active = 0;
+                dns_latency_tasks[i].task = NULL;
+                dns_latency_task_count--;
+                hev_task_unref (t);
+            }
+        }
+        task_unlock ();
         dns_latency_initialized = 0;
         return;
     }

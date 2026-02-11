@@ -698,7 +698,12 @@ hev_dns_cache_fini (void)
     for (int i = 0; i < DNS_CACHE_SHARD_COUNT; i++)
         hev_task_mutex_unlock (&dns_cache_shards[i]);
 
-    /* 5. 等待清理任务退出 (仅在非测试模式且任务确实启动时) */
+    /* 5. 销毁对象池资源 (在等待清理任务前，确保池已失效) */
+    if (pool_to_destroy) {
+        hev_object_pool_destroy (pool_to_destroy);
+    }
+
+    /* 6. 等待清理任务退出 (仅在非测试模式且任务确实启动时) */
     if (!g_is_test_mode && cache_cleaner_started) {
         volatile int wait_count = 0;
         const int max_wait_count = 500; /* 最多等待 5 秒 */
@@ -708,11 +713,6 @@ hev_dns_cache_fini (void)
         }
     }
     cache_cleaner_started = 0;
-
-    /* 6. 销毁对象池资源 */
-    if (pool_to_destroy) {
-        hev_object_pool_destroy (pool_to_destroy);
-    }
 
     /* 重置初始化标志 */
     dns_cache_initialized = 0;

@@ -21,6 +21,8 @@
 #include <hev-socks5-client-udp.h>
 #include <hev-socks5-misc.h>
 
+#include <hev-task-system.h>
+#include <lwip/init.h>
 #include "hev-test.h"
 
 #include <time.h>
@@ -1698,17 +1700,25 @@ run_dns_cache_expiration_stress_test (void)
     printf ("  DNS cache expiration stress test passed\n");
 }
 
-#include <hev-task-system.h>
-#include <lwip/init.h>
+static int task_system_ready = 0;
+
+static void
+ensure_task_system_ready (void)
+{
+    if (!task_system_ready) {
+        hev_task_system_init ();
+        lwip_init ();
+        task_system_ready = 1;
+    }
+}
 
 static void
 run_dns_latency_stress_test (void)
 {
     printf ("--- Running stress tests for DNS latency optimization ---\n");
 
-    /* 初始化任务系统和 lwIP 环境以支持协程运行 */
-    hev_task_system_init ();
-    lwip_init ();
+    /* 确保任务系统和 lwIP 环境已初始化 */
+    ensure_task_system_ready ();
     hev_dns_latency_init ();
 
     /* 模拟一个包含 32 个 IP 的 DNS 响应 */
@@ -1790,8 +1800,6 @@ run_dns_latency_stress_test (void)
         hev_dns_latency_fini ();
     }
 
-    hev_task_system_fini ();
-
     hev_object_unref (HEV_OBJECT (base));
     printf ("  DNS latency stress test completed\n");
 }
@@ -1838,6 +1846,10 @@ hev_test_run (void)
     run_dns_cache_expiration_stress_test ();
     run_dns_latency_stress_test ();
     // run_edge_case_tests (); // Skip due to NULL pointer bug in hev_filter_is_blocked_ip()
+
+    if (task_system_ready) {
+        hev_task_system_fini ();
+    }
 
     printf ("=========================================\n");
     printf ("Test Summary: %d/%d passed.\n", passed_tests, total_tests);

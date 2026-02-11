@@ -160,12 +160,12 @@ hev_socks5_tunnel_main_inner (int tun_fd)
     // 5. 清理过滤器 (使用 task mutex，必须在 task_system_fini 之前!)
     hev_filter_fini ();
 
-    // 6. 清理任务系统 (在所有使用任务的模块清理之后)
-    hev_task_system_fini ();
-
-    // 7. 清理日志系统
+    // 6. 清理日志系统 (最好在 task_system_fini 之前,防止最后打印日志导致重新创建分配器)
     hev_socks5_logger_fini ();
     hev_logger_fini ();
+
+    // 7. 清理任务系统 (在所有使用任务或内存管理的模块清理之后)
+    hev_task_system_fini ();
 
     // 9. 配置清理由调用者负责（在 main_from_file/main_from_str 中）
     // 注意：hev_config_fini() 不在这里调用，因为配置可能来自不同源

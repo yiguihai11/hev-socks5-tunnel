@@ -20,9 +20,16 @@ static pthread_key_t key;
 static pthread_once_t key_once = PTHREAD_ONCE_INIT;
 
 static void
+pthread_key_destructor (void *ptr)
+{
+    if (ptr)
+        hev_memory_allocator_unref (ptr);
+}
+
+static void
 pthread_key_creator (void)
 {
-    pthread_key_create (&key, NULL);
+    pthread_key_create (&key, pthread_key_destructor);
 }
 
 EXPORT_SYMBOL HevMemoryAllocator *
