@@ -1544,6 +1544,84 @@ run_dns_cache_memory_lru_tests (void)
     printf ("  DNS cache memory & LRU tests passed\n");
 }
 
+#include "hev-ring-buffer.h"
+
+static void
+run_ring_buffer_tests (void)
+{
+    printf ("--- Running tests for HevRingBuffer ---\n");
+
+    /* 1. NULL 指针安全测试 */
+    printf ("\n  Testing NULL pointer safety...\n");
+    hev_ring_buffer_read_release (NULL, 100);
+    printf ("    [ OK ] hev_ring_buffer_read_release(NULL) did not crash\n");
+
+    /* 2. 基本读写释放测试 */
+    printf ("\n  Testing basic write/read/release flow...\n");
+    HevRingBuffer *rb = hev_ring_buffer_new (1024);
+    TEST_ASSERT (rb != NULL);
+    TEST_ASSERT (hev_ring_buffer_get_max_size (rb) == 1024);
+    TEST_ASSERT (hev_ring_buffer_get_use_size (rb) == 0);
+
+    /* 模拟写入 100 字节 */
+    struct iovec iov[2];
+    int res = hev_ring_buffer_writing (rb, iov);
+    TEST_ASSERT (res >= 1);
+    TEST_ASSERT (iov[0].iov_len >= 100);
+    hev_ring_buffer_write_finish (rb, 100);
+    TEST_ASSERT (hev_ring_buffer_get_use_size (rb) == 100);
+
+    /* 模拟读取结束 */
+    hev_ring_buffer_read_finish (rb, 40);
+    /* use_size 应该还是 100，直到 release */
+    TEST_ASSERT (hev_ring_buffer_get_use_size (rb) == 100);
+
+    /* 模拟数据确认并释放 */
+    hev_ring_buffer_read_release (rb, 40);
+    TEST_ASSERT (hev_ring_buffer_get_use_size (rb) == 60);
+
+    /* 3. 指针重置测试 */
+    printf ("\n  Testing pointer reset when empty...\n");
+    /* 模拟 rb 的指针发生了偏移 */
+    TEST_ASSERT (rb->rp != 0 || rb->wp != 0);
+
+    /* 释放剩余的 60 字节 */
+    hev_ring_buffer_read_release (rb, 60);
+    TEST_ASSERT (hev_ring_buffer_get_use_size (rb) == 0);
+    /* 关键：当 use_size 为 0 时，rp 和 wp 必须重置为 0 */
+    TEST_ASSERT (rb->rp == 0);
+    TEST_ASSERT (rb->wp == 0);
+    printf ("    [ OK ] Pointers reset correctly when buffer is empty\n");
+
+    /* 4. 环形回绕写入测试 */
+    printf ("\n  Testing wrap-around writing...\n");
+    /* 消耗掉大部分空间并保持不空 */
+    hev_ring_buffer_write_finish (rb, 800);
+    hev_ring_buffer_read_finish (rb, 800);
+    /* 此时 use_size = 800 (虽然读完了但没 release，所以 use_size 还在)
+     * 指针 wp = 800, rp = 800 */
+
+    /* 写入 300 字节，这会触发回绕 (800 + 300 > 1024) */
+    res = hev_ring_buffer_writing (rb, iov);
+    TEST_ASSERT (res == 2); /* 应该返回两个 iov 片段 */
+    TEST_ASSERT (iov[0].iov_len == 224); /* 1024 - 800 (到末尾的距离) */
+    TEST_ASSERT (iov[1].iov_len == 0); /* 注意：use_size = 800, 总可用 = 1024 - 800 = 224 */
+
+    /* 重新测试：释放一部分，留一部分 */
+    hev_ring_buffer_read_release (rb, 400);
+    /* 此时 use_size = 400, wp = 800, rp = 800 (release 不改变指针)
+     * 可用空间 = 1024 - 400 = 624
+     * 到末尾空间 = 1024 - 800 = 224
+     * 回绕空间 = 624 - 224 = 400 */
+    res = hev_ring_buffer_writing (rb, iov);
+    TEST_ASSERT (res == 2);
+    TEST_ASSERT (iov[0].iov_len == 224);
+    TEST_ASSERT (iov[1].iov_len == 400);
+
+    hev_ring_buffer_destroy (rb);
+    printf ("  HevRingBuffer tests passed\n");
+}
+
 static void
 run_dns_cache_expiration_stress_test (void)
 {
@@ -1745,6 +1823,7 @@ hev_test_run (void)
     run_filter_tests ();
     run_parser_tests ();
     run_blacklist_tests ();
+    run_ring_buffer_tests ();
     run_smart_proxy_tests ();
     run_traffic_router_tests ();
     run_session_manager_tests ();
