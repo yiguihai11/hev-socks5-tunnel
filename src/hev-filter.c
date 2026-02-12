@@ -1822,8 +1822,8 @@ hev_filter_blacklist_get_stats (size_t *total_entries, size_t *active_entries,
 
 void
 hev_filter_blacklist_get_all (void (*callback) (HevBlacklistEntry *entry,
-                                                 void *data),
-                               void *data)
+                                                void *data),
+                              void *data)
 {
     int i;
 

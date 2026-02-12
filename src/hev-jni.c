@@ -192,18 +192,23 @@ blacklist_collect_callback (HevBlacklistEntry *entry, void *data)
 {
     BlacklistContext *ctx = data;
     char buffer[512];
-    const char *type_str = (entry->type == HEV_BLACKLIST_ENTRY_IP) ? "IP" : "DOMAIN";
+    const char *type_str = (entry->type == HEV_BLACKLIST_ENTRY_IP) ? "IP" :
+                                                                     "DOMAIN";
     const char *value = (entry->type == HEV_BLACKLIST_ENTRY_IP) ?
-        ipaddr_ntoa(&entry->ip_addr) : entry->hostname;
-    time_t now = time(NULL);
+                            ipaddr_ntoa (&entry->ip_addr) :
+                            entry->hostname;
+    time_t now = time (NULL);
     long expiry = (long)(entry->expiry_time - now);
     uint64_t hits = entry->hit_count;
 
-    if (expiry < 0) expiry = 0;
+    if (expiry < 0)
+        expiry = 0;
 
-    snprintf (buffer, sizeof (buffer), "%s|%s|%ld|%llu", type_str, value, expiry, (unsigned long long)hits);
+    snprintf (buffer, sizeof (buffer), "%s|%s|%ld|%llu", type_str, value,
+              expiry, (unsigned long long)hits);
     jstring jstr = (*ctx->env)->NewStringUTF (ctx->env, buffer);
-    (*ctx->env)->SetObjectArrayElement (ctx->env, ctx->array, ctx->index++, jstr);
+    (*ctx->env)->SetObjectArrayElement (ctx->env, ctx->array, ctx->index++,
+                                        jstr);
     (*ctx->env)->DeleteLocalRef (ctx->env, jstr);
 }
 

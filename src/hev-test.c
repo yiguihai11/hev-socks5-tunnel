@@ -1808,8 +1808,8 @@ static void
 test_jni_callback (HevBlacklistEntry *entry, void *data)
 {
     char buffer[512];
-    const char *type_str =
-        (entry->type == HEV_BLACKLIST_ENTRY_IP) ? "IP" : "DOMAIN";
+    const char *type_str = (entry->type == HEV_BLACKLIST_ENTRY_IP) ? "IP" :
+                                                                     "DOMAIN";
     const char *value = (entry->type == HEV_BLACKLIST_ENTRY_IP) ?
                             ipaddr_ntoa (&entry->ip_addr) :
                             entry->hostname;
