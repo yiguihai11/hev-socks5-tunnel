@@ -18,6 +18,7 @@
 #include <string.h>
 
 #include "hev-main.h"
+#include "hev-filter.h"
 
 #include "hev-jni.h"
 
@@ -52,12 +53,15 @@ static void native_start_service (JNIEnv *env, jobject thiz, jstring conig_path,
                                   jint fd);
 static void native_stop_service (JNIEnv *env, jobject thiz);
 static jlongArray native_get_stats (JNIEnv *env, jobject thiz);
+static jobjectArray native_get_blacklist (JNIEnv *env, jobject thiz);
 
 static JNINativeMethod native_methods[] = {
     { "TProxyStartService", "(Ljava/lang/String;I)V",
       (void *)native_start_service },
     { "TProxyStopService", "()V", (void *)native_stop_service },
     { "TProxyGetStats", "()[J", (void *)native_get_stats },
+    { "TProxyGetBlacklist", "()[Ljava/lang/String;",
+      (void *)native_get_blacklist },
 };
 
 static void
@@ -163,6 +167,69 @@ native_get_stats (JNIEnv *env, jobject thiz)
 
     res = (*env)->NewLongArray (env, 4);
     (*env)->SetLongArrayRegion (env, res, 0, 4, array);
+
+    return res;
+}
+
+typedef struct
+{
+    JNIEnv *env;
+    jobjectArray array;
+    jclass string_class;
+    int index;
+    int count;
+} BlacklistContext;
+
+static void
+blacklist_count_callback (HevBlacklistEntry *entry, void *data)
+{
+    int *count = data;
+    (*count)++;
+}
+
+static void
+blacklist_collect_callback (HevBlacklistEntry *entry, void *data)
+{
+    BlacklistContext *ctx = data;
+    char buffer[512];
+    const char *type_str = (entry->type == HEV_BLACKLIST_ENTRY_IP) ? "IP" : "DOMAIN";
+    const char *value = (entry->type == HEV_BLACKLIST_ENTRY_IP) ?
+        ipaddr_ntoa(&entry->ip_addr) : entry->hostname;
+    time_t now = time(NULL);
+    long expiry = (long)(entry->expiry_time - now);
+    uint64_t hits = entry->hit_count;
+
+    if (expiry < 0) expiry = 0;
+
+    snprintf (buffer, sizeof (buffer), "%s|%s|%ld|%llu", type_str, value, expiry, (unsigned long long)hits);
+    jstring jstr = (*ctx->env)->NewStringUTF (ctx->env, buffer);
+    (*ctx->env)->SetObjectArrayElement (ctx->env, ctx->array, ctx->index++, jstr);
+    (*ctx->env)->DeleteLocalRef (ctx->env, jstr);
+}
+
+static jobjectArray
+native_get_blacklist (JNIEnv *env, jobject thiz)
+{
+    int count = 0;
+    jclass string_class = (*env)->FindClass (env, "java/lang/String");
+
+    /* 第一遍：计算数量 */
+    hev_filter_blacklist_get_all (blacklist_count_callback, &count);
+
+    /* 创建数组 */
+    jobjectArray res = (*env)->NewObjectArray (env, count, string_class, NULL);
+
+    /* 第二遍：填充数据 */
+    BlacklistContext ctx;
+    ctx.env = env;
+    ctx.array = res;
+    ctx.string_class = string_class;
+    ctx.index = 0;
+    ctx.count = count;
+
+    hev_filter_blacklist_get_all (blacklist_collect_callback, &ctx);
+
+    (*env)->DeleteLocalRef (env, string_class);
 
     return res;
 }

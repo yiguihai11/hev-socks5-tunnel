@@ -1619,9 +1619,10 @@ hev_filter_blacklist_check_entry (HevBlacklistEntryType type,
         }
 
         if (match) {
+            entry->hit_count++;
             found = 1;
             found_entry = entry;
-            entry->hit_count++;
+            break;
         }
 
         prev = entry;
@@ -1817,6 +1818,27 @@ hev_filter_blacklist_get_stats (size_t *total_entries, size_t *active_entries,
     /* 精简版不支持 total_hits 和 total_blocked_bytes */
     (void)total_hits_out;
     (void)total_blocked_out;
+}
+
+void
+hev_filter_blacklist_get_all (void (*callback) (HevBlacklistEntry *entry,
+                                                 void *data),
+                               void *data)
+{
+    int i;
+
+    if (!callback)
+        return;
+
+    hev_task_mutex_lock (&blacklist_mutex);
+    for (i = 0; i < BLACKLIST_HASH_SIZE; i++) {
+        HevBlacklistEntry *current = blacklist_table[i];
+        while (current) {
+            callback (current, data);
+            current = current->next;
+        }
+    }
+    hev_task_mutex_unlock (&blacklist_mutex);
 }
 
 /* ============================================================================

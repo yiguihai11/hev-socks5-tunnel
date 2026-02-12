@@ -438,4 +438,15 @@ void hev_filter_blacklist_get_stats (size_t *total_entries,
                                      uint64_t *total_hits,
                                      uint64_t *total_blocked);
 
+/**
+ * hev_filter_blacklist_get_all:
+ * @callback: Callback function for each entry
+ * @data: User data for callback
+ *
+ * Iterate over all blacklist entries.
+ */
+void hev_filter_blacklist_get_all (void (*callback) (HevBlacklistEntry *entry,
+                                                     void *data),
+                                   void *data);
+
 #endif /* __HEV_FILTER_H__ */

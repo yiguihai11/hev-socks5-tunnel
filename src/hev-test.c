@@ -1804,6 +1804,66 @@ run_dns_latency_stress_test (void)
     printf ("  DNS latency stress test completed\n");
 }
 
+static void
+test_jni_callback (HevBlacklistEntry *entry, void *data)
+{
+    char buffer[512];
+    const char *type_str =
+        (entry->type == HEV_BLACKLIST_ENTRY_IP) ? "IP" : "DOMAIN";
+    const char *value = (entry->type == HEV_BLACKLIST_ENTRY_IP) ?
+                            ipaddr_ntoa (&entry->ip_addr) :
+                            entry->hostname;
+    time_t now = time (NULL);
+    long expiry = (long)(entry->expiry_time - now);
+    uint64_t hits = entry->hit_count;
+
+    if (expiry < 0)
+        expiry = 0;
+
+    snprintf (buffer, sizeof (buffer), "%s|%s|%ld|%llu", type_str, value,
+              expiry, (unsigned long long)hits);
+    printf ("    [JNI STRING] %s\n", buffer);
+
+    /* 验证格式 */
+    TEST_ASSERT (strstr (buffer, "|") != NULL);
+    if (entry->type == HEV_BLACKLIST_ENTRY_IP) {
+        TEST_ASSERT (strcmp (value, "1.2.3.4") == 0);
+    } else {
+        TEST_ASSERT (strcmp (value, "example.com") == 0);
+    }
+}
+
+static void
+run_jni_blacklist_simulation_test (void)
+{
+    printf ("--- Running simulation for JNI blacklist data ---\n");
+
+    hev_filter_init ();
+
+    /* 1. 添加测试数据 */
+    ip_addr_t test_ip;
+    ipaddr_aton ("1.2.3.4", &test_ip);
+    hev_filter_blacklist_add_ip (&test_ip);
+    hev_filter_blacklist_add_domain ("example.com");
+
+    /* 2. 模拟点击以增加命中次数 */
+    for (int i = 0; i < 5; i++) {
+        hev_filter_blacklist_check_ip (&test_ip);
+    }
+    for (int i = 0; i < 3; i++) {
+        hev_filter_blacklist_check_entry (HEV_BLACKLIST_ENTRY_DOMAIN, NULL, 0,
+                                          "example.com");
+    }
+
+    /* 3. 模拟 JNI 回调逻辑 */
+    printf ("\n  Simulating JNI TProxyGetBlacklist output:\n");
+
+    hev_filter_blacklist_get_all (test_jni_callback, NULL);
+
+    hev_filter_fini ();
+    printf ("  JNI blacklist simulation test passed\n");
+}
+
 int
 hev_test_run (void)
 {
@@ -1833,6 +1893,7 @@ hev_test_run (void)
     run_parser_tests ();
     run_blacklist_tests ();
     run_ring_buffer_tests ();
+    run_jni_blacklist_simulation_test ();
     run_smart_proxy_tests ();
     run_traffic_router_tests ();
     run_session_manager_tests ();
