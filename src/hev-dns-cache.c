@@ -63,6 +63,7 @@ static int dns_cache_initialized = 0;
 /* 清理任务控制 */
 static volatile int cache_cleaner_running = 0;
 static volatile int cache_cleaner_started = 0;
+static HevTask *cleaner_task_ptr = NULL;
 
 /* DNS服务器轮询索引（统一索引，轮询所有配置的DNS服务器） */
 static size_t dns_server_rotation_index = 0;
@@ -522,6 +523,9 @@ dns_cache_cleaner_task (void *data)
     }
 
     cache_cleaner_started = 0;
+    /* 不要在这里释放 cleaner_task_ptr，因为它是由 task system 管理的
+     * 只需要置空全局指针 */
+    cleaner_task_ptr = NULL;
     LOG_I ("dns-cache: Cache cleaner task stopped");
 }
 
@@ -539,7 +543,8 @@ start_cache_cleaner_if_needed (void)
         cache_cleaner_running = 1;
         cache_cleaner_started = 1;
         int stack_size = hev_config_get_misc_task_stack_size ();
-        hev_task_run (hev_task_new (stack_size), dns_cache_cleaner_task, NULL);
+        cleaner_task_ptr = hev_task_new (stack_size);
+        hev_task_run (cleaner_task_ptr, dns_cache_cleaner_task, NULL);
         LOG_D ("dns-cache: Cache cleaner task started");
     }
 }
@@ -700,10 +705,16 @@ hev_dns_cache_fini (void)
 
     /* 5. 等待清理任务退出 (必须先等待任务停止，确保没有任何地方再使用对象池) */
     if (!g_is_test_mode && cache_cleaner_started) {
+        /* 如果任务还在运行（可能是 sleeping），唤醒它以便它能检测到停止标志 */
+        if (cleaner_task_ptr) {
+            hev_task_wakeup (cleaner_task_ptr);
+        }
+
         volatile int wait_count = 0;
-        const int max_wait_count = 500; /* 最多等待 5 秒 */
+        /* 增加等待次数，因为 yield 切换很快 */
+        const int max_wait_count = 50000;
         while (cache_cleaner_started && wait_count < max_wait_count) {
-            hev_task_sleep (10);
+            hev_task_yield (HEV_TASK_YIELD);
             wait_count++;
         }
     }
