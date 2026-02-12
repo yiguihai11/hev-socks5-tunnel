@@ -64,16 +64,17 @@ hev_memory_allocator_set_default (HevMemoryAllocator *allocator)
 EXPORT_SYMBOL HevMemoryAllocator *
 hev_memory_allocator_ref (HevMemoryAllocator *self)
 {
-    self->ref_count++;
+    __atomic_fetch_add (&self->ref_count, 1, __ATOMIC_RELAXED);
     return self;
 }
 
 EXPORT_SYMBOL void
 hev_memory_allocator_unref (HevMemoryAllocator *self)
 {
-    self->ref_count--;
-    if (0 < self->ref_count)
+    if (__atomic_fetch_sub (&self->ref_count, 1, __ATOMIC_RELEASE) > 1)
         return;
+
+    __atomic_thread_fence (__ATOMIC_ACQUIRE);
 
     if (self->destroy)
         self->destroy (self);

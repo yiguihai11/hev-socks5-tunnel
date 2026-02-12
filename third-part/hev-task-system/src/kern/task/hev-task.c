@@ -53,7 +53,7 @@ hev_task_new (int stack_size)
 EXPORT_SYMBOL HevTask *
 hev_task_ref (HevTask *self)
 {
-    self->ref_count++;
+    __atomic_fetch_add (&self->ref_count, 1, __ATOMIC_RELAXED);
 
     return self;
 }
@@ -61,9 +61,10 @@ hev_task_ref (HevTask *self)
 EXPORT_SYMBOL void
 hev_task_unref (HevTask *self)
 {
-    self->ref_count--;
-    if (self->ref_count)
+    if (__atomic_fetch_sub (&self->ref_count, 1, __ATOMIC_RELEASE) > 1)
         return;
+
+    __atomic_thread_fence (__ATOMIC_ACQUIRE);
 
     hev_list_del (&hev_task_system_get_context ()->all_tasks, &self->list_node);
 

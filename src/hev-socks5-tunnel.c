@@ -438,10 +438,6 @@ event_task_entry (void *data)
 
     hev_task_del_fd (task_event, event_fds[0]);
     LOG_D ("socks5 tunnel: event task cleanup complete");
-
-    HevTask *self = task_event;
-    task_event = NULL;
-    hev_task_unref (self);
 }
 
 /* Calculate Internet checksum (RFC 1071) */
@@ -866,9 +862,11 @@ event_task_init (void)
 static void
 event_task_fini (void)
 {
-    if (task_event) {
-        hev_task_unref (task_event);
-        task_event = NULL;
+    HevTask *task;
+
+    task = __atomic_exchange_n (&task_event, NULL, __ATOMIC_RELAXED);
+    if (task) {
+        hev_task_unref (task);
     }
 
     if (event_fds[0] >= 0) {
@@ -897,9 +895,11 @@ lwip_io_task_init (void)
 static void
 lwip_io_task_fini (void)
 {
-    if (task_lwip_io) {
-        hev_task_unref (task_lwip_io);
-        task_lwip_io = NULL;
+    HevTask *task;
+
+    task = __atomic_exchange_n (&task_lwip_io, NULL, __ATOMIC_RELAXED);
+    if (task) {
+        hev_task_unref (task);
     }
 }
 
@@ -919,9 +919,11 @@ lwip_timer_task_init (void)
 static void
 lwip_timer_task_fini (void)
 {
-    if (task_lwip_timer) {
-        hev_task_unref (task_lwip_timer);
-        task_lwip_timer = NULL;
+    HevTask *task;
+
+    task = __atomic_exchange_n (&task_lwip_timer, NULL, __ATOMIC_RELAXED);
+    if (task) {
+        hev_task_unref (task);
     }
 }
 
