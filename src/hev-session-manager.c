@@ -445,12 +445,6 @@ run_domain_first_task (void *data)
                 &pcb->local_ip, hostname_found ? http_hostname : NULL,
                 pcb->local_port);
 
-            /* DEBUG: Trace smart-proxy decision */
-            LOG_D (
-                "%p [DOMAIN-FIRST] Debug: enabled=%d, is_probe=%d (port=%d), is_blocked=%d",
-                self, smart_proxy_enabled, is_probe_port, pcb->local_port,
-                is_gfw_blocked);
-
             if (unlikely (smart_proxy_enabled && is_probe_port &&
                           !is_gfw_blocked)) {
                 LOG_I ("%p [DOMAIN-FIRST] Route: Smart Proxy (probe mode)",
@@ -985,8 +979,8 @@ run_smart_proxy_task (void *data)
                                              saddr_len, self->queue,
                                              probe_timeout, task);
 
-    LOG_D ("%p [SMART-PROXY-V2] After probe: dst_ip_copy=%s, pcb->local_ip=%s",
-           self, ipaddr_ntoa (&dst_ip_copy), ipaddr_ntoa (&pcb->local_ip));
+    /*LOG_D ("%p [SMART-PROXY-V2] After probe: dst_ip_copy=%s, pcb->local_ip=%s",
+           self, ipaddr_ntoa (&dst_ip_copy), ipaddr_ntoa (&pcb->local_ip));*/
     LOG_I ("%p [SMART-PROXY-V2] Probe result: %d (duration=%ldms)", self,
            probe_outcome.result, probe_outcome.duration_ms);
 
