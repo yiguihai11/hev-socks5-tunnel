@@ -1081,19 +1081,22 @@ run_smart_proxy_task (void *data)
         LOG_I ("%p [SMART-PROXY-V2] SOCKS5 fallback ended (socks5_time=%ldms)",
                self, socks5_end_time - socks5_start_time);
 
-    /* Add to blacklist if SOCKS5 succeeded */
-    if (self->socks5_success) {
-        const char *reason = probe_result_to_string (probe_outcome.result);
-        if (self->detected_hostname[0]) {
-            hev_filter_blacklist_add_domain (self->detected_hostname, reason);
-            LOG_W ("%p [SMART-PROXY-V2] Added domain '%s' to blacklist (reason: %s)",
-                   self, self->detected_hostname, reason);
-        } else {
-            hev_filter_blacklist_add_ip (&dst_ip_copy, reason);
-            LOG_W ("%p [SMART-PROXY-V2] Added IP '%s' to blacklist (reason: %s)",
-                   self, fallback_dst_ip, reason);
+        /* Add to blacklist if SOCKS5 succeeded */
+        if (self->socks5_success) {
+            const char *reason = probe_result_to_string (probe_outcome.result);
+            if (self->detected_hostname[0]) {
+                hev_filter_blacklist_add_domain (self->detected_hostname,
+                                                 reason);
+                LOG_W (
+                    "%p [SMART-PROXY-V2] Added domain '%s' to blacklist (reason: %s)",
+                    self, self->detected_hostname, reason);
+            } else {
+                hev_filter_blacklist_add_ip (&dst_ip_copy, reason);
+                LOG_W (
+                    "%p [SMART-PROXY-V2] Added IP '%s' to blacklist (reason: %s)",
+                    self, fallback_dst_ip, reason);
+            }
         }
-    }
     }
 
     /* ====================================================================

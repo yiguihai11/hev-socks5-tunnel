@@ -337,7 +337,8 @@ typedef HevBlacklistEntry HevBlacklistedIP;
  *
  * Returns: 新增条目的唯一标识符，失败返回NULL
  */
-const char *hev_filter_blacklist_add_ip (const ip_addr_t *addr, const char *reason);
+const char *hev_filter_blacklist_add_ip (const ip_addr_t *addr,
+                                         const char *reason);
 
 /**
  * hev_filter_blacklist_add_domain:
@@ -350,7 +351,8 @@ const char *hev_filter_blacklist_add_ip (const ip_addr_t *addr, const char *reas
  *
  * Returns: 新增条目的唯一标识符，失败返回NULL
  */
-const char *hev_filter_blacklist_add_domain (const char *domain, const char *reason);
+const char *hev_filter_blacklist_add_domain (const char *domain,
+                                             const char *reason);
 
 /**
  * hev_filter_blacklist_check_ip:

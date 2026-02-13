@@ -405,7 +405,8 @@ run_smart_proxy_tests (void)
     // Test: Blacklist Domain API
     printf ("\nTesting blacklist domain API...\n");
     const char *domain = "example.com";
-    const char *domain_entry_id = hev_filter_blacklist_add_domain (domain, "Test");
+    const char *domain_entry_id =
+        hev_filter_blacklist_add_domain (domain, "Test");
     TEST_ASSERT (domain_entry_id != NULL);
     TEST_ASSERT (strlen (domain_entry_id) > 0);
 
