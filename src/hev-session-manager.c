@@ -914,6 +914,23 @@ static int continue_with_direct_connection (HevSocks5SessionTCP *self,
 static int create_direct_connection_fd (struct sockaddr *saddr,
                                         socklen_t saddr_len);
 
+static const char *
+probe_result_to_string (ProbeResult result)
+{
+    switch (result) {
+    case PROBE_SUCCESS:
+        return "SUCCESS";
+    case PROBE_RESET:
+        return "RESET";
+    case PROBE_TIMEOUT:
+        return "TIMEOUT";
+    case PROBE_ERROR:
+        return "ERROR";
+    default:
+        return "UNKNOWN";
+    }
+}
+
 static void
 run_smart_proxy_task (void *data)
 {
@@ -981,8 +998,9 @@ run_smart_proxy_task (void *data)
 
     /*LOG_D ("%p [SMART-PROXY-V2] After probe: dst_ip_copy=%s, pcb->local_ip=%s",
            self, ipaddr_ntoa (&dst_ip_copy), ipaddr_ntoa (&pcb->local_ip));*/
-    LOG_W ("%p [SMART-PROXY-V2] Probe result: %d (duration=%ldms)", self,
-           probe_outcome.result, probe_outcome.duration_ms);
+    LOG_W ("%p [SMART-PROXY-V2] Probe result: %s (duration=%ldms)", self,
+           probe_result_to_string (probe_outcome.result),
+           probe_outcome.duration_ms);
 
     /* ====================================================================
        Step 2: Decision based on probe result
