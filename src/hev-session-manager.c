@@ -778,31 +778,11 @@ run_direct_connect_task (void *data)
 
     if (hev_task_io_socket_connect (fd, (struct sockaddr *)&saddr, saddr_len,
                                     hev_socks5_task_io_yielder, s) < 0) {
-        int err = errno;
         time_t connect_duration_ms = get_current_time_ms () - connect_start;
-        LOG_W ("%p [DIRECT] Connect failed after %ld ms: %s (errno=%d)", self,
-               connect_duration_ms, strerror (err), err);
-
+        LOG_E ("%p [DIRECT] Connect failed after %ld ms: %s", self,
+               connect_duration_ms, strerror (errno));
         hev_task_del_fd (task, fd);
         close (fd);
-
-        /* User-friendly fallback logs */
-        if (err == 101) {
-            LOG_I (
-                "%p [DIRECT] Network unreachable (errno 101), retrying via SOCKS5 proxy...",
-                self);
-        } else {
-            LOG_I (
-                "%p [DIRECT] Direct connect failed (%s), falling back to SOCKS5 proxy...",
-                self, strerror (err));
-        }
-
-        /* 启动 SOCKS5 任务并移交 PCB */
-        hev_session_manager_start_task (
-            pcb, NULL, HEV_SESSION_SOCKS5,
-            self->detected_hostname[0] ? self->detected_hostname : NULL);
-
-        self->pcb = NULL; /* 标记 PCB 已移交，防止 cleanup_session 终止它 */
         goto exit_cleanup;
     }
 
