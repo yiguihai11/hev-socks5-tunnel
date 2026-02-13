@@ -546,13 +546,19 @@ hev_dns_latency_modify_response (uint8_t *data, size_t *len,
         pos += 4;
     }
 
-    /* 遍历所有Answer，找到目标IP并统计 */
-    int target_answer_count = 0; /* 目标Answer之前需要保留的Answer数量 */
-    int found = 0;
+    size_t answer_section_start = pos;
+    uint8_t *new_answers = hev_malloc (*len);
+    if (!new_answers)
+        return -1;
 
+    size_t new_answers_len = 0;
+    int new_ancount = 0;
+    int found_best = 0;
+
+    /* 遍历所有Answer，保留CNAME和最佳IP */
     for (int i = 0; i < ancount && pos < *len; i++) {
         char domain[256];
-        size_t answer_start = pos;
+        size_t record_start = pos;
 
         if (parse_dns_name (data, *len, &pos, domain, sizeof (domain)) < 0)
             break;
@@ -567,51 +573,51 @@ hev_dns_latency_modify_response (uint8_t *data, size_t *len,
         if (pos + rdlen > *len)
             break;
 
-        /* 检查是否匹配目标IP */
-        int is_target = 0;
-        if (IP_IS_V4 (best_ip) && rtype == DNS_TYPE_A && rdlen == 4) {
-            ip_addr_t ip;
-            IP_ADDR4 (&ip, data[pos], data[pos + 1], data[pos + 2],
-                      data[pos + 3]);
-            if (ip_addr_cmp (&ip, best_ip)) {
-                is_target = 1;
-                found = 1;
-            }
-        } else if (IP_IS_V6 (best_ip) && rtype == DNS_TYPE_AAAA &&
-                   rdlen == 16) {
-            ip_addr_t ip;
-            memset (&ip, 0, sizeof (ip));
-            memcpy (ip_2_ip6 (&ip)->addr, data + pos, 16);
-            ip.type = IPADDR_TYPE_V6;
-            if (ip_addr_cmp (&ip, best_ip)) {
-                is_target = 1;
-                found = 1;
-            }
-        }
+        size_t record_len = pos + rdlen - record_start;
+        int keep_record = 0;
 
-        /* 如果是CNAME，需要保留 */
         if (rtype == DNS_TYPE_CNAME) {
-            target_answer_count++;
+            keep_record = 1;
+        } else if (!found_best) {
+            if (IP_IS_V4 (best_ip) && rtype == DNS_TYPE_A && rdlen == 4) {
+                if (memcmp (data + pos, &ip_2_ip4 (best_ip)->addr, 4) == 0) {
+                    keep_record = 1;
+                    found_best = 1;
+                }
+            } else if (IP_IS_V6 (best_ip) && rtype == DNS_TYPE_AAAA &&
+                       rdlen == 16) {
+                if (memcmp (data + pos, ip_2_ip6 (best_ip)->addr, 16) == 0) {
+                    keep_record = 1;
+                    found_best = 1;
+                }
+            }
         }
 
-        /* 如果是目标IP，记录位置并停止 */
-        if (is_target) {
-            /* 简单方案：记录目标Answer的结束位置 */
-            *len = answer_start + 10 + rdlen; /* Answer开始 + 头部 + 数据 */
-            hdr->ancount = htons (target_answer_count + 1);
-            break;
+        if (keep_record) {
+            memcpy (new_answers + new_answers_len, data + record_start,
+                    record_len);
+            new_answers_len += record_len;
+            new_ancount++;
         }
 
         pos += rdlen;
     }
 
-    if (!found) {
+    if (!found_best) {
         LOG_W ("dns-latency: Best IP not found in DNS response");
+        hev_free (new_answers);
         return -1;
     }
 
+    /* 重新组装数据包 */
+    memcpy (data + answer_section_start, new_answers, new_answers_len);
+    *len = answer_section_start + new_answers_len;
+    hdr->ancount = htons (new_ancount);
+
+    hev_free (new_answers);
+
     LOG_I ("dns-latency: Modified DNS response, kept %d answers (len=%zu)",
-           target_answer_count + 1, *len);
+           new_ancount, *len);
 
     return 0;
 }

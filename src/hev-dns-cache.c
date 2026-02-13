@@ -100,19 +100,28 @@ read_uint32 (const uint8_t *p)
 uint16_t
 extract_dns_qtype (const uint8_t *data, size_t len)
 {
-    if (len < sizeof (DNSHeader) + 4)
+    /* 检查并跳过UDP头部（8字节） */
+    size_t dns_offset = 0;
+    if (len >= 10 && data[2] == 0x00 && data[3] == 0x35) {
+        dns_offset = 8;
+    }
+
+    const uint8_t *dns_data = data + dns_offset;
+    size_t dns_len = len - dns_offset;
+
+    if (dns_len < sizeof (DNSHeader) + 4)
         return DNS_TYPE_A; /* 默认 A 记录 */
 
     size_t pos = sizeof (DNSHeader);
 
     /* 跳过域名 */
-    while (pos < len) {
-        uint8_t label_len = data[pos];
+    while (pos < dns_len) {
+        uint8_t label_len = dns_data[pos];
         if (label_len == 0) {
             break;
         }
         if ((label_len & 0xC0) == 0xC0) {
-            /* 处理压缩指针 (虽然在查询部分不常见，但在某些响应包中存在) */
+            /* 处理压缩指针 */
             pos += 2;
             goto found_qtype;
         }
@@ -123,11 +132,11 @@ extract_dns_qtype (const uint8_t *data, size_t len)
     pos += 1;
 
 found_qtype:
-    if (pos + 4 > len)
+    if (pos + 4 > dns_len)
         return DNS_TYPE_A;
 
     /* QTYPE 紧跟在域名结束符之后，占用 2 字节 */
-    return read_uint16 (data + pos);
+    return read_uint16 (dns_data + pos);
 }
 
 /* 简单哈希函数（DJB2，包含域名和查询类型） */
