@@ -46,7 +46,7 @@
 /* DNS 缓存哈希表 */
 static HevDNSCacheEntry *dns_cache_table[DNS_CACHE_HASH_SIZE];
 static HevTaskMutex dns_cache_shards[DNS_CACHE_SHARD_COUNT];
-static HevObjectPool *dns_entry_pool = NULL;
+static HevObjectPool * volatile dns_entry_pool = NULL;
 static size_t total_cache_entries = 0;
 static size_t poisoned_cache_entries = 0;
 static uint64_t total_cache_hits = 0;
@@ -575,6 +575,13 @@ hev_dns_cache_clean_expired (void)
         }
 
         hev_task_mutex_lock (&dns_cache_shards[shard]);
+
+        /* 双重检查：获取锁后再次检查停止标志
+         * 如果在此期间 fini 被调用，我们应该立即停止以避免访问已销毁的资源 */
+        if (!g_is_test_mode && (!cache_cleaner_running || !hev_socks5_tunnel_is_running ())) {
+            hev_task_mutex_unlock (&dns_cache_shards[shard]);
+            break;
+        }
 
         /* 清理属于这个分片的哈希桶 */
         for (int i = shard; i < DNS_CACHE_HASH_SIZE;
