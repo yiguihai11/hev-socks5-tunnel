@@ -61,10 +61,8 @@ hev_task_ref (HevTask *self)
 EXPORT_SYMBOL void
 hev_task_unref (HevTask *self)
 {
-    if (__atomic_fetch_sub (&self->ref_count, 1, __ATOMIC_RELEASE) > 1)
+    if (__atomic_fetch_sub (&self->ref_count, 1, __ATOMIC_ACQ_REL) != 1)
         return;
-
-    __atomic_thread_fence (__ATOMIC_ACQUIRE);
 
     hev_list_del (&hev_task_system_get_context ()->all_tasks, &self->list_node);
 
