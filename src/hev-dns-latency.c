@@ -1215,7 +1215,7 @@ dns_latency_optimize_task (void *data)
     if (ip_count <= 0) {
         LOG_W ("dns-latency: No IPs extracted from DNS response for %s",
                ctx->domain);
-        goto cleanup;
+        goto send_response;
     }
 
     if (ip_count == 1) {

@@ -108,16 +108,26 @@ extract_dns_qtype (const uint8_t *data, size_t len)
     /* 跳过域名 */
     while (pos < len) {
         uint8_t label_len = data[pos];
-        if (label_len == 0)
+        if (label_len == 0) {
             break;
+        }
+        if ((label_len & 0xC0) == 0xC0) {
+            /* 处理压缩指针 (虽然在查询部分不常见，但在某些响应包中存在) */
+            pos += 2;
+            goto found_qtype;
+        }
         pos += label_len + 1;
     }
 
+    /* 跨过最后的 0 字节 */
+    pos += 1;
+
+found_qtype:
     if (pos + 4 > len)
         return DNS_TYPE_A;
 
-    /* QTYPE 在域名之后 */
-    return (data[pos + 1] << 8) | data[pos + 2];
+    /* QTYPE 紧跟在域名结束符之后，占用 2 字节 */
+    return read_uint16 (data + pos);
 }
 
 /* 简单哈希函数（DJB2，包含域名和查询类型） */
