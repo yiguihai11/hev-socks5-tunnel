@@ -981,7 +981,7 @@ run_smart_proxy_task (void *data)
 
     /*LOG_D ("%p [SMART-PROXY-V2] After probe: dst_ip_copy=%s, pcb->local_ip=%s",
            self, ipaddr_ntoa (&dst_ip_copy), ipaddr_ntoa (&pcb->local_ip));*/
-    LOG_I ("%p [SMART-PROXY-V2] Probe result: %d (duration=%ldms)", self,
+    LOG_W ("%p [SMART-PROXY-V2] Probe result: %d (duration=%ldms)", self,
            probe_outcome.result, probe_outcome.duration_ms);
 
     /* ====================================================================
@@ -1052,7 +1052,7 @@ run_smart_proxy_task (void *data)
         char fallback_dst_ip[INET6_ADDRSTRLEN];
         ipaddr_ntoa_r (&dst_ip_copy, fallback_dst_ip, sizeof (fallback_dst_ip));
 
-        LOG_I ("%p [SMART-PROXY-V2] Falling back to SOCKS5 for %s:%d -> %s:%d",
+        LOG_W ("%p [SMART-PROXY-V2] Falling back to SOCKS5 for %s:%d -> %s:%d",
                self, src_ip, pcb ? pcb->remote_port : 0, fallback_dst_ip,
                dst_port_copy);
 
