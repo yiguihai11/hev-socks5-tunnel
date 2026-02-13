@@ -788,15 +788,20 @@ run_direct_connect_task (void *data)
 
         /* User-friendly fallback logs */
         if (err == 101) {
-            LOG_I ("%p [DIRECT] Network unreachable (errno 101), retrying via SOCKS5 proxy...", self);
+            LOG_I (
+                "%p [DIRECT] Network unreachable (errno 101), retrying via SOCKS5 proxy...",
+                self);
         } else {
-            LOG_I ("%p [DIRECT] Direct connect failed (%s), falling back to SOCKS5 proxy...", self, strerror (err));
+            LOG_I (
+                "%p [DIRECT] Direct connect failed (%s), falling back to SOCKS5 proxy...",
+                self, strerror (err));
         }
 
         /* 启动 SOCKS5 任务并移交 PCB */
-        hev_session_manager_start_task (pcb, NULL, HEV_SESSION_SOCKS5, 
-                                        self->detected_hostname[0] ? self->detected_hostname : NULL);
-        
+        hev_session_manager_start_task (
+            pcb, NULL, HEV_SESSION_SOCKS5,
+            self->detected_hostname[0] ? self->detected_hostname : NULL);
+
         self->pcb = NULL; /* 标记 PCB 已移交，防止 cleanup_session 终止它 */
         goto exit_cleanup;
     }
