@@ -1453,7 +1453,7 @@ hev_filter_reset_stats (void)
 /* Internal helper: add blacklist entry with common logic */
 static const char *
 blacklist_add_internal (HevBlacklistEntryType type, const ip_addr_t *ip_addr,
-                        const char *hostname)
+                        const char *hostname, const char *reason)
 {
     HevBlacklistEntry *entry;
     unsigned int hash;
@@ -1491,6 +1491,11 @@ blacklist_add_internal (HevBlacklistEntryType type, const ip_addr_t *ip_addr,
     entry->expiry_time = now + ttl_seconds;
     entry->hit_count = 0;
     snprintf (entry->id, sizeof (entry->id), "%p", (void *)entry);
+    if (reason) {
+        safe_str_copy (entry->reason, reason, sizeof (entry->reason));
+    } else {
+        strcpy (entry->reason, "Unknown");
+    }
 
     /* 初始化网络信息 */
     if (type == HEV_BLACKLIST_ENTRY_IP && ip_addr) {
@@ -1505,6 +1510,31 @@ blacklist_add_internal (HevBlacklistEntryType type, const ip_addr_t *ip_addr,
     hash = blacklist_hash_multi (type, ip_addr, 0, hostname);
 
     hev_task_mutex_lock (&blacklist_mutex);
+    /* 检查是否已存在，防止重复 */
+    HevBlacklistEntry *curr = blacklist_table[hash];
+    while (curr) {
+        int match = 0;
+        if (curr->type == type) {
+            if (type == HEV_BLACKLIST_ENTRY_IP) {
+                match = ip_addr_cmp (&curr->ip_addr, ip_addr);
+            } else {
+                match = strcasecmp (curr->hostname, hostname) == 0;
+            }
+        }
+        if (match) {
+            /* 已存在，更新过期时间、原因并重置命中计数 */
+            curr->expiry_time = entry->expiry_time;
+            curr->hit_count = 0;
+            if (reason) {
+                safe_str_copy (curr->reason, reason, sizeof (curr->reason));
+            }
+            hev_task_mutex_unlock (&blacklist_mutex);
+            hev_free (entry);
+            return curr->id;
+        }
+        curr = curr->next;
+    }
+
     entry->next = blacklist_table[hash];
     blacklist_table[hash] = entry;
     blacklist_count++;
@@ -1513,11 +1543,11 @@ blacklist_add_internal (HevBlacklistEntryType type, const ip_addr_t *ip_addr,
 
     /* 记录日志 */
     if (type == HEV_BLACKLIST_ENTRY_IP) {
-        LOG_I ("filter: Added IP %s to blacklist (ttl=%dm)", ip_str,
-               ttl_seconds / 60);
+        LOG_I ("filter: Added IP %s to blacklist (reason=%s, ttl=%dm)", ip_str,
+               entry->reason, ttl_seconds / 60);
     } else {
-        LOG_I ("filter: Added domain '%s' to blacklist (ttl=%dm)", hostname,
-               ttl_seconds / 60);
+        LOG_I ("filter: Added domain '%s' to blacklist (reason=%s, ttl=%dm)",
+               hostname, entry->reason, ttl_seconds / 60);
     }
 
     return entry->id; /* 返回ID字符串 */
@@ -1525,16 +1555,17 @@ blacklist_add_internal (HevBlacklistEntryType type, const ip_addr_t *ip_addr,
 
 /* Simplified blacklist add function for IP addresses */
 const char *
-hev_filter_blacklist_add_ip (const ip_addr_t *addr)
+hev_filter_blacklist_add_ip (const ip_addr_t *addr, const char *reason)
 {
-    return blacklist_add_internal (HEV_BLACKLIST_ENTRY_IP, addr, NULL);
+    return blacklist_add_internal (HEV_BLACKLIST_ENTRY_IP, addr, NULL, reason);
 }
 
 /* Simplified blacklist add function for domain names */
 const char *
-hev_filter_blacklist_add_domain (const char *domain)
+hev_filter_blacklist_add_domain (const char *domain, const char *reason)
 {
-    return blacklist_add_internal (HEV_BLACKLIST_ENTRY_DOMAIN, NULL, domain);
+    return blacklist_add_internal (HEV_BLACKLIST_ENTRY_DOMAIN, NULL, domain,
+                                   reason);
 }
 
 /* 新的IP检查函数 */

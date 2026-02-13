@@ -204,8 +204,8 @@ blacklist_collect_callback (HevBlacklistEntry *entry, void *data)
     if (expiry < 0)
         expiry = 0;
 
-    snprintf (buffer, sizeof (buffer), "%s|%s|%ld|%llu", type_str, value,
-              expiry, (unsigned long long)hits);
+    snprintf (buffer, sizeof (buffer), "%s|%s|%ld|%llu|%s", type_str, value,
+              expiry, (unsigned long long)hits, entry->reason);
     jstring jstr = (*ctx->env)->NewStringUTF (ctx->env, buffer);
     (*ctx->env)->SetObjectArrayElement (ctx->env, ctx->array, ctx->index++,
                                         jstr);

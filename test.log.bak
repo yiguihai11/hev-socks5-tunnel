@@ -1,0 +1,355 @@
+========== tproxy.conf ==========
+tunnel:
+  mtu: 1500
+socks5:
+  tcp:
+    port: 1080
+    address: '64.69.34.166'
+    username: 'yiguihai'
+    password: 'ygh15177542493'
+  udp:
+    address: '64.69.34.166'
+    port: 1080
+    udp-relay: 'tcp'
+    username: 'yiguihai'
+    password: 'ygh15177542493'
+dns-split-tunnel:
+  enabled: true
+  foreign-dns:
+    - "1.1.1.1"
+    - "8.8.8.8"
+    - "2606:4700:4700::1111"
+    - "2001:4860:4860::8888"
+dns-forwarder:
+  enabled: false
+mapdns:
+  address: 198.18.0.2
+  address6: 'fd00::1'
+  port: 53
+  network: 100.64.0.0
+  netmask: 255.192.0.0
+  network6: 'fd00::'
+  prefixlen: 96
+  cache-size: 10000
+dns-latency-optimize:
+  enabled: true
+  timeout-ms: 235
+smart-proxy:
+  enabled: true
+  timeout-ms: 1350
+  blocked-ip-expiry-minutes: 360
+  probe-ports:
+    - 80
+    - 443
+chnroutes:
+  enabled: true
+  file-path: "/data/user/0/hev.sockstun/cache/chnroutes.txt"
+acl:
+  enabled: false
+  file-path: "/data/user/0/hev.sockstun/cache/acl.txt"
+misc:
+  task-stack-size: 81920
+  tcp-buffer-size: 65536
+  udp-recv-buffer-size: 524288
+  udp-copy-buffer-nums: 10
+  connect-timeout: 5000
+  tcp-read-write-timeout: 60000
+  udp-read-write-timeout: 15000
+  log-file: '/data/user/0/hev.sockstun/cache/tunnel.log'
+  log-level: debug
+
+========== End of Config ==========
+
+========== tunnel.log ==========
+[2026-02-13 17:05:16] [I] hev-socks5-tunnel starting, log_level=0, log_file=/data/user/0/hev.sockstun/cache/tunnel.log
+[2026-02-13 17:05:16] [I] filter: Initialized with enhanced blacklist support
+[2026-02-13 17:05:16] [I] filter: Loading chnroutes from /data/user/0/hev.sockstun/cache/chnroutes.txt
+[2026-02-13 17:05:16] [I] filter: Loaded chnroutes (IPv4:8690, IPv6:2039)
+[2026-02-13 17:05:16] [D] filter: IPv6 routes count = 2039
+[2026-02-13 17:05:16] [D] router: Initializing traffic router
+[2026-02-13 17:05:16] [D] Object pool created: obj_size=336, capacity=32
+[2026-02-13 17:05:16] [I] dns-cache: DNS cache initialized (shards=16, pool=32/256, max_memory=3MB)
+[2026-02-13 17:05:16] [I] router: Traffic router initialized successfully (with DNS cache)
+[2026-02-13 17:05:16] [E] set limit nofile: Operation not permitted
+[2026-02-13 17:05:16] [D] socks5 tunnel: Statistics requested
+[2026-02-13 17:05:16] [I] dns-latency: ping command available for IPv4
+[2026-02-13 17:05:16] [I] dns-latency: ping6 command available for IPv6
+[2026-02-13 17:05:16] [I] dns-latency: DNS latency optimization module initialized
+[2026-02-13 17:05:16] [I] socks5 tunnel: Initializing tunnel (tun_fd=90)
+[2026-02-13 17:05:16] [D] 0xb400007e816b6700 mapped dns construct
+[2026-02-13 17:05:16] [I] mapped dns: using configured IPv6 prefix /96
+[2026-02-13 17:05:16] [D] 0xb400007e816b6700 mapped dns new
+[2026-02-13 17:05:16] [I] socks5 tunnel: Initialization completed successfully
+[2026-02-13 17:05:16] [I] socks5 tunnel: Starting tunnel operation
+[2026-02-13 17:05:16] [I] socks5 tunnel: Tunnel is now running
+[2026-02-13 17:05:16] [D] socks5 tunnel lwip task run
+[2026-02-13 17:05:16] [D] socks5 tunnel timer task run
+[2026-02-13 17:05:16] [D] socks5 tunnel event task run
+[2026-02-13 17:05:16] [D] socks5 tunnel: waiting for stop signal on event_fd
+[2026-02-13 17:05:18] [D] socks5 tunnel: Statistics requested
+[2026-02-13 17:05:19] [D] 0x788242d97c socks5 tunnel: UDP packet received from 198.18.0.1:51750 to 223.5.5.5:53 (size=34 bytes)
+[2026-02-13 17:05:19] [D] 0x788242d97c router: UDP routing decision for 198.18.0.1:51750 -> 223.5.5.5:53 (packet_size=34)
+[2026-02-13 17:05:19] [D] dns-cache: Detected UDP header in packet, skipping 8 bytes
+[2026-02-13 17:05:19] [D] dns-cache: extract_dns_domain: result=0, domain='66img.cc' (len=8)
+[2026-02-13 17:05:19] [D] dns-cache: Checking cache for domain: 66img.cc (domain_len=8)
+[2026-02-13 17:05:19] [D] dns-cache: DNS query type: 28 (A=1, AAAA=28)
+[2026-02-13 17:05:19] [D] dns-cache: Cache miss for domain: 66img.cc (domain_len=8)
+[2026-02-13 17:05:19] [I] 0x788242d97c router: DNS query to domestic 223.5.5.5:53 (cache miss), using DIRECT for pollution detection
+[2026-02-13 17:05:19] [I] 0xb4000079a0065400 [UDP] Direct connect started 198.18.0.1:51750 -> 223.5.5.5:53 (first_packet=34 bytes)
+[2026-02-13 17:05:19] [D] 0x788242d97c socks5 tunnel: UDP packet handled by traffic router (direct connect or DNS forward)
+[2026-02-13 17:05:19] [D] 0xb400007a20014160 socks5 construct
+[2026-02-13 17:05:19] [D] 0xb400007a20014160 socks5 client construct
+[2026-02-13 17:05:19] [I] 0xb400007a20014160 socks5 client udp construct
+[2026-02-13 17:05:19] [D] 0xb400007a20014160 socks5 client udp new
+[2026-02-13 17:05:19] [D] 0xb4000079a0065400 [UDP] send task start 198.18.0.1:51750 -> 223.5.5.5:53
+[2026-02-13 17:05:19] [D] 0xb4000079a0065400 [UDP] session created at 27 ms
+[2026-02-13 17:05:19] [D] 0xb4000079a0065400 [UDP] target is IPv4 (mapped to IPv6): 223.5.5.5:53
+[2026-02-13 17:05:19] [I] 0xb4000079a0065400 [UDP] Direct connect established 198.18.0.1:51750 -> 223.5.5.5:53
+[2026-02-13 17:05:19] [D] 0xb4000079a0065400 [UDP] sent 26 bytes to server (total=1 packets, 26 bytes)
+[2026-02-13 17:05:19] [D] 0xb400007a20014d00 socks5 construct
+[2026-02-13 17:05:19] [D] 0xb400007a20014d00 socks5 client construct
+[2026-02-13 17:05:19] [I] 0xb400007a20014d00 socks5 client udp construct
+[2026-02-13 17:05:19] [D] 0xb400007a20014d00 socks5 client udp new
+[2026-02-13 17:05:19] [D] 0xb4000079a0065400 [UDP] recv task start 198.18.0.1:51750 <- 223.5.5.5:53
+[2026-02-13 17:05:19] [D] 0x788242d91c socks5 tunnel: UDP packet received from 198.18.0.1:13407 to 223.5.5.5:53 (size=34 bytes)
+[2026-02-13 17:05:19] [D] 0x788242d91c router: UDP routing decision for 198.18.0.1:13407 -> 223.5.5.5:53 (packet_size=34)
+[2026-02-13 17:05:19] [D] dns-cache: Detected UDP header in packet, skipping 8 bytes
+[2026-02-13 17:05:19] [D] dns-cache: extract_dns_domain: result=0, domain='66img.cc' (len=8)
+[2026-02-13 17:05:19] [D] dns-cache: Checking cache for domain: 66img.cc (domain_len=8)
+[2026-02-13 17:05:19] [D] dns-cache: DNS query type: 1 (A=1, AAAA=28)
+[2026-02-13 17:05:19] [D] dns-cache: Cache miss for domain: 66img.cc (domain_len=8)
+[2026-02-13 17:05:19] [I] 0x788242d91c router: DNS query to domestic 223.5.5.5:53 (cache miss), using DIRECT for pollution detection
+[2026-02-13 17:05:19] [I] 0xb4000079a0065240 [UDP] Direct connect started 198.18.0.1:13407 -> 223.5.5.5:53 (first_packet=34 bytes)
+[2026-02-13 17:05:19] [D] 0x788242d91c socks5 tunnel: UDP packet handled by traffic router (direct connect or DNS forward)
+[2026-02-13 17:05:19] [D] 0xb400007a20014400 socks5 construct
+[2026-02-13 17:05:19] [D] 0xb400007a20014400 socks5 client construct
+[2026-02-13 17:05:19] [I] 0xb400007a20014400 socks5 client udp construct
+[2026-02-13 17:05:19] [D] 0xb400007a20014400 socks5 client udp new
+[2026-02-13 17:05:19] [D] 0xb4000079a0065240 [UDP] send task start 198.18.0.1:13407 -> 223.5.5.5:53
+[2026-02-13 17:05:19] [D] 0xb4000079a0065240 [UDP] session created at 29 ms
+[2026-02-13 17:05:19] [D] 0xb4000079a0065240 [UDP] target is IPv4 (mapped to IPv6): 223.5.5.5:53
+[2026-02-13 17:05:19] [I] 0xb4000079a0065240 [UDP] Direct connect established 198.18.0.1:13407 -> 223.5.5.5:53
+[2026-02-13 17:05:19] [D] 0xb4000079a0065240 [UDP] sent 26 bytes to server (total=1 packets, 26 bytes)
+[2026-02-13 17:05:19] [D] 0xb400007a20017100 socks5 construct
+[2026-02-13 17:05:19] [D] 0xb400007a20017100 socks5 client construct
+[2026-02-13 17:05:19] [I] 0xb400007a20017100 socks5 client udp construct
+[2026-02-13 17:05:19] [D] 0xb400007a20017100 socks5 client udp new
+[2026-02-13 17:05:19] [D] 0xb4000079a0065240 [UDP] recv task start 198.18.0.1:13407 <- 223.5.5.5:53
+[2026-02-13 17:05:19] [D] 0xb4000079a0065240 [UDP] received 154 bytes from server (total=1 packets, 154 bytes)
+[2026-02-13 17:05:19] [W] dns-cache: Detected foreign IP in DNS response: 15.204.8.51 (pollution suspected)
+[2026-02-13 17:05:19] [W] 0xb4000079a0065240 session: DNS pollution detected from 223.5.5.5:53, querying via SOCKS5 proxy (using configured foreign-dns)
+[2026-02-13 17:05:19] [D] 0xb4000079a0065240 session: Stripping 8-byte header from SOCKS5 DNS query
+[2026-02-13 17:05:19] [D] dns-cache: Using IPv4 foreign-dns list
+[2026-02-13 17:05:19] [D] dns-cache: Selected DNS server: 1.1.1.1
+[2026-02-13 17:05:19] [D] 0xb400007a200116a0 socks5 construct
+[2026-02-13 17:05:19] [D] 0xb400007a200116a0 socks5 client construct
+[2026-02-13 17:05:19] [I] 0xb400007a200116a0 socks5 client udp construct
+[2026-02-13 17:05:19] [D] 0xb400007a200116a0 socks5 client udp new
+[2026-02-13 17:05:19] [D] 0xb400007a200116a0 socks5 client connect [64.69.34.166]:1080
+[2026-02-13 17:05:19] [D] 0xb4000079a0065400 [UDP] received 222 bytes from server (total=1 packets, 222 bytes)
+[2026-02-13 17:05:19] [W] dns-cache: Detected foreign IPv6 in DNS response: 2001:41D0:701:1100::9FE5 (pollution suspected)
+[2026-02-13 17:05:19] [W] 0xb4000079a0065400 session: DNS pollution detected from 223.5.5.5:53, querying via SOCKS5 proxy (using configured foreign-dns)
+[2026-02-13 17:05:19] [D] 0xb4000079a0065400 session: Stripping 8-byte header from SOCKS5 DNS query
+[2026-02-13 17:05:19] [D] dns-cache: Using IPv4 foreign-dns list
+[2026-02-13 17:05:19] [D] dns-cache: Selected DNS server: 8.8.8.8
+[2026-02-13 17:05:19] [D] 0xb400007a20005b80 socks5 construct
+[2026-02-13 17:05:19] [D] 0xb400007a20005b80 socks5 client construct
+[2026-02-13 17:05:19] [I] 0xb400007a20005b80 socks5 client udp construct
+[2026-02-13 17:05:19] [D] 0xb400007a20005b80 socks5 client udp new
+[2026-02-13 17:05:19] [D] 0xb400007a20005b80 socks5 client connect [64.69.34.166]:1080
+[2026-02-13 17:05:19] [D] 0xb400007a200116a0 socks5 client connect server fd 101
+[2026-02-13 17:05:19] [D] 0xb400007a200116a0 socks5 client set auth
+[2026-02-13 17:05:19] [D] 0xb400007a200116a0 socks5 client handshake standard
+[2026-02-13 17:05:19] [D] 0xb400007a200116a0 socks5 client write auth methods
+[2026-02-13 17:05:19] [D] 0xb400007a200116a0 socks5 client read auth method
+[2026-02-13 17:05:19] [D] 0xb400007a20005b80 socks5 client connect server fd 102
+[2026-02-13 17:05:19] [D] 0xb400007a20005b80 socks5 client set auth
+[2026-02-13 17:05:19] [D] 0xb400007a20005b80 socks5 client handshake standard
+[2026-02-13 17:05:19] [D] 0xb400007a20005b80 socks5 client write auth methods
+[2026-02-13 17:05:19] [D] 0xb400007a20005b80 socks5 client read auth method
+[2026-02-13 17:05:19] [D] 0xb400007a200116a0 socks5 client write auth creds
+[2026-02-13 17:05:19] [D] 0xb400007a200116a0 socks5 client read auth creds
+[2026-02-13 17:05:19] [D] 0xb400007a20005b80 socks5 client write auth creds
+[2026-02-13 17:05:19] [D] 0xb400007a20005b80 socks5 client read auth creds
+[2026-02-13 17:05:19] [D] 0xb400007a200116a0 socks5 client auth done
+[2026-02-13 17:05:19] [D] 0xb400007a200116a0 socks5 client write request
+[2026-02-13 17:05:19] [D] 0xb400007a200116a0 socks5 client read response
+[2026-02-13 17:05:19] [D] 0xb400007a20005b80 socks5 client auth done
+[2026-02-13 17:05:19] [D] 0xb400007a20005b80 socks5 client write request
+[2026-02-13 17:05:19] [D] 0xb400007a20005b80 socks5 client read response
+[2026-02-13 17:05:19] [D] addr_from_lwip: IP 1.1.1.1:13568 (no hostname mapping)
+[2026-02-13 17:05:19] [I] dns-cache: Sending DNS query via SOCKS5 (target=1.1.1.1:53, type=2)
+[2026-02-13 17:05:19] [D] addr_from_lwip: IP 8.8.8.8:13568 (no hostname mapping)
+[2026-02-13 17:05:19] [I] dns-cache: Sending DNS query via SOCKS5 (target=8.8.8.8:53, type=2)
+[2026-02-13 17:05:19] [I] dns-cache: Received SOCKS5 DNS response from 1.1.1.1 (154 bytes)
+[2026-02-13 17:05:19] [D] 0xb400007a200116a0 socks5 client udp destruct
+[2026-02-13 17:05:19] [D] 0xb400007a200116a0 socks5 client destruct
+[2026-02-13 17:05:19] [D] 0xb400007a200116a0 socks5 destruct
+[2026-02-13 17:05:19] [I] 0xb4000079a0065240 session: Replaced poisoned response with clean response from SOCKS5 (154 bytes)
+[2026-02-13 17:05:19] [D] dns-cache: extract_dns_domain: result=0, domain='66img.cc' (len=8)
+[2026-02-13 17:05:19] [D] 0xb4000079a0065240 [UDP] sending from spoofed source 223.5.5.5:53
+[2026-02-13 17:05:19] [D] 0xb4000079a0065240 [UDP] forwarded 154 bytes to client 198.18.0.1:13407
+[2026-02-13 17:05:20] [I] dns-cache: Received SOCKS5 DNS response from 8.8.8.8 (222 bytes)
+[2026-02-13 17:05:20] [D] 0xb400007a20005b80 socks5 client udp destruct
+[2026-02-13 17:05:20] [D] 0xb400007a20005b80 socks5 client destruct
+[2026-02-13 17:05:20] [D] 0xb400007a20005b80 socks5 destruct
+[2026-02-13 17:05:20] [I] 0xb4000079a0065400 session: Replaced poisoned response with clean response from SOCKS5 (222 bytes)
+[2026-02-13 17:05:20] [D] dns-cache: extract_dns_domain: result=0, domain='66img.cc' (len=8)
+[2026-02-13 17:05:20] [D] 0xb4000079a0065400 [UDP] sending from spoofed source 223.5.5.5:53
+[2026-02-13 17:05:20] [D] 0xb4000079a0065400 [UDP] forwarded 222 bytes to client 198.18.0.1:51750
+[2026-02-13 17:05:20] [D] 0x788252d948 socks5 tunnel: TCP connection accepted from 198.18.0.1:57280 to 51.81.222.67:443
+[2026-02-13 17:05:20] [D] 0x788252d948 router: TCP routing decision for 198.18.0.1:57280 -> 51.81.222.67:443
+[2026-02-13 17:05:20] [D] 0xb400007950025c20 socks5 session tcp construct: pcb->local_ip=51.81.222.67, pcb->local_port=443
+[2026-02-13 17:05:20] [D] addr_from_lwip: IP 51.81.222.67:47873 (no hostname mapping)
+[2026-02-13 17:05:20] [D] 0xb400007950025c20 socks5 construct
+[2026-02-13 17:05:20] [D] 0xb400007950025c20 socks5 client construct
+[2026-02-13 17:05:20] [D] 0xb400007950025c20 socks5 client tcp construct
+[2026-02-13 17:05:20] [I] 0xb400007950025c20 socks5 client tcp -> [51.81.222.67]:443
+[2026-02-13 17:05:20] [D] 0xb400007950025c20 socks5 session tcp construct for 198.18.0.1:57280
+[2026-02-13 17:05:20] [D] 0xb400007950025c20 socks5 session tcp new
+[2026-02-13 17:05:20] [I] 0xb400007950025c20 [domain-first] started 198.18.0.1:57280 -> 51.81.222.67:443
+[2026-02-13 17:05:20] [D] 0xb400007950025c20 socks5 session tcp set task 0xb400007a10014660
+[2026-02-13 17:05:20] [I] 0xb400007950025c20 [DOMAIN-FIRST] Routing 198.18.0.1:57280 -> 51.81.222.67:443
+[2026-02-13 17:05:20] [D] 0xb400007950025c20 [DOMAIN-FIRST] Waiting for protocol data on port 443...
+[2026-02-13 17:05:20] [D] 0xb400007950025c20 socks5 session tcp: received 1036 bytes from client
+[2026-02-13 17:05:20] [D] 0xb400007950025c20 socks5 session tcp: received 530 bytes from client
+[2026-02-13 17:05:20] [D] 0x788252d948 filter: ClientHello detected (version=0x0301, len=1557)
+[2026-02-13 17:05:20] [D] 0x788252d948 filter: Parsing extensions (len=1424)
+[2026-02-13 17:05:20] [D] 0x788252d948 filter: Found SNI extension
+[2026-02-13 17:05:20] [D] 0x788252d948 filter: Found ALPN extension
+[2026-02-13 17:05:20] [I] 0x788252d948 filter: Detected TLS hostname: 66img.cc
+[2026-02-13 17:05:20] [I] 0xb400007950025c20 [DOMAIN-FIRST] Detected hostname: 66img.cc (target: 51.81.222.67:443)
+[2026-02-13 17:05:20] [D] 0xb400007950025c20 [DOMAIN-FIRST] Foreign IP -> SOCKS5
+[2026-02-13 17:05:20] [D] 0xb400007950025c20 [DOMAIN-FIRST] Preserving 1566 bytes of queued data for next session
+[2026-02-13 17:05:20] [I] 0xb400007950025c20 [DOMAIN-FIRST] Route: Smart Proxy (probe mode)
+[2026-02-13 17:05:20] [D] 0xb400007950024bf0 socks5 session tcp construct: pcb->local_ip=51.81.222.67, pcb->local_port=443
+[2026-02-13 17:05:20] [D] addr_from_lwip: IP 51.81.222.67:47873 (no hostname mapping)
+[2026-02-13 17:05:20] [D] 0xb400007950024bf0 socks5 construct
+[2026-02-13 17:05:20] [D] 0xb400007950024bf0 socks5 client construct
+[2026-02-13 17:05:20] [D] 0xb400007950024bf0 socks5 client tcp construct
+[2026-02-13 17:05:20] [I] 0xb400007950024bf0 socks5 client tcp -> [51.81.222.67]:443
+[2026-02-13 17:05:20] [D] 0xb400007950024bf0 socks5 session tcp construct for 198.18.0.1:57280
+[2026-02-13 17:05:20] [D] 0xb400007950024bf0 socks5 session tcp new
+[2026-02-13 17:05:20] [D] 0xb400007950024bf0 [smart-proxy] Transferred hostname '66img.cc' to new session
+[2026-02-13 17:05:20] [I] 0xb400007950024bf0 [smart-proxy] started 198.18.0.1:57280 -> 51.81.222.67:443
+[2026-02-13 17:05:20] [D] 0xb400007950024bf0 socks5 session tcp set task 0xb400007a10019360
+[2026-02-13 17:05:20] [D] 0xb400007950025c20 socks5 session tcp destruct
+[2026-02-13 17:05:20] [D] 0xb400007950025c20 socks5 client tcp destruct
+[2026-02-13 17:05:20] [D] 0xb400007950025c20 socks5 client destruct
+[2026-02-13 17:05:20] [D] 0xb400007950025c20 socks5 destruct
+[2026-02-13 17:05:20] [D] 0xb400007950024bf0 [SMART-PROXY-V2] Before copy: pcb->local_ip=51.81.222.67
+[2026-02-13 17:05:20] [D] 0xb400007950024bf0 [SMART-PROXY-V2] After copy: dst_ip_copy=51.81.222.67
+[2026-02-13 17:05:20] [D] 0xb400007950024bf0 [SMART-PROXY-V2] Task run 198.18.0.1:57280 -> 51.81.222.67:443
+[2026-02-13 17:05:20] [I] 0xb400007950024bf0 [SMART-PROXY-V2] Starting probe to 51.81.222.67:443 (timeout=675ms)
+[2026-02-13 17:05:20] [I] 0xb400007950024bf0 [PROBE] Creating independent probe socket
+[2026-02-13 17:05:20] [D] 0xb400007950024bf0 [PROBE] Connecting to target...
+[2026-02-13 17:05:20] [D] 0xb400007950024bf0 [PROBE] Connecting to [::ffff:51.81.222.67]:443 (IPv6 socket, addrlen=28)
+[2026-02-13 17:05:20] [I] 0xb400007950024bf0 [PROBE] TCP handshake successful
+[2026-02-13 17:05:20] [I] 0xb400007950024bf0 [PROBE] Sending browser data (1566 bytes)...
+[2026-02-13 17:05:20] [D] [PROBE] Sent 1566 bytes (2 iovs)
+[2026-02-13 17:05:20] [I] 0xb400007950024bf0 [PROBE] Sent 1566 bytes, waiting for response...
+[2026-02-13 17:05:20] [D] [PROBE] Waiting for response (timeout=675ms)...
+[2026-02-13 17:05:20] [D] socks5 tunnel: Statistics requested
+[2026-02-13 17:05:20] [I] [PROBE] Received 16 bytes from server
+[2026-02-13 17:05:20] [I] 0xb400007950024bf0 [PROBE] Probe SUCCESS in 408ms, closing probe connection
+[2026-02-13 17:05:20] [D] 0xb400007950024bf0 [SMART-PROXY-V2] After probe: dst_ip_copy=51.81.222.67, pcb->local_ip=51.81.222.67
+[2026-02-13 17:05:20] [I] 0xb400007950024bf0 [SMART-PROXY-V2] Probe result: 1 (duration=408ms)
+[2026-02-13 17:05:20] [I] 0xb400007950024bf0 [SMART-PROXY-V2] Probe SUCCESS in 408ms, establishing new direct connection
+[2026-02-13 17:05:20] [D] Direct connection established (fd=101)
+[2026-02-13 17:05:20] [I] 0xb400007950024bf0 [DIRECT] Setting up splice with probe connection fd=101
+[2026-02-13 17:05:20] [I] 0xb400007950024bf0 [DIRECT] Starting bidirectional splice
+[2026-02-13 17:05:20] [D] 0xb400007950024bf0 [SPLICE] forward sent 1566 bytes (iovc=2)
+[2026-02-13 17:05:20] [D] 0xb400007950024bf0 [SPLICE-B] direct backward splice task start
+[2026-02-13 17:05:20] [D] 0xb400007950024bf0 [SPLICE] backward received 1228 bytes (iovc=1)
+[2026-02-13 17:05:20] [D] 0xb400007950024bf0 [SPLICE] backward received 4255 bytes (iovc=1)
+[2026-02-13 17:05:20] [D] 0xb400007950024bf0 socks5 session tcp: sent 1228 bytes acknowledged
+[2026-02-13 17:05:20] [D] 0xb400007950024bf0 socks5 session tcp: sent 1460 bytes acknowledged
+[2026-02-13 17:05:20] [D] 0xb400007950024bf0 socks5 session tcp: sent 1460 bytes acknowledged
+[2026-02-13 17:05:20] [D] 0xb400007950024bf0 socks5 session tcp: sent 1335 bytes acknowledged
+[2026-02-13 17:05:20] [D] 0xb400007950024bf0 socks5 session tcp: received 64 bytes from client
+[2026-02-13 17:05:20] [D] 0xb400007950024bf0 [SPLICE] forward sent 64 bytes (iovc=1)
+[2026-02-13 17:05:20] [D] 0xb400007950024bf0 socks5 session tcp: received 124 bytes from client
+[2026-02-13 17:05:20] [D] 0xb400007950024bf0 [SPLICE] forward sent 124 bytes (iovc=1)
+[2026-02-13 17:05:22] [D] 0xb400007950024bf0 [SPLICE] backward received 389 bytes (iovc=1)
+[2026-02-13 17:05:22] [D] socks5 tunnel: Statistics requested
+[2026-02-13 17:05:22] [D] 0xb400007950024bf0 socks5 session tcp: sent 389 bytes acknowledged
+[2026-02-13 17:05:22] [D] 0xb400007950024bf0 socks5 session tcp: received 24 bytes from client
+[2026-02-13 17:05:22] [D] 0xb400007950024bf0 [SPLICE] forward sent 24 bytes (iovc=1)
+[2026-02-13 17:05:22] [D] 0xb400007950024bf0 socks5 session tcp: received EOF from client
+[2026-02-13 17:05:22] [D] 0xb400007950024bf0 session: forward EOF, shutting down write
+[2026-02-13 17:05:22] [D] 0xb400007950024bf0 [DIRECT] Forward splice ended
+[2026-02-13 17:05:22] [D] 0xb400007950024bf0 [SPLICE] backward received 24 bytes (iovc=1)
+[2026-02-13 17:05:22] [D] 0xb400007950024bf0 [SPLICE] backward EOF, shutting down pcb write
+[2026-02-13 17:05:22] [D] 0xb400007950024bf0 [SPLICE-B] direct backward splice task end
+[2026-02-13 17:05:22] [W] 0xb400007950024bf0 socks5 session tcp: error occurred (err=-14), terminating
+[2026-02-13 17:05:22] [D] 0xb400007950024bf0 socks5 session terminate
+[2026-02-13 17:05:22] [I] 0xb400007950024bf0 [DIRECT] Splice ended (total_time=1979ms)
+[2026-02-13 17:05:22] [I] 0xb400007950024bf0 [SMART-PROXY-V2] Task ended (total_time=2586ms, path=DIRECT)
+[2026-02-13 17:05:22] [D] 0xb400007950024bf0 socks5 session terminate
+[2026-02-13 17:05:22] [D] 0xb400007950024bf0 socks5 session tcp destruct
+[2026-02-13 17:05:22] [D] 0xb400007950024bf0 socks5 session tcp destruct: destroying ring buffer
+[2026-02-13 17:05:22] [D] 0xb400007950024bf0 socks5 client tcp destruct
+[2026-02-13 17:05:22] [D] 0xb400007950024bf0 socks5 client destruct
+[2026-02-13 17:05:22] [D] 0xb400007950024bf0 socks5 destruct
+[2026-02-13 17:05:24] [D] socks5 tunnel: Statistics requested
+[2026-02-13 17:05:25] [I] socks5 tunnel: SIGINT received, initiating shutdown
+[2026-02-13 17:05:25] [D] socks5 tunnel: writing stop signal to event_fd=96
+[2026-02-13 17:05:25] [D] socks5 tunnel: received stop signal (bytes=1)
+[2026-02-13 17:05:25] [I] socks5 tunnel: shutdown initiated, terminating sessions
+[2026-02-13 17:05:25] [D] socks5 tunnel: terminating session 0 (self=0x0)
+[2026-02-13 17:05:25] [D] socks5 tunnel: removing NULL session entry
+[2026-02-13 17:05:25] [D] socks5 tunnel: terminating session 0 (self=0x0)
+[2026-02-13 17:05:25] [D] socks5 tunnel: removing NULL session entry
+[2026-02-13 17:05:25] [I] socks5 tunnel: terminated 0 sessions
+[2026-02-13 17:05:25] [D] socks5 tunnel: waiting for sessions to finish (session_count=0)
+[2026-02-13 17:05:25] [I] socks5 tunnel: all sessions finished
+[2026-02-13 17:05:25] [D] socks5 tunnel: joining lwip_io task
+[2026-02-13 17:05:25] [D] socks5 tunnel: lwip_io task exiting loop
+[2026-02-13 17:05:25] [D] socks5 tunnel: lwip_io task exited
+[2026-02-13 17:05:25] [D] socks5 tunnel: lwip_io task joined
+[2026-02-13 17:05:25] [D] socks5 tunnel: joining lwip_timer task
+[2026-02-13 17:05:25] [D] socks5 tunnel: lwip_timer task exiting loop
+[2026-02-13 17:05:25] [D] socks5 tunnel: lwip_timer task joined
+[2026-02-13 17:05:25] [D] socks5 tunnel: event task cleanup complete
+[2026-02-13 17:05:25] [D] socks5 tunnel: write result: 1 (errno=0)
+[2026-02-13 17:05:26] [D] 0xb4000079a0065400 [UDP] send task exiting due to shutdown
+[2026-02-13 17:05:26] [D] 0xb4000079a0065400 [UDP] waiting for recv task to complete
+[2026-02-13 17:05:26] [D] 0xb4000079a0065400 [UDP] recv task exiting due to shutdown
+[2026-02-13 17:05:26] [D] 0xb4000079a0065400 [UDP] recv task end (received 1 packets, 222 bytes)
+[2026-02-13 17:05:26] [D] 0xb4000079a0065240 [UDP] send task exiting due to shutdown
+[2026-02-13 17:05:26] [D] 0xb4000079a0065240 [UDP] waiting for recv task to complete
+[2026-02-13 17:05:26] [D] 0xb4000079a0065240 [UDP] recv task exiting due to shutdown
+[2026-02-13 17:05:26] [D] 0xb4000079a0065240 [UDP] recv task end (received 1 packets, 154 bytes)
+[2026-02-13 17:05:26] [D] 0xb400007a20014160 socks5 client udp destruct
+[2026-02-13 17:05:26] [D] 0xb400007a20014160 socks5 client destruct
+[2026-02-13 17:05:26] [D] 0xb400007a20014160 socks5 destruct
+[2026-02-13 17:05:26] [I] 0xb4000079a0065400 [UDP] Direct connect cleanup (sent 1 packets/26 bytes, alive=0x00)
+[2026-02-13 17:05:26] [D] 0xb4000079a0065400 [UDP] Cleanup started 198.18.0.1:51750 -> 223.5.5.5:53
+[2026-02-13 17:05:26] [I] 0xb4000079a0065400 [UDP] Direct connect 198.18.0.1:51750 -> 223.5.5.5:53 ended (duration=7000 ms, packets_dropped=0)
+[2026-02-13 17:05:26] [D] 0xb400007a20014400 socks5 client udp destruct
+[2026-02-13 17:05:26] [D] 0xb400007a20014400 socks5 client destruct
+[2026-02-13 17:05:26] [D] 0xb400007a20014400 socks5 destruct
+[2026-02-13 17:05:26] [I] 0xb4000079a0065240 [UDP] Direct connect cleanup (sent 1 packets/26 bytes, alive=0x00)
+[2026-02-13 17:05:26] [D] 0xb4000079a0065240 [UDP] Cleanup started 198.18.0.1:13407 -> 223.5.5.5:53
+[2026-02-13 17:05:26] [I] 0xb4000079a0065240 [UDP] Direct connect 198.18.0.1:13407 -> 223.5.5.5:53 ended (duration=7000 ms, packets_dropped=0)
+[2026-02-13 17:05:26] [I] socks5 tunnel: Tunnel operation stopped
+[2026-02-13 17:05:26] [D] main: Starting cleanup sequence
+[2026-02-13 17:05:26] [I] socks5 tunnel: Finalizing tunnel
+[2026-02-13 17:05:26] [I] socks5 tunnel: Statistics - TX: 22 packets/2866 bytes, RX: 14 packets/6836 bytes
+[2026-02-13 17:05:26] [D] 0xb400007e816b6700 mapped dns destruct
+[2026-02-13 17:05:26] [I] socks5 tunnel: Finalization completed
+[2026-02-13 17:05:26] [I] dns-latency: Shutdown signaled, waiting for 0 active tasks to complete
+[2026-02-13 17:05:26] [I] dns-latency: All 0 tasks completed during shutdown
+[2026-02-13 17:05:26] [I] dns-latency: DNS latency optimization module finalized
+[2026-02-13 17:05:26] [D] router: Finalizing traffic router
+[2026-02-13 17:05:26] [I] router: DNS cache stats - total:0, poisoned:0, hits:0, memory:0/3MB
+[2026-02-13 17:05:26] [I] router: Traffic router finalized
+[2026-02-13 17:05:26] [D] filter: Cleaning up resources
+[2026-02-13 17:05:26] [D] filter: Freeing chnroutes IPv6 (2039 entries)
+[2026-02-13 17:05:26] [D] filter: Freeing chnroutes IPv4 (8690 entries)
+[2026-02-13 17:05:26] [D] filter: Freeing hostname table
+[2026-02-13 17:05:26] [D] filter: Freeing blacklist
+[2026-02-13 17:05:26] [I] filter: Cleared 0 blacklist entries
+[2026-02-13 17:05:26] [I] filter: Finalized successfully
+
+========== End of Logs ==========

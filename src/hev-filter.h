@@ -318,6 +318,7 @@ typedef struct _HevBlacklistEntry
     HevBlacklistEntryType type;
     ip_addr_t ip_addr;
     char hostname[256];
+    char reason[64];
     time_t expiry_time; /* 过期时间，0 表示永不过期 */
     uint64_t hit_count; /* 命中统计 (用于调试) */
     char id[32]; /* 条目唯一标识符 (指针地址字符串) */
@@ -336,11 +337,12 @@ typedef HevBlacklistEntry HevBlacklistedIP;
  *
  * Returns: 新增条目的唯一标识符，失败返回NULL
  */
-const char *hev_filter_blacklist_add_ip (const ip_addr_t *addr);
+const char *hev_filter_blacklist_add_ip (const ip_addr_t *addr, const char *reason);
 
 /**
  * hev_filter_blacklist_add_domain:
  * @domain: Domain name to blacklist
+ * @reason: Reason for blacklisting
  *
  * Add a domain name to the dynamic blacklist.
  * Uses configured expiry time (blocked-ip-expiry-minutes).
@@ -348,7 +350,7 @@ const char *hev_filter_blacklist_add_ip (const ip_addr_t *addr);
  *
  * Returns: 新增条目的唯一标识符，失败返回NULL
  */
-const char *hev_filter_blacklist_add_domain (const char *domain);
+const char *hev_filter_blacklist_add_domain (const char *domain, const char *reason);
 
 /**
  * hev_filter_blacklist_check_ip:

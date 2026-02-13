@@ -163,7 +163,7 @@ run_blacklist_tests (void)
     ip_addr_t test_ip;
     ipaddr_aton ("192.168.100.1", &test_ip);
 
-    const char *entry_id = hev_filter_blacklist_add_ip (&test_ip);
+    const char *entry_id = hev_filter_blacklist_add_ip (&test_ip, "Test");
 
     TEST_ASSERT (entry_id != NULL);
     TEST_ASSERT (strlen (entry_id) > 0);
@@ -189,7 +189,7 @@ run_blacklist_tests (void)
     // Test: Domain blacklist
     printf ("\nTesting domain blacklist...\n");
     const char *domain_entry_id =
-        hev_filter_blacklist_add_domain ("bad-site.org");
+        hev_filter_blacklist_add_domain ("bad-site.org", "Test");
 
     TEST_ASSERT (domain_entry_id != NULL);
     int domain_blocked = hev_filter_blacklist_check_entry (
@@ -229,7 +229,7 @@ run_blacklist_tests (void)
 
     // Add to dynamic blacklist
     const char *integration_entry_id =
-        hev_filter_blacklist_add_ip (&test_ip_integration);
+        hev_filter_blacklist_add_ip (&test_ip_integration, "Test");
     TEST_ASSERT (integration_entry_id != NULL);
 
     // Test integrated IP check (should NOT be blocked by ACL rules)
@@ -239,7 +239,7 @@ run_blacklist_tests (void)
     // Test: Hostname filtering integration
     const char *integration_hostname = "blocked-integration.com";
     const char *host_entry_id =
-        hev_filter_blacklist_add_domain (integration_hostname);
+        hev_filter_blacklist_add_domain (integration_hostname, "Test");
     TEST_ASSERT (host_entry_id != NULL);
 
     // Test integrated hostname check (should NOT be blocked by ACL rules)
@@ -394,7 +394,7 @@ run_smart_proxy_tests (void)
     ip_addr_t test_ip;
     ipaddr_aton ("93.184.216.34", &test_ip); // example.com
 
-    const char *ip_entry_id = hev_filter_blacklist_add_ip (&test_ip);
+    const char *ip_entry_id = hev_filter_blacklist_add_ip (&test_ip, "Test");
     TEST_ASSERT (ip_entry_id != NULL);
     TEST_ASSERT (strlen (ip_entry_id) > 0);
 
@@ -405,7 +405,7 @@ run_smart_proxy_tests (void)
     // Test: Blacklist Domain API
     printf ("\nTesting blacklist domain API...\n");
     const char *domain = "example.com";
-    const char *domain_entry_id = hev_filter_blacklist_add_domain (domain);
+    const char *domain_entry_id = hev_filter_blacklist_add_domain (domain, "Test");
     TEST_ASSERT (domain_entry_id != NULL);
     TEST_ASSERT (strlen (domain_entry_id) > 0);
 
@@ -1898,8 +1898,8 @@ run_jni_blacklist_simulation_test (void)
     /* 1. 添加测试数据 */
     ip_addr_t test_ip;
     ipaddr_aton ("1.2.3.4", &test_ip);
-    hev_filter_blacklist_add_ip (&test_ip);
-    hev_filter_blacklist_add_domain ("example.com");
+    hev_filter_blacklist_add_ip (&test_ip, "Test");
+    hev_filter_blacklist_add_domain ("example.com", "Test");
 
     /* 2. 模拟点击以增加命中次数 */
     for (int i = 0; i < 5; i++) {
