@@ -1712,31 +1712,46 @@ run_dns_qtype_extraction_tests (void)
 
     /* Case 1: "test.com" (Type A) */
     int pos = 12;
-    packet[pos++] = 4; memcpy(packet + pos, "test", 4); pos += 4;
-    packet[pos++] = 3; memcpy(packet + pos, "com", 3); pos += 3;
+    packet[pos++] = 4;
+    memcpy (packet + pos, "test", 4);
+    pos += 4;
+    packet[pos++] = 3;
+    memcpy (packet + pos, "com", 3);
+    pos += 3;
     packet[pos++] = 0; // Null terminator
-    packet[pos++] = 0; packet[pos++] = 1; // QTYPE A (1)
-    packet[pos++] = 0; packet[pos++] = 1; // QCLASS IN (1)
-    
+    packet[pos++] = 0;
+    packet[pos++] = 1; // QTYPE A (1)
+    packet[pos++] = 0;
+    packet[pos++] = 1; // QCLASS IN (1)
+
     uint16_t qtype = extract_dns_qtype (packet, pos);
     TEST_ASSERT (qtype == 1);
-    if (qtype == 1) printf ("    [ OK ] QTYPE A (1) extracted correctly\n");
-    else printf ("    [ FAIL ] QTYPE A (1) extracted as %u\n", qtype);
+    if (qtype == 1)
+        printf ("    [ OK ] QTYPE A (1) extracted correctly\n");
+    else
+        printf ("    [ FAIL ] QTYPE A (1) extracted as %u\n", qtype);
 
     /* Case 2: "a.io" (Type AAAA) */
     memset (packet, 0, sizeof (packet));
     packet[5] = 1;
     pos = 12;
-    packet[pos++] = 1; packet[pos++] = 'a';
-    packet[pos++] = 2; packet[pos++] = 'i'; packet[pos++] = 'o';
+    packet[pos++] = 1;
+    packet[pos++] = 'a';
+    packet[pos++] = 2;
+    packet[pos++] = 'i';
+    packet[pos++] = 'o';
     packet[pos++] = 0;
-    packet[pos++] = 0; packet[pos++] = 28; // QTYPE AAAA (28)
-    packet[pos++] = 0; packet[pos++] = 1; // QCLASS IN (1)
-    
+    packet[pos++] = 0;
+    packet[pos++] = 28; // QTYPE AAAA (28)
+    packet[pos++] = 0;
+    packet[pos++] = 1; // QCLASS IN (1)
+
     qtype = extract_dns_qtype (packet, pos);
     TEST_ASSERT (qtype == 28);
-    if (qtype == 28) printf ("    [ OK ] QTYPE AAAA (28) extracted correctly\n");
-    else printf ("    [ FAIL ] QTYPE AAAA (28) extracted as %u\n", qtype);
+    if (qtype == 28)
+        printf ("    [ OK ] QTYPE AAAA (28) extracted correctly\n");
+    else
+        printf ("    [ FAIL ] QTYPE AAAA (28) extracted as %u\n", qtype);
 }
 
 static int task_system_ready = 0;
