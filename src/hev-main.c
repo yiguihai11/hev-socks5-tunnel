@@ -63,11 +63,18 @@ hev_socks5_tunnel_main_inner (int tun_fd)
     if (res < 0)
         return -2;
 
+    res = hev_task_system_init ();
+    if (res < 0) {
+        hev_logger_fini ();
+        return -3;
+    }
+
     LOG_I ("hev-socks5-tunnel starting, log_level=%d, log_file=%s", log_level,
            log_file);
 
     res = hev_socks5_logger_init (log_level, log_file);
     if (res < 0) {
+        hev_task_system_fini ();
         hev_logger_fini ();
         return -3;
     }
@@ -75,6 +82,7 @@ hev_socks5_tunnel_main_inner (int tun_fd)
     res = hev_filter_init ();
     if (res < 0) {
         hev_socks5_logger_fini ();
+        hev_task_system_fini ();
         hev_logger_fini ();
         return -4;
     }
@@ -93,6 +101,7 @@ hev_socks5_tunnel_main_inner (int tun_fd)
     if (res < 0) {
         hev_filter_fini ();
         hev_socks5_logger_fini ();
+        hev_task_system_fini ();
         hev_logger_fini ();
         return -4;
     }
@@ -106,23 +115,14 @@ hev_socks5_tunnel_main_inner (int tun_fd)
     if (pid_file)
         run_as_daemon (pid_file);
 
-    res = hev_task_system_init ();
-    if (res < 0) {
-        hev_traffic_router_fini ();
-        hev_filter_fini ();
-        hev_socks5_logger_fini ();
-        hev_logger_fini ();
-        return -4;
-    }
-
     lwip_init ();
 
     res = hev_dns_latency_init ();
     if (res < 0) {
-        hev_task_system_fini ();
         hev_traffic_router_fini ();
         hev_filter_fini ();
         hev_socks5_logger_fini ();
+        hev_task_system_fini ();
         hev_logger_fini ();
         return -5;
     }

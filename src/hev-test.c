@@ -1892,6 +1892,7 @@ run_jni_blacklist_simulation_test (void)
 {
     printf ("--- Running simulation for JNI blacklist data ---\n");
 
+    ensure_task_system_ready ();
     hev_filter_init ();
 
     /* 1. 添加测试数据 */
@@ -1922,6 +1923,9 @@ int
 hev_test_run (void)
 {
     g_is_test_mode = 1; // Set test mode flag
+
+    /* 必须最先初始化任务系统，以提供全局内存分配上下文 */
+    ensure_task_system_ready ();
 
     const char *test_config = "smart-proxy:\n"
                               "  enabled: true\n"

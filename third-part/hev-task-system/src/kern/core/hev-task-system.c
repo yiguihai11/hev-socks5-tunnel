@@ -49,9 +49,7 @@ hev_task_system_init (void)
 #ifdef ENABLE_MEMALLOC_SLICE
     allocator = hev_memory_allocator_slice_new ();
 #endif
-    allocator = hev_memory_allocator_set_default (allocator);
-    if (allocator)
-        hev_memory_allocator_unref (allocator);
+    hev_memory_allocator_set_default (allocator);
 
     pthread_once (&key_once, pthread_key_creator);
 
