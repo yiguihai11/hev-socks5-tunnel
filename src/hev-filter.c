@@ -781,12 +781,22 @@ int
 hev_filter_parse_http_host (void *log_data, const unsigned char *data,
                             size_t len, char *hostname, size_t hostname_len)
 {
+    char *buffer = NULL;
+    int res = -1;
+
+    /* 检查输入长度，防止分配过大内存 */
     if (len == 0 || len >= 8192)
         return -1;
-
-    char *buffer = hev_malloc (len + 1);
-    if (!buffer)
+    
+    if (!hostname || hostname_len == 0)
         return -1;
+
+    /* 使用 hev_malloc 分配内存并检查失败 */
+    buffer = hev_malloc (len + 1);
+    if (!buffer) {
+        LOG_E ("%p filter: Failed to allocate %zu bytes for HTTP parsing", log_data, len + 1);
+        return -1;
+    }
 
     memcpy (buffer, data, len);
     buffer[len] = '\0';
@@ -800,10 +810,10 @@ hev_filter_parse_http_host (void *log_data, const unsigned char *data,
             if (copy_len > 0 && copy_len < hostname_len) {
                 memcpy (hostname, host_start, copy_len);
                 hostname[copy_len] = '\0';
-                hev_free (buffer);
                 LOG_I ("%p filter: Detected HTTP Host: %s", log_data, hostname);
                 stats.http_parsed++;
-                return 0;
+                res = 0;
+                goto cleanup;
             }
         }
     }
@@ -820,17 +830,19 @@ hev_filter_parse_http_host (void *log_data, const unsigned char *data,
             if (copy_len > 0 && copy_len < hostname_len) {
                 memcpy (hostname, url_start, copy_len);
                 hostname[copy_len] = '\0';
-                hev_free (buffer);
                 LOG_I ("%p filter: Detected HTTP URL Host: %s", log_data,
                        hostname);
                 stats.http_parsed++;
-                return 0;
+                res = 0;
+                goto cleanup;
             }
         }
     }
 
-    hev_free (buffer);
-    return -1;
+cleanup:
+    if (buffer)
+        hev_free (buffer);
+    return res;
 }
 
 /* ============================================================================
@@ -1393,14 +1405,32 @@ hev_filter_sniff_pcb_hostname (struct tcp_pcb *pcb, struct pbuf *queue,
     size_t total_len = 0;
     struct pbuf *p;
 
-    if (!queue || !hostname || hostname_len == 0)
+    /* 防御性检查：确保输入参数有效 */
+    if (!hostname || hostname_len == 0)
         return -1;
 
-    /* Copy data from pbuf queue */
+    /* 初始化为空字符串 */
+    hostname[0] = '\0';
+
+    if (!queue)
+        return -1;
+
+    /* 安全地从 pbuf 队列拷贝数据 */
     for (p = queue; p && total_len < sizeof (buffer) - 1; p = p->next) {
+        /* 确保 payload 指针有效 */
+        if (!p->payload) {
+            continue;
+        }
+
         size_t copy_len = p->len;
+        
+        /* 防止缓冲区溢出 */
         if (total_len + copy_len >= sizeof (buffer))
             copy_len = sizeof (buffer) - 1 - total_len;
+        
+        /* 如果没有可拷贝的数据，停止 */
+        if (copy_len == 0)
+            break;
 
         memcpy (buffer + total_len, p->payload, copy_len);
         total_len += copy_len;
@@ -1408,6 +1438,9 @@ hev_filter_sniff_pcb_hostname (struct tcp_pcb *pcb, struct pbuf *queue,
 
     if (total_len == 0)
         return -1;
+    
+    /* 确保以 NULL 结尾，虽然解析函数不需要，但为了安全 */
+    buffer[total_len] = '\0';
 
     /* Unified protocol detection: Try TLS first, fallback to HTTP */
     /* Step 1: Try TLS SNI extraction (works for any port) */

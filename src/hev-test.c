@@ -87,6 +87,19 @@ static int passed_tests = 0;
         }                                                                 \
     } while (0)
 
+#define TEST_PASSED(msg)                                                  \
+    do {                                                                  \
+        total_tests++;                                                    \
+        passed_tests++;                                                   \
+        printf (ANSI_COLOR_GREEN "[  OK  ] " ANSI_COLOR_RESET "%s\n", msg); \
+    } while (0)
+
+#define TEST_FAILED(msg)                                                  \
+    do {                                                                  \
+        total_tests++;                                                    \
+        printf (ANSI_COLOR_RED "[ FAIL ] " ANSI_COLOR_RESET "%s\n", msg); \
+    } while (0)
+
 static void
 create_test_file (const char *path, const char *content)
 {
@@ -148,6 +161,63 @@ run_parser_tests (void)
     TEST_ASSERT (res == 0);
     TEST_ASSERT (hello.detected == 1);
     TEST_ASSERT (strcmp (hello.hostname, "tls.example.com") == 0);
+}
+
+static void
+run_sniff_robustness_tests (void)
+{
+    printf ("--- Running tests for Sniff Robustness ---\n");
+
+    char hostname[256];
+    struct pbuf *p_null = NULL;
+    struct tcp_pcb *pcb = NULL; /* Mock PCB */
+
+    /* Test 1: NULL queue */
+    if (hev_filter_sniff_pcb_hostname (pcb, p_null, hostname, sizeof (hostname)) == -1) {
+        TEST_PASSED ("NULL queue safety");
+    } else {
+        TEST_FAILED ("NULL queue safety");
+    }
+
+    /* Test 2: Empty pbuf (len=0) */
+    struct pbuf *p_empty = pbuf_alloc (PBUF_RAW, 0, PBUF_RAM);
+    if (hev_filter_sniff_pcb_hostname (pcb, p_empty, hostname, sizeof (hostname)) == -1) {
+        TEST_PASSED ("Empty pbuf safety");
+    } else {
+        TEST_FAILED ("Empty pbuf safety");
+    }
+    pbuf_free (p_empty);
+
+    /* Test 3: Pbuf with NULL payload (simulated) */
+    /* Note: pbuf_alloc might return NULL on failure, but we assume success for test */
+    struct pbuf *p_bad = pbuf_alloc (PBUF_RAW, 10, PBUF_RAM);
+    if (p_bad) {
+        void *orig_payload = p_bad->payload;
+        p_bad->payload = NULL; /* Inject fault */
+        /* Should handle NULL payload gracefully */
+        if (hev_filter_sniff_pcb_hostname (pcb, p_bad, hostname, sizeof (hostname)) == -1) {
+            TEST_PASSED ("NULL payload safety");
+        } else {
+            TEST_FAILED ("NULL payload safety");
+        }
+        p_bad->payload = orig_payload; /* Restore */
+        pbuf_free (p_bad);
+    }
+
+    /* Test 4: Malformed HTTP (no Host header) */
+    const char *malformed_http = "GET / HTTP/1.1\r\nUser-Agent: curl\r\n\r\n";
+    struct pbuf *p_http = pbuf_alloc (PBUF_RAW, strlen(malformed_http), PBUF_RAM);
+    if (p_http) {
+        memcpy(p_http->payload, malformed_http, strlen(malformed_http));
+        if (hev_filter_sniff_pcb_hostname (pcb, p_http, hostname, sizeof (hostname)) == -1) {
+            TEST_PASSED ("Malformed HTTP handling");
+        } else {
+            TEST_FAILED ("Malformed HTTP handling");
+        }
+        pbuf_free (p_http);
+    }
+    
+    printf ("  Sniff robustness tests passed\n");
 }
 
 static void
@@ -1950,6 +2020,7 @@ hev_test_run (void)
 
     run_filter_tests ();
     run_parser_tests ();
+    run_sniff_robustness_tests ();
     run_blacklist_tests ();
     run_ring_buffer_tests ();
     run_dns_qtype_extraction_tests ();

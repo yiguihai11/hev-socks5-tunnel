@@ -345,7 +345,8 @@ run_domain_first_task (void *data)
         }
 
         if (self->queue) {
-            if (hev_filter_sniff_pcb_hostname (pcb, self->queue, http_hostname,
+            hev_task_mutex_lock (self->mutex);
+            if (self->pcb && hev_filter_sniff_pcb_hostname (self->pcb, self->queue, http_hostname,
                                                sizeof (http_hostname)) == 0) {
                 hostname_found = 1;
                 /* Save hostname for use in subsequent tasks */
@@ -356,6 +357,7 @@ run_domain_first_task (void *data)
                     "%p [DOMAIN-FIRST] Detected hostname: %s (target: %s:%d)",
                     self, http_hostname, dst_ip, pcb->local_port);
             }
+            hev_task_mutex_unlock (self->mutex);
         }
     }
 
