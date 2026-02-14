@@ -787,14 +787,15 @@ hev_filter_parse_http_host (void *log_data, const unsigned char *data,
     /* 检查输入长度，防止分配过大内存 */
     if (len == 0 || len >= 8192)
         return -1;
-    
+
     if (!hostname || hostname_len == 0)
         return -1;
 
     /* 使用 hev_malloc 分配内存并检查失败 */
     buffer = hev_malloc (len + 1);
     if (!buffer) {
-        LOG_E ("%p filter: Failed to allocate %zu bytes for HTTP parsing", log_data, len + 1);
+        LOG_E ("%p filter: Failed to allocate %zu bytes for HTTP parsing",
+               log_data, len + 1);
         return -1;
     }
 
@@ -1423,11 +1424,11 @@ hev_filter_sniff_pcb_hostname (struct tcp_pcb *pcb, struct pbuf *queue,
         }
 
         size_t copy_len = p->len;
-        
+
         /* 防止缓冲区溢出 */
         if (total_len + copy_len >= sizeof (buffer))
             copy_len = sizeof (buffer) - 1 - total_len;
-        
+
         /* 如果没有可拷贝的数据，停止 */
         if (copy_len == 0)
             break;
@@ -1438,7 +1439,7 @@ hev_filter_sniff_pcb_hostname (struct tcp_pcb *pcb, struct pbuf *queue,
 
     if (total_len == 0)
         return -1;
-    
+
     /* 确保以 NULL 结尾，虽然解析函数不需要，但为了安全 */
     buffer[total_len] = '\0';
 
