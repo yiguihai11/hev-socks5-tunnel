@@ -2053,7 +2053,8 @@ run_direct_udp_task (void *data)
         HevUDPPacket *pkt = container_of (node, HevUDPPacket, node);
         struct pbuf *p = pkt->data;
 
-        if (p->len > 8) {
+        /* Only attempt to remove 8-byte header for DNS (port 53) */
+        if (session->dest_port == 53 && p->len > 8) {
             unsigned char *data = (unsigned char *)p->payload;
             uint16_t check_port = (data[2] << 8) | data[3];
             if (check_port == session->dest_port) {
@@ -2065,7 +2066,7 @@ run_direct_udp_task (void *data)
                     session->queue_count--;
                     continue;
                 }
-                LOG_D ("%p [UDP] removed 8-byte header", session);
+                LOG_D ("%p [UDP] removed 8-byte header for DNS", session);
             }
         }
 
