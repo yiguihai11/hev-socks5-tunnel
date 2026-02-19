@@ -1961,15 +1961,9 @@ run_direct_udp_task (void *data)
     char src_ip[INET6_ADDRSTRLEN];
     char dst_ip[INET6_ADDRSTRLEN];
     int stack_size;
-    HevSocks5 *s5;
     size_t total_sent_bytes = 0;
     size_t total_sent_packets = 0;
-
-    s5 = HEV_SOCKS5 (hev_socks5_client_udp_new (HEV_SOCKS5_TYPE_NONE));
-    if (!s5) {
-        LOG_E ("%p [UDP] send task failed to create dummy socks5", session);
-        goto cleanup;
-    }
+    int timeout;
 
     get_udp_session_addresses (&session->src_ip, session->src_port,
                                &session->dest_ip, session->dest_port, src_ip,
@@ -1977,14 +1971,11 @@ run_direct_udp_task (void *data)
 
     LOG_D ("%p [UDP] send task start %s:%d -> %s:%d", session, src_ip,
            session->src_port, dst_ip, session->dest_port);
-    LOG_D ("%p [UDP] session created at %ld ms", session,
-           get_current_time_ms () % 1000);
 
     session->fd = hev_task_io_socket_socket (AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
     if (session->fd < 0) {
         LOG_E ("%p [UDP] failed to create socket: %s", session,
                strerror (errno));
-        hev_object_unref (HEV_OBJECT (s5));
         goto cleanup;
     }
 
@@ -2003,19 +1994,10 @@ run_direct_udp_task (void *data)
     build_ipv6_sockaddr (&session->dest_ip, session->dest_port, &dest_addr,
                          &addr_len);
 
-    if (IP_IS_V6 (&session->dest_ip)) {
-        LOG_D ("%p [UDP] target is IPv6: %s:%d", session, dst_ip,
-               session->dest_port);
-    } else {
-        LOG_D ("%p [UDP] target is IPv4 (mapped to IPv6): %s:%d", session,
-               dst_ip, session->dest_port);
-    }
-
     stack_size = hev_config_get_misc_task_stack_size ();
     session->task_recv = hev_task_new (stack_size);
     if (!session->task_recv) {
         LOG_E ("%p [UDP] failed to create recv task", session);
-        hev_object_unref (HEV_OBJECT (s5));
         goto cleanup;
     }
 
@@ -2023,6 +2005,7 @@ run_direct_udp_task (void *data)
     hev_task_run (session->task_recv, direct_udp_recv_task, session);
 
     session->alive = UDP_ALIVE_SEND | UDP_ALIVE_RECV;
+    timeout = hev_config_get_misc_udp_read_write_timeout ();
 
     LOG_I ("%p [UDP] Direct connect established %s:%d -> %s:%d", session,
            src_ip, session->src_port, dst_ip, session->dest_port);
@@ -2041,9 +2024,7 @@ run_direct_udp_task (void *data)
                 break;
             }
 
-            hev_socks5_set_timeout (
-                s5, hev_config_get_misc_udp_read_write_timeout ());
-            if (hev_socks5_task_io_yielder (HEV_TASK_WAITIO, s5) < 0) {
+            if (hev_task_sleep (timeout) < 0) {
                 LOG_I ("%p [UDP] send task idle timeout", session);
                 break;
             }
@@ -2070,13 +2051,15 @@ run_direct_udp_task (void *data)
             }
         }
 
-        ssize_t sent = hev_task_io_socket_sendto (
-            session->fd, p->payload, p->len, 0,
-            (const struct sockaddr *)&dest_addr, addr_len,
-            hev_socks5_task_io_yielder, s5);
+        ssize_t sent = sendto (session->fd, p->payload, p->len, 0,
+                               (const struct sockaddr *)&dest_addr, addr_len);
 
         if (sent <= 0) {
-            LOG_W ("%p [UDP] sendto failed or timeout", session);
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                hev_task_yield (HEV_TASK_WAITIO);
+                continue;
+            }
+            LOG_W ("%p [UDP] sendto failed: %s", session, strerror (errno));
         } else {
             total_sent_bytes += sent;
             total_sent_packets++;
@@ -2098,7 +2081,6 @@ run_direct_udp_task (void *data)
 
     hev_task_join (session->task_recv);
     hev_task_unref (session->task_recv);
-    hev_object_unref (HEV_OBJECT (s5));
 
 cleanup:
     LOG_I (
