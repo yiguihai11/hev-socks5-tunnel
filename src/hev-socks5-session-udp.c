@@ -521,11 +521,23 @@ hev_socks5_session_udp_run (HevSocks5SessionUDP *self)
 
     hev_socks5_set_timeout (HEV_SOCKS5 (self), read_write_timeout);
 
-    if (srv->user && srv->pass) {
-        hev_socks5_client_set_auth (HEV_SOCKS5_CLIENT (self), srv->user,
-                                    srv->pass);
-        LOG_D ("%p socks5 session udp auth %s:%s (using UDP config)", self,
-               srv->user, srv->pass);
+    HevConfigSocks5Server *tcp_srv = hev_config_get_socks5_tcp_server ();
+    const char *user = NULL;
+    const char *pass = NULL;
+
+    if (strcmp (srv->addr, tcp_srv->addr) == 0 && srv->port == tcp_srv->port) {
+        /* Use global credentials for the default server */
+        user = tcp_srv->user;
+        pass = tcp_srv->pass;
+    } else {
+        /* Use UDP-specific credentials for the independent UDP server */
+        user = srv->user;
+        pass = srv->pass;
+    }
+
+    if (user && pass) {
+        hev_socks5_client_set_auth (HEV_SOCKS5_CLIENT (self), user, pass);
+        LOG_D ("%p socks5 session udp auth %s:%s", self, user, pass);
     }
 
     res = hev_socks5_client_handshake (HEV_SOCKS5_CLIENT (self), srv->pipeline);
